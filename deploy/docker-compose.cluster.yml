@@ -1,0 +1,164 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# A small cluster on one machine, for testing the API and worker roles:
+# two API processes behind a load balancer on 127.0.0.1:8080, two worker
+# processes, PostgreSQL, RustFS and the Docker socket proxy. Use
+# `make cluster-up` / `make test-cluster` (they set NBSANDBOX_DATA_DIR and
+# stop the dev stack, which uses the same port). Production deployments
+# (Kubernetes, several hosts) follow the same shape: see docs/scaling.md.
+
+name: nbsandbox-cluster
+
+x-nbsandboxd: &nbsandboxd
+  build:
+    context: ..
+    dockerfile: deploy/nbsandboxd.Dockerfile
+  image: nbsandboxd:dev
+  user: "1000:1000"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  restart: unless-stopped
+  stop_grace_period: 90s
+
+x-env: &env
+  NBSANDBOX_CONFIG: /etc/nbsandbox/settings.yaml
+  NBSANDBOX_DATABASE_URL: postgres://nbsandbox:nbsandbox-dev@postgres:5432/nbsandbox?sslmode=disable
+  NBSANDBOX_STORAGE: s3
+  NBSANDBOX_S3_ENDPOINT: rustfs:9000
+  NBSANDBOX_S3_BUCKET: nbsandbox
+  NBSANDBOX_S3_ACCESS_KEY: nbsandbox
+  NBSANDBOX_S3_SECRET_KEY: nbsandbox-dev-secret
+  NBSANDBOX_S3_CREATE_BUCKET: "true"
+  NBSANDBOX_USERS_FILE: ${NBSANDBOX_DATA_DIR}/users.yaml
+  NBSANDBOX_LOG_LEVEL: ${NBSANDBOX_LOG_LEVEL:-info}
+  NBSANDBOX_SHUTDOWN_GRACE: ${NBSANDBOX_SHUTDOWN_GRACE:-60s}
+  NBSANDBOX_RUN_TIMEOUT: ${NBSANDBOX_RUN_TIMEOUT:-10m}
+  # Short, so a lost worker's runs are taken over quickly in tests.
+  NBSANDBOX_RUN_LEASE: ${NBSANDBOX_RUN_LEASE:-10s}
+  NBSANDBOX_RUN_RETENTION: ${NBSANDBOX_RUN_RETENTION:-}
+  NBSANDBOX_EVENT_RETENTION: ${NBSANDBOX_EVENT_RETENTION:-}
+  NBSANDBOX_IDEMPOTENCY_WINDOW: ${NBSANDBOX_IDEMPOTENCY_WINDOW:-}
+  NBSANDBOX_CLEANUP_EVERY: ${NBSANDBOX_CLEANUP_EVERY:-}
+
+services:
+  lb:
+    # Spreads requests over the API processes (each request to any of them).
+    image: caddy:2-alpine@sha256:78bd35025c7ba85961dd149ae670315129954e77abe2383ac47c89106b35ade9
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+    volumes:
+      - ./Caddyfile.cluster:/etc/caddy/Caddyfile:ro
+    ports:
+      - "127.0.0.1:${NBSANDBOX_PORT:-8080}:8080"
+    networks: [default]
+    read_only: true
+    tmpfs: ["/tmp", "/data", "/config"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      api: { condition: service_started }
+    restart: unless-stopped
+
+  api:
+    <<: *nbsandboxd
+    deploy: { replicas: 2 }
+    environment:
+      <<: *env
+      NBSANDBOX_ROLE: api
+      # An API node keeps no run files; its data folder is its own.
+      NBSANDBOX_DATA_DIR: /srv/nbsandbox
+    tmpfs: ["/srv/nbsandbox:uid=1000,gid=1000,mode=0700"]
+    volumes:
+      - ${NBSANDBOX_DATA_DIR}/users.yaml:${NBSANDBOX_DATA_DIR}/users.yaml:ro
+      - ../config/settings.yaml:/etc/nbsandbox/settings.yaml:ro
+    networks: [default]
+    depends_on:
+      postgres: { condition: service_healthy }
+      rustfs: { condition: service_healthy }
+
+  # The workers. Named nbsandboxd so the integration tests that stop or kill
+  # "nbsandboxd" hit the processes that run notebooks (all of them).
+  nbsandboxd:
+    <<: *nbsandboxd
+    deploy: { replicas: 2 }
+    environment:
+      <<: *env
+      NBSANDBOX_ROLE: worker
+      NBSANDBOX_DATA_DIR: ${NBSANDBOX_DATA_DIR}
+      NBSANDBOX_DOCKER_HOST: tcp://socket-proxy:2375
+      NBSANDBOX_RUN_CONCURRENCY: ${NBSANDBOX_RUN_CONCURRENCY:-1}
+    volumes:
+      # Same absolute path inside and outside: Docker resolves run containers'
+      # bind mounts on the host. The workers share it; each run has its own
+      # folders.
+      - ${NBSANDBOX_DATA_DIR}:${NBSANDBOX_DATA_DIR}
+      - ../config/settings.yaml:/etc/nbsandbox/settings.yaml:ro
+    networks: [docker-api, default]
+    depends_on:
+      socket-proxy: { condition: service_started }
+      postgres: { condition: service_healthy }
+      rustfs: { condition: service_healthy }
+
+  socket-proxy:
+    image: wollomatic/socket-proxy:1@sha256:ff95d6ff6c27853005ef85eb8f4ab5923dc3d2f1e055f98fb6aeeaceec3fe848
+    group_add: ["${DOCKER_GID:-0}"]
+    command:
+      - -listenip=0.0.0.0
+      # Any worker on the docker-api network (it has only workers).
+      - -allowfrom=172.31.250.0/24
+      - -loglevel=info
+      - -allowHEAD=(/v[0-9.]+)?/_ping
+      - -allowGET=(/v[0-9.]+)?/(_ping|version|info|containers/json|containers/[a-zA-Z0-9_.-]+/(json|logs|stats)|images/.+/json)
+      - -allowPOST=(/v[0-9.]+)?/containers/(create|[a-zA-Z0-9_.-]+/(start|stop|kill|wait))
+      - -allowDELETE=(/v[0-9.]+)?/containers/[a-zA-Z0-9_.-]+
+      - -allowbindmountfrom=${NBSANDBOX_DATA_DIR:?set NBSANDBOX_DATA_DIR}/spaces
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [docker-api]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine@sha256:3540c0362c809df084ffac0ae69fe794515f9de92692f02178bcdce0ef0302ac
+    environment:
+      POSTGRES_USER: nbsandbox
+      POSTGRES_PASSWORD: nbsandbox-dev
+      POSTGRES_DB: nbsandbox
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [default]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nbsandbox -d nbsandbox"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  rustfs:
+    image: rustfs/rustfs:1.0.4@sha256:ed9210d6411d77ffceb70d94b964a3cb7d225983368bc25bebe01e995293dcc2
+    environment:
+      RUSTFS_ACCESS_KEY: nbsandbox
+      RUSTFS_SECRET_KEY: nbsandbox-dev-secret
+    volumes:
+      - objects:/data
+    networks: [default]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://127.0.0.1:9000/ || exit 1"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+networks:
+  docker-api:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.31.250.0/24
+
+volumes:
+  pgdata:
+  objects:

@@ -1,0 +1,76 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Smoke test: can GitHub-hosted ubuntu-24.04 runners run the runner image
+# under gVisor (runsc) with every isolation setting nbsandboxd uses? Green →
+# gVisor tests can run on hosted runners; red → they need a self-hosted runner.
+
+name: gvisor-smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - deploy/gvisor.version
+      - runner-image/**
+      - .github/workflows/gvisor-smoke.yml
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install pinned gVisor
+        run: |
+          set -euo pipefail
+          version="$(cat deploy/gvisor.version)"
+          arch="$(uname -m)"
+          base="https://storage.googleapis.com/gvisor/releases/release/${version}/${arch}"
+          cd "$(mktemp -d)"
+          curl -fsSLO "${base}/gvisor.tar.bz2"
+          curl -fsSLO "${base}/gvisor.tar.bz2.sha512"
+          sha512sum -c gvisor.tar.bz2.sha512
+          tar -xjf gvisor.tar.bz2
+          for bin in runsc containerd-shim-runsc-v1; do
+            sudo install -m 0755 "$(find . -type f -name "$bin" | head -n 1)" /usr/local/bin/
+          done
+          sudo /usr/local/bin/runsc install
+          sudo systemctl restart docker
+          docker info --format '{{json .Runtimes}}' | grep -q runsc
+          runsc --version
+
+      - name: Build runner image
+        run: docker build -t nbsandbox-runner:ci runner-image
+
+      - name: Run smoke notebook under runsc with nbsandboxd's isolation settings
+        run: |
+          set -euo pipefail
+          space="$(mktemp -d)"
+          cp tests/workloads/smoke.ipynb tests/workloads/fail_cell3.ipynb "$space/"
+          chmod 0777 "$space"
+          run() {
+            local run_id="$1" nb="$2"
+            mkdir -p "$space/runs/$run_id"
+            chmod 0777 "$space/runs/$run_id"
+            docker run --rm --runtime=runsc \
+              --network none --read-only --tmpfs /tmp:rw,nosuid,nodev,size=256m \
+              --cap-drop ALL --security-opt no-new-privileges --init \
+              --memory 2g --memory-swap 2g --cpus 1 --pids-limit 256 --shm-size 64m \
+              --log-driver local --log-opt max-size=10m --log-opt max-file=1 --log-opt compress=false \
+              --user 1000:1000 -v "$space:/space:rw" -w /space \
+              -e NBSANDBOX_RUN_ID="$run_id" -e NBSANDBOX_OUTPUT_DIR="/space/runs/$run_id/artifacts" \
+              nbsandbox-runner:ci "$nb" || true
+            echo "--- status ($nb)"
+            cat "$space/runs/$run_id/.nbsandbox-status.json"
+          }
+          run 11111111-1111-4111-8111-111111111111 smoke.ipynb
+          run 22222222-2222-4222-8222-222222222222 fail_cell3.ipynb
+          grep -q '"state": "succeeded"' "$space/runs/11111111-1111-4111-8111-111111111111/.nbsandbox-status.json"
+          grep -q '"state": "execution_error"' "$space/runs/22222222-2222-4222-8222-222222222222/.nbsandbox-status.json"
+          test -s "$space/runs/11111111-1111-4111-8111-111111111111/artifacts/summary.csv"

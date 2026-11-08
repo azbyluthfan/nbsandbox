@@ -1,0 +1,68 @@
+{
+  "title": "nbsandbox",
+  "uid": "nbsandbox-overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "time": { "from": "now-24h", "to": "now" },
+  "refresh": "30s",
+  "templating": { "list": [ { "name": "DS", "type": "datasource", "query": "prometheus", "label": "Prometheus" } ] },
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Docker reachable",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "targets": [ { "expr": "nbsandbox_docker_up", "refId": "A" } ],
+      "fieldConfig": { "defaults": { "mappings": [ { "type": "value", "options": { "0": { "text": "down" }, "1": { "text": "up" } } } ] } }
+    },
+    {
+      "id": 2, "type": "stat", "title": "Active runs",
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "targets": [ { "expr": "nbsandbox_active_runs", "refId": "A" } ]
+    },
+    {
+      "id": 3, "type": "stat", "title": "Queued runs",
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "targets": [ { "expr": "nbsandbox_queue_length", "refId": "A" } ]
+    },
+    {
+      "id": 4, "type": "stat", "title": "Live log viewers",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "targets": [ { "expr": "nbsandbox_log_streams_active", "refId": "A" } ]
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Finished runs per hour, by status",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "targets": [ { "expr": "sum by (status) (increase(nbsandbox_runs_total[1h]))", "legendFormat": "{{status}}", "refId": "A" } ]
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Run duration (p50, p95)",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "targets": [
+        { "expr": "histogram_quantile(0.5, sum by (le) (rate(nbsandbox_run_duration_seconds_bucket[1h])))", "legendFormat": "p50", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(nbsandbox_run_duration_seconds_bucket[1h])))", "legendFormat": "p95", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "API requests by route and code",
+      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "targets": [ { "expr": "sum by (route, code) (rate(nbsandbox_http_requests_total[5m]))", "legendFormat": "{{code}} {{route}}", "refId": "A" } ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "nbsandboxd memory and goroutines",
+      "gridPos": { "x": 0, "y": 20, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "targets": [
+        { "expr": "process_resident_memory_bytes{job=\"nbsandboxd\"}", "legendFormat": "RSS", "refId": "A" },
+        { "expr": "go_goroutines{job=\"nbsandboxd\"}", "legendFormat": "goroutines", "refId": "B" }
+      ]
+    }
+  ]
+}

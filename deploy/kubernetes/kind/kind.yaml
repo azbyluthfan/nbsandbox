@@ -1,0 +1,27 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# A one-node Kubernetes cluster in Docker for local development and tests
+# (make k8s-up). The API is published on 127.0.0.1:8080, like the other
+# stacks.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: nbsandbox
+networking:
+  # Cilium instead of kindnet (make k8s-up installs it): kindnet doesn't
+  # apply NetworkPolicy to the Kubernetes API server's address, so run Pods
+  # could reach it. Cilium is also what AKS uses (Azure CNI powered by
+  # Cilium), so local tests match production.
+  disableDefaultCNI: true
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 30080   # the API Service's NodePort
+        hostPort: 8080
+        listenAddress: "127.0.0.1"
+    kubeadmConfigPatches:
+      - |
+        # Kubernetes limits processes per Pod on the node, not per run:
+        # a fork bomb in a notebook stops here.
+        kind: KubeletConfiguration
+        podPidsLimit: 300

@@ -1,0 +1,68 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Caddy in front of nbsandboxd. Only the /v1 API and its gRPC twin are forwarded:
+# /healthz, /readyz and /metrics stay internal, and the optional web UI is
+# never exposed through here.
+#
+#   NBSANDBOX_DOMAIN  host name, e.g. nbsandbox.example.com (default: localhost)
+#   NBSANDBOX_TLS     "internal" (Caddy's own CA, for tests and private hosts)
+#                   or an e-mail address for Let's Encrypt (public hosts)
+
+{
+	admin off
+	servers {
+		timeouts {
+			read_header 10s
+			idle 2m
+		}
+	}
+}
+
+{$NBSANDBOX_DOMAIN:localhost} {
+	tls {$NBSANDBOX_TLS:internal}
+
+	# Uploads: the per-space quota plus multipart overhead (settings: uploads.max_space).
+	request_body {
+		max_size 520MB
+	}
+
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+	}
+
+	handle /v1/* {
+		reverse_proxy nbsandboxd:8080 {
+			# Send log stream events as they arrive, never buffered.
+			flush_interval -1
+			transport http {
+				read_timeout 0
+				write_timeout 0
+			}
+		}
+	}
+
+	# The same API over gRPC (and gRPC-Web, Connect): HTTP/2 from the
+	# client over TLS, then cleartext HTTP/2 (h2c) to nbsandboxd.
+	handle /nbsandbox.v1.* {
+		reverse_proxy h2c://nbsandboxd:8080 {
+			flush_interval -1
+			transport http {
+				read_timeout 0
+				write_timeout 0
+			}
+		}
+	}
+
+	handle {
+		respond "Not found" 404
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

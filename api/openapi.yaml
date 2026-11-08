@@ -1,0 +1,1387 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# nbsandbox HTTP API. Kept in step with the route table in internal/api/routes.go:
+# a test fails if a route is missing here or documented but not served.
+
+openapi: 3.1.0
+info:
+  title: nbsandbox API
+  version: 0.1.0-dev
+  description: |
+    Run Jupyter notebooks headless in isolated spaces. Every /v1 endpoint needs
+    HTTP basic auth (users.yaml) or a bearer access token from the configured
+    OpenID Connect provider; each operation lists the token scope it needs
+    (403 without it). Spaces belong to the caller's ID. Another caller's space
+    is reported as 404, never 403.
+
+    This spec is the reference. For how to use the endpoints together (set
+    up a space, run a notebook, edit files safely, publish and call a
+    function, follow progress, handle errors), see the guide in docs/api.md;
+    for calling notebooks from other services, docs/functions.md.
+
+    The optional local web UI (off by default, its own port) serves the same
+    /v1 endpoints under /ui/api/as/{user}/v1/... without a password, acting
+    as {user}, plus GET /ui/api/users. It is a local tool only.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+
+servers:
+  - url: http://127.0.0.1:8080
+
+security:
+  - basicAuth: []
+  - bearerAuth: []
+
+tags:
+  - name: operations
+  - name: spaces
+  - name: files
+  - name: runs
+  - name: functions
+  - name: admin
+    description: Every owner's spaces, for administrators (scope nbsandbox.admin)
+
+paths:
+  /healthz:
+    get:
+      tags: [operations]
+      summary: Liveness (the process serves HTTP)
+      security: []
+      responses:
+        "200": { description: Alive, content: { application/json: { schema: { $ref: "#/components/schemas/Liveness" } } } }
+
+  /readyz:
+    get:
+      tags: [operations]
+      summary: Readiness (database, Docker, runner image, runtime, data directory)
+      security: []
+      responses:
+        "200": { description: Ready, content: { application/json: { schema: { $ref: "#/components/schemas/ReadyReport" } } } }
+        "503": { description: Not ready; each failing check says why, content: { application/json: { schema: { $ref: "#/components/schemas/ReadyReport" } } } }
+
+  /metrics:
+    get:
+      tags: [operations]
+      summary: Prometheus metrics (internal; not exposed through the reverse proxy)
+      security: []
+      responses:
+        "200": { description: Prometheus text format, content: { text/plain: { schema: { type: string } } } }
+
+  /v1/spaces:
+    post:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.spaces.write] }]
+      tags: [spaces]
+      summary: Create a space
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                name: { type: string, maxLength: 100 }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Space" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/TooLarge" }
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [spaces]
+      summary: List the caller's spaces, newest first
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200": { description: One page, content: { application/json: { schema: { $ref: "#/components/schemas/SpaceList" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /v1/spaces/{id}:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [spaces]
+      summary: Space details with usage
+      responses:
+        "200": { description: The space, content: { application/json: { schema: { $ref: "#/components/schemas/Space" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.spaces.write] }]
+      tags: [spaces]
+      summary: Rename
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 100 }
+      responses:
+        "200": { description: Renamed, content: { application/json: { schema: { $ref: "#/components/schemas/Space" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.spaces.write] }]
+      tags: [spaces]
+      summary: Delete the space with all files and runs
+      responses:
+        "204": { description: Deleted }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /v1/admin/spaces:
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.admin] }]
+      tags: [admin]
+      summary: Every owner's spaces, newest first (administrators)
+      description: |
+        Needs the nbsandbox.admin scope: a token that carries it, or a basic
+        user with `admin: true` in users.yaml. `owner` narrows the list to one
+        caller ID.
+      parameters:
+        - name: owner
+          in: query
+          required: false
+          schema: { type: string }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200": { description: One page, content: { application/json: { schema: { $ref: "#/components/schemas/AdminSpaceList" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /v1/admin/spaces/{id}:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+    patch:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.admin] }]
+      tags: [admin]
+      summary: Give a space to another owner (administrators)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [owner]
+              properties:
+                owner: { type: string, minLength: 1, maxLength: 512, description: The new owner's caller ID }
+      responses:
+        "200": { description: The space, content: { application/json: { schema: { $ref: "#/components/schemas/AdminSpace" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.admin] }]
+      tags: [admin]
+      summary: Delete any owner's space with all files and runs (administrators)
+      responses:
+        "204": { description: Deleted }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /v1/spaces/{id}/files:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+    post:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.files.write] }]
+      tags: [files]
+      summary: Upload files (all or nothing)
+      description: |
+        multipart/form-data with one or more parts named "file". Each part's
+        filename must be a plain name; use `folder` to put files in a folder.
+        Notebooks (.ipynb) must be nbformat 4. Existing files are replaced.
+      parameters:
+        - name: folder
+          in: query
+          required: false
+          description: Destination folder, relative to the space (not under runs/).
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: array
+                  items: { type: string, format: binary }
+      responses:
+        "201": { description: Stored, content: { application/json: { schema: { $ref: "#/components/schemas/UploadResult" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/TooLarge" }
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [files]
+      summary: List the space's files and folders (folders first in their place, sorted by path)
+      responses:
+        "200": { description: Files sorted by path, content: { application/json: { schema: { $ref: "#/components/schemas/FileList" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/spaces/{id}/files/{path}:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+      - $ref: "#/components/parameters/FilePath"
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [files]
+      summary: Download a file (always as an attachment; ETag is the file's version)
+      responses:
+        "200":
+          description: The file
+          headers:
+            ETag: { description: The file's version, for If-Match when saving, schema: { type: string } }
+          content:
+            application/octet-stream: { schema: { type: string, format: binary } }
+        "304": { description: Not modified (If-None-Match matched) }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "412": { description: If-Match didn't match }
+    put:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.files.write] }]
+      tags: [files]
+      summary: Create or replace one file with the raw request body
+      description: |
+        Replacing an existing file needs If-Match with the version being
+        replaced (from the ETag of a download, or a listing's version), so
+        two editors can't overwrite each other. If-None-Match: * creates
+        only. Same limits, quota and notebook validation as uploads.
+      parameters:
+        - { name: If-Match, in: header, required: false, schema: { type: string } }
+        - { name: If-None-Match, in: header, required: false, schema: { type: string, enum: ["*"] } }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream: { schema: { type: string, format: binary } }
+      responses:
+        "200": { description: Replaced, content: { application/json: { schema: { $ref: "#/components/schemas/File" } } } }
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/File" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "412": { $ref: "#/components/responses/VersionConflict" }
+        "413": { $ref: "#/components/responses/TooLarge" }
+        "428": { $ref: "#/components/responses/VersionConflict" }
+    patch:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.files.write] }]
+      tags: [files]
+      summary: Rename or move a file or folder
+      parameters:
+        - { name: If-Match, in: header, required: false, description: Move a file only if it is still this version, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [path]
+              properties:
+                path: { type: string, description: The new path; must not exist yet }
+      responses:
+        "200": { description: Moved, content: { application/json: { schema: { $ref: "#/components/schemas/File" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "412": { $ref: "#/components/responses/VersionConflict" }
+    delete:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.files.write] }]
+      tags: [files]
+      summary: Delete a file, or a folder (an empty one, or with recursive=true everything in it)
+      parameters:
+        - { name: recursive, in: query, required: false, schema: { type: boolean, default: false } }
+      responses:
+        "204": { description: Deleted }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /v1/spaces/{id}/folders:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+    post:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.files.write] }]
+      tags: [files]
+      summary: Create an empty folder (and any missing parents)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [path]
+              properties:
+                path: { type: string }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/File" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /v1/spaces/{id}/functions:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [functions]
+      summary: List the space's published functions
+      responses:
+        "200":
+          description: Functions by name
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Function" } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/spaces/{id}/functions/{name}:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+      - $ref: "#/components/parameters/FunctionName"
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [functions]
+      summary: A function with its versions, newest first
+      responses:
+        "200": { description: The function, content: { application/json: { schema: { $ref: "#/components/schemas/Function" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.functions.publish] }]
+      tags: [functions]
+      summary: Delete a function and all its versions (its past runs stay)
+      responses:
+        "204": { description: Deleted }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /v1/spaces/{id}/functions/{name}/versions:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+      - $ref: "#/components/parameters/FunctionName"
+    post:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.functions.publish] }]
+      tags: [functions]
+      summary: Publish the space's notebook, with the files it needs, as the next immutable version
+      description: |
+        Copies the notebook and the listed files and folders into a bundle.
+        Invocations run that bundle, mounted read-only as /space; later
+        edits to the space change nothing until the next publish. Bundles
+        count toward the space's quota. The first publish creates the
+        function. Python notebooks only (400 for another kernel's language).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [notebook]
+              properties:
+                notebook: { type: string }
+                files: { type: array, items: { type: string }, description: Files and folders the notebook reads, at their paths in the space }
+                contract:
+                  description: |
+                    Used instead of the contract in the notebook's metadata
+                    (the notebook isn't changed). input: a JSON Schema;
+                    output: a JSON Schema (one value), or {"mode": "stream",
+                    "item": <JSON Schema>}.
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    input: {}
+                    output: {}
+      responses:
+        "201": { description: Published, content: { application/json: { schema: { $ref: "#/components/schemas/FunctionVersion" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/TooLarge" }
+
+  /v1/spaces/{id}/functions/{name}/versions/{version}:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+      - $ref: "#/components/parameters/FunctionName"
+      - $ref: "#/components/parameters/FunctionVersion"
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [functions]
+      summary: One version, with its contract
+      responses:
+        "200": { description: The version, content: { application/json: { schema: { $ref: "#/components/schemas/FunctionVersion" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/spaces/{id}/functions/{name}/contract:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+      - $ref: "#/components/parameters/FunctionName"
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [functions]
+      summary: The latest version's input and output schemas (null when not declared)
+      responses:
+        "200": { description: The contract, content: { application/json: { schema: { $ref: "#/components/schemas/Contract" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/spaces/{id}/functions/{name}/invoke:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+      - $ref: "#/components/parameters/FunctionName"
+    post:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.functions.invoke] }]
+      tags: [functions]
+      summary: Invoke the function (latest version, or the one in the path)
+      description: |
+        Starts a run of the published bundle with these parameters. Without
+        wait: 201 with the run (poll it, or follow the event streams). With
+        wait: 200 with the result once it finishes, or 202 with the run if
+        the wait ended first. Same Idempotency-Key rules as runs.
+      parameters:
+        - $ref: "#/components/parameters/Wait"
+        - { name: Idempotency-Key, in: header, required: false, schema: { type: string, maxLength: 255 } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                parameters: { $ref: "#/components/schemas/Parameters" }
+      responses:
+        "200":
+          description: |
+            With wait, the result; or a replay of an earlier request with the
+            same Idempotency-Key (the run); or, asked as a stream (Accept:
+            text/event-stream or ?stream=1), the call's result stream, as GET
+            .../result streams it.
+          content:
+            application/json: { schema: { oneOf: [ { $ref: "#/components/schemas/CallerResult" }, { $ref: "#/components/schemas/Run" } ] } }
+            text/event-stream: { schema: { type: string } }
+        "201": { description: Queued, content: { application/json: { schema: { $ref: "#/components/schemas/Run" } } } }
+        "202": { description: With wait, the run hadn't finished when the wait ended, content: { application/json: { schema: { $ref: "#/components/schemas/Run" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422":
+          description: Idempotency-Key reused with another body, or dependencies missing with dependency_check=reject
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "503": { $ref: "#/components/responses/DockerUnavailable" }
+
+  /v1/spaces/{id}/functions/{name}/versions/{version}/invoke:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+      - $ref: "#/components/parameters/FunctionName"
+      - $ref: "#/components/parameters/FunctionVersion"
+    post:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.functions.invoke] }]
+      tags: [functions]
+      summary: Invoke the function (latest version, or the one in the path)
+      description: |
+        Starts a run of the published bundle with these parameters. Without
+        wait: 201 with the run (poll it, or follow the event streams). With
+        wait: 200 with the result once it finishes, or 202 with the run if
+        the wait ended first. Same Idempotency-Key rules as runs.
+      parameters:
+        - $ref: "#/components/parameters/Wait"
+        - { name: Idempotency-Key, in: header, required: false, schema: { type: string, maxLength: 255 } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                parameters: { $ref: "#/components/schemas/Parameters" }
+      responses:
+        "200":
+          description: With wait, the result; or a replay of an earlier request with the same Idempotency-Key (the run)
+          content: { application/json: { schema: { oneOf: [ { $ref: "#/components/schemas/CallerResult" }, { $ref: "#/components/schemas/Run" } ] } } }
+        "201": { description: Queued, content: { application/json: { schema: { $ref: "#/components/schemas/Run" } } } }
+        "202": { description: With wait, the run hadn't finished when the wait ended, content: { application/json: { schema: { $ref: "#/components/schemas/Run" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422":
+          description: Idempotency-Key reused with another body, or dependencies missing with dependency_check=reject
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "503": { $ref: "#/components/responses/DockerUnavailable" }
+
+  /v1/spaces/{id}/runs/{run_id}/events:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+      - $ref: "#/components/parameters/RunID"
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [runs]
+      summary: The run's status changes as Server-Sent Events
+      description: |
+        One `status` event per change: queued (with the queue position at
+        that moment), running, then the final status with the result (see
+        CallerResult); the stream ends after it. Each event's id is a
+        sequence number: reconnect with Last-Event-ID (or ?after=N) to
+        continue with nothing lost. Events older than runs.event_retention
+        (default 24 h) are deleted; a `pruned` event says so. Other events:
+        `shutdown` (reconnect later). Heartbeat comments every 15 s.
+
+        With ?include=progress,cell it also sends what the run reports while
+        it works (see RunEvent), numbered in the same sequence: `progress`
+        (nbsandbox.progress: a fraction from 0 to 1 and a message) and
+        `cell` (a code cell started or finished). A streamed output's items
+        are on the result stream (GET .../result as text/event-stream).
+      parameters:
+        - { name: Last-Event-ID, in: header, required: false, schema: { type: integer, minimum: 0 } }
+        - { name: after, in: query, required: false, schema: { type: integer, minimum: 0 } }
+        - $ref: "#/components/parameters/Include"
+      responses:
+        "200": { description: The event stream, content: { text/event-stream: { schema: { type: string } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/spaces/{id}/events:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [runs]
+      summary: Status changes of every run in the space, as Server-Sent Events
+      description: |
+        The same `status` events as the per-run stream, for all runs in the
+        space (or only one function's invocations with ?function=), until the
+        client disconnects. A service making many calls keeps one connection.
+        Resume with Last-Event-ID; `pruned` and `shutdown` as for runs;
+        ?include=progress,cell as for runs.
+      parameters:
+        - { name: function, in: query, required: false, schema: { type: string } }
+        - { name: Last-Event-ID, in: header, required: false, schema: { type: integer, minimum: 0 } }
+        - { name: after, in: query, required: false, schema: { type: integer, minimum: 0 } }
+        - $ref: "#/components/parameters/Include"
+      responses:
+        "200": { description: The event stream, content: { text/event-stream: { schema: { type: string } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/runtime:
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [runs]
+      summary: The runner image, its Python packages, and the limits every run gets
+      responses:
+        "200": { description: Runtime, content: { application/json: { schema: { $ref: "#/components/schemas/RuntimeInfo" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DockerUnavailable" }
+
+  /v1/runtime/completions:
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [runs]
+      summary: The runner image's completion index, for editors
+      description: |
+        Every public name of the image's importable modules (installed
+        packages, common standard-library modules, nbsandbox, and their
+        public submodules one level down): its kind (m module, c class,
+        f function, v value), its signature and the first line of its docs.
+        Built when the image is built, so it matches the installed packages.
+        Sent gzipped when the client accepts it. The ETag is the index's
+        hash: send it in If-None-Match to get 304 until the image changes.
+      responses:
+        "200":
+          description: The index
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [schema_version, modules]
+                properties:
+                  schema_version: { type: integer }
+                  python_version: { type: string }
+                  modules:
+                    type: object
+                    description: Module name → [[name, kind, signature, doc], ...]
+                    additionalProperties: { type: array, items: { type: array, items: { type: string } } }
+        "304": { description: Not modified (If-None-Match matched) }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DockerUnavailable" }
+
+  /v1/spaces/{id}/runs:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+    post:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.runs] }]
+      tags: [runs]
+      summary: Start a run (queued; one active run per space)
+      description: |
+        Python notebooks only: a notebook whose kernel is another language
+        (its kernelspec or language_info names R, Julia, ...) is refused with
+        400. One run that can write the space at a time (409); read-only
+        runs and function calls run alongside.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: Same key and body within 24 hours returns the original run (200); same key with a different body is 422.
+          schema: { type: string, maxLength: 255 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [notebook]
+              properties:
+                notebook: { type: string, description: Path of an .ipynb file in the space }
+                parameters: { $ref: "#/components/schemas/Parameters" }
+                space:
+                  type: string
+                  enum: [read-write, read-only]
+                  default: read-write
+                  description: read-only mounts the space's files read-only, so the run can't change them.
+      responses:
+        "201": { description: Queued, content: { application/json: { schema: { $ref: "#/components/schemas/Run" } } } }
+        "200": { description: Replay of an earlier request with the same Idempotency-Key, content: { application/json: { schema: { $ref: "#/components/schemas/Run" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422":
+          description: Idempotency-Key reused with another body, or dependencies missing with dependency_check=reject
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "503": { $ref: "#/components/responses/DockerUnavailable" }
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [runs]
+      summary: List runs, newest first
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - { name: status, in: query, required: false, schema: { $ref: "#/components/schemas/RunStatus" } }
+        - { name: created_after, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: created_before, in: query, required: false, schema: { type: string, format: date-time } }
+      responses:
+        "200": { description: One page, content: { application/json: { schema: { $ref: "#/components/schemas/RunList" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/spaces/{id}/runs/{run_id}:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+      - $ref: "#/components/parameters/RunID"
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [runs]
+      summary: Status, queue position, and result.json once finished
+      responses:
+        "200": { description: The run, content: { application/json: { schema: { $ref: "#/components/schemas/Run" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.runs] }]
+      tags: [runs]
+      summary: Delete a finished run's outputs
+      responses:
+        "204": { description: Deleted }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /v1/spaces/{id}/runs/{run_id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+      - $ref: "#/components/parameters/RunID"
+    post:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.runs] }]
+      tags: [runs]
+      summary: Cancel a queued or running run (a running run stops asynchronously)
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                reason: { type: string, maxLength: 500, description: Recorded with the result as cancel_reason }
+      responses:
+        "202": { description: Cancelling or cancelled, content: { application/json: { schema: { $ref: "#/components/schemas/Run" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /v1/spaces/{id}/runs/{run_id}/result:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+      - $ref: "#/components/parameters/RunID"
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [runs]
+      summary: The run's result for the caller (the output, or the error with its reasons), as JSON or as a stream
+      description: |
+        As JSON (the default): the result once the run has finished, 409
+        before (or wait for it with ?wait=). As a stream (Accept:
+        text/event-stream, or ?stream=1): the items of a streamed output as
+        they are made, then the result (see the stream parameter).
+      parameters:
+        - $ref: "#/components/parameters/Wait"
+        - $ref: "#/components/parameters/Stream"
+        - { name: Last-Event-ID, in: header, required: false, schema: { type: integer, minimum: 0 }, description: "Stream: resume after this item" }
+        - { name: after, in: query, required: false, schema: { type: integer, minimum: 0 }, description: "Stream: resume after this item" }
+        - { name: include, in: query, required: false, schema: { type: string, enum: [progress] }, description: "Stream: also send progress events" }
+      responses:
+        "200":
+          description: The result (JSON), or the result stream
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/CallerResult" } }
+            text/event-stream: { schema: { type: string, description: "item events (ResultItem), progress events (RunEvent), then a result event (CallerResult)" } }
+        "202": { description: With wait, the run hadn't finished when the wait ended, content: { application/json: { schema: { $ref: "#/components/schemas/Run" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/StillActive" }
+
+  /v1/spaces/{id}/runs/{run_id}/promote:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+      - $ref: "#/components/parameters/RunID"
+    post:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.files.write] }]
+      tags: [runs]
+      summary: Copy one of the run's artifacts into the space's files
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [artifact, to]
+              properties:
+                artifact: { type: string, description: Path inside the run's artifacts }
+                to: { type: string, description: New file path in the space; must not exist yet }
+      responses:
+        "201": { description: Copied, content: { application/json: { schema: { $ref: "#/components/schemas/File" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/TooLarge" }
+
+  /v1/spaces/{id}/runs/{run_id}/output.ipynb:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+      - $ref: "#/components/parameters/RunID"
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [runs]
+      summary: Executed notebook (partial if the run didn't succeed)
+      responses:
+        "200": { description: Notebook, content: { application/x-ipynb+json: { schema: { type: string, format: binary } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/spaces/{id}/runs/{run_id}/output.html:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+      - $ref: "#/components/parameters/RunID"
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [runs]
+      summary: Rendered notebook, served sandboxed (no scripts, unique origin)
+      responses:
+        "200": { description: HTML, content: { text/html: { schema: { type: string } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/spaces/{id}/runs/{run_id}/artifacts:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+      - $ref: "#/components/parameters/RunID"
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [runs]
+      summary: List files the notebook wrote to NBSANDBOX_OUTPUT_DIR
+      responses:
+        "200": { description: Artifacts, content: { application/json: { schema: { $ref: "#/components/schemas/FileList" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/spaces/{id}/runs/{run_id}/artifacts/{path}:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+      - $ref: "#/components/parameters/RunID"
+      - $ref: "#/components/parameters/FilePath"
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [runs]
+      summary: Download an artifact (always as an attachment)
+      responses:
+        "200": { description: The file, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/spaces/{id}/runs/{run_id}/log:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+      - $ref: "#/components/parameters/RunID"
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [runs]
+      summary: Console output so far (the full log once finished)
+      responses:
+        "200": { description: Log, one line per event, content: { text/plain: { schema: { type: string } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/spaces/{id}/runs/{run_id}/log/stream:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+      - $ref: "#/components/parameters/RunID"
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [runs]
+      summary: Live log as Server-Sent Events
+      description: |
+        One `line` event per log line; its `id` is the line number. Lines
+        already written come first, then live lines, then a `done` event
+        with the final status: `{"status": "...", "last_event_id": N}`.
+        A queued run is waited for (heartbeat comments every 15 s); a
+        finished run is replayed and the stream ends at once. Reconnect with
+        the `Last-Event-ID` header (or `?after=N`) to continue after line N
+        with no gap or duplicate. Other events: `dropped` (the client fell
+        too far behind; reconnect) and `shutdown` (nbsandboxd is stopping;
+        reconnect later).
+      parameters:
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema: { type: integer, minimum: 0 }
+        - name: after
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0 }
+      responses:
+        "200": { description: Event stream, content: { text/event-stream: { schema: { type: string } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+components:
+  securitySchemes:
+    basicAuth: { type: http, scheme: basic }
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        An access token from the configured OpenID Connect provider, issued
+        for nbsandbox's audience (a token issued for another API is refused).
+        Each operation lists the scope it needs; the token carries scopes in
+        scp, scope or roles.
+
+  parameters:
+    SpaceID:
+      name: id
+      in: path
+      required: true
+      description: Space UUID (lowercase). Anything else is 400.
+      schema: { type: string, format: uuid }
+    FilePath:
+      name: path
+      in: path
+      required: true
+      description: File path relative to the space; may contain "/". No "..", no absolute paths, not under runs/.
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    FunctionName:
+      name: name
+      in: path
+      required: true
+      schema: { type: string, pattern: "^[a-z0-9][a-z0-9_-]{0,62}$" }
+    FunctionVersion:
+      name: version
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    Include:
+      name: include
+      in: query
+      required: false
+      description: Also send what runs report while they work, comma-separated
+      schema: { type: string, example: "progress,cell" }
+    Stream:
+      name: stream
+      in: query
+      required: false
+      description: |
+        1 (or true): answer as a stream, like Accept: text/event-stream. An
+        `item` event per item of a streamed output as soon as it is recorded
+        (id = its number; resume with Last-Event-ID or ?after=), `progress`
+        events with ?include=progress, then one `result` event (CallerResult),
+        and the stream ends. A finished run replays its items at once. The
+        items are exactly the list in the result's output.
+      schema: { type: string, enum: ["1", "true"] }
+    Wait:
+      name: wait
+      in: query
+      required: false
+      description: Hold the request until the run finishes, at most this long ("30s", or seconds; max 60s)
+      schema: { type: string }
+    RunID:
+      name: run_id
+      in: path
+      required: true
+      description: Run UUID (lowercase). Anything else is 400.
+      schema: { type: string, format: uuid }
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: next_cursor from the previous page.
+      schema: { type: string }
+
+  responses:
+    BadRequest: { description: Invalid request, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    Unauthorized: { description: "Missing or wrong credentials, or an invalid or expired token (WWW-Authenticate says which schemes are accepted)", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    Forbidden: { description: "The access token lacks this endpoint's scope (code forbidden; WWW-Authenticate names the scope). Basic-auth users hold every scope", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    NotFound: { description: Missing, or owned by another user, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    Conflict: { description: A run is active in the space, or the run is (not) finished, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    DockerUnavailable: { description: Docker is unavailable; retry later (Retry-After), content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    TooLarge: { description: A file, the space quota or the request is too large; nothing was stored, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    VersionConflict:
+      description: |
+        412: the file changed since the version given (reload, then save
+        again). 428: replacing a file needs If-Match. The body names the
+        current version.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error, current_version]
+            properties:
+              error: { $ref: "#/components/schemas/ErrorDetail" }
+              current_version: { type: string, description: '"" if the file no longer exists' }
+    StillActive:
+      description: The run is still queued or running; it has no result yet
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error, status]
+            properties:
+              error: { $ref: "#/components/schemas/ErrorDetail" }
+              status: { type: string, enum: [queued, running] }
+
+  schemas:
+    RunEvent:
+      description: |
+        The data of a `progress` or `cell` event: what a run reported while
+        it worked.
+      type: object
+      required: [run_id, kind]
+      properties:
+        run_id: { type: string }
+        kind: { type: string, enum: [progress, cell] }
+        function: { type: string }
+        version: { type: integer }
+        fraction: { type: number, minimum: 0, maximum: 1, description: "progress" }
+        message: { type: string, description: "progress" }
+        cell_index: { type: integer, description: "cell: its index in the uploaded notebook" }
+        state: { type: string, enum: [started, finished], description: cell }
+        outcome: { type: string, enum: [ok, error], description: "cell, when finished" }
+        duration_seconds: { type: number, description: "cell, when finished" }
+    ResultItem:
+      description: The data of an `item` event of a result stream.
+      type: object
+      required: [run_id, kind, index, item]
+      properties:
+        run_id: { type: string }
+        kind: { type: string, const: item }
+        function: { type: string }
+        version: { type: integer }
+        index: { type: integer, minimum: 1, description: "1, 2, ...: output[index-1] in the result" }
+        total: { type: integer, description: "If the notebook declared how many items it sends" }
+        item: { description: Any JSON value }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { $ref: "#/components/schemas/ErrorDetail" }
+    ErrorDetail:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [bad_request, unauthorized, forbidden, not_found, method_not_allowed, conflict, payload_too_large, unprocessable,
+                 invalid_parameters, invalid_contract, version_mismatch, version_required, docker_unavailable, internal]
+        message: { type: string }
+        problems:
+          type: array
+          description: With invalid_parameters, where the parameters failed the notebook's input contract.
+          items:
+            type: object
+            required: [pointer, message]
+            properties:
+              pointer: { type: string, description: JSON pointer into the parameters ("" = the whole object) }
+              message: { type: string }
+    Parameters:
+      type: object
+      description: |
+        Injected by papermill: each key becomes a Python variable, so keys must be
+        Python identifiers. Values can be any JSON (nested objects and arrays,
+        null), nested at most 32 deep; at most runs.max_parameters bytes (default
+        1 MiB). If the notebook declares an input contract, they must match it.
+      additionalProperties: true
+    Liveness:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, const: ok }
+    ReadyReport:
+      type: object
+      required: [status, checks]
+      properties:
+        status: { type: string, enum: [ready, not_ready] }
+        checks:
+          type: object
+          description: Check name → "ok" or the reason it failed.
+          additionalProperties: { type: string }
+    Usage:
+      type: object
+      required: [bytes_used, quota_bytes, file_count, run_count]
+      properties:
+        bytes_used: { type: integer, description: All files including run outputs }
+        quota_bytes: { type: integer }
+        file_count: { type: integer, description: User files, excluding runs/ }
+        run_count: { type: integer }
+    Space:
+      type: object
+      required: [id, name, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        usage: { $ref: "#/components/schemas/Usage" }
+    AdminSpace:
+      allOf:
+        - $ref: "#/components/schemas/Space"
+        - type: object
+          required: [owner]
+          properties:
+            owner: { type: string, description: The owner's caller ID }
+    AdminSpaceList:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AdminSpace" } }
+        next_cursor: { type: string, description: Empty on the last page }
+    SpaceList:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Space" } }
+        next_cursor: { type: string, description: Empty on the last page }
+    File:
+      type: object
+      required: [path, size, modified]
+      properties:
+        path: { type: string }
+        type: { type: string, enum: [file, folder] }
+        size: { type: integer }
+        modified: { type: string, format: date-time }
+        version: { type: string, description: "Files only: changes whenever the file changes; send it in If-Match to save" }
+    FileList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/File" } }
+    UploadResult:
+      type: object
+      required: [files]
+      properties:
+        files: { type: array, items: { $ref: "#/components/schemas/File" } }
+    RunStatus:
+      type: string
+      enum: [queued, running, succeeded, failed, oom, kernel_died, timeout, cancelled, interrupted, platform_error]
+    DependencyWarning:
+      type: object
+      required: [module, source]
+      properties:
+        module: { type: string }
+        cell: { type: integer, description: 0-based position among the notebook's code cells }
+        source: { type: string, enum: [notebook, requirements.txt] }
+    Run:
+      type: object
+      required: [id, space_id, notebook, parameters, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        space_id: { type: string, format: uuid }
+        notebook: { type: string }
+        notebook_sha256: { type: string, description: Hash of the notebook snapshot the run executes }
+        function: { type: string, description: The published function, for an invocation }
+        client: { type: string, description: "The application that started the run: the token's client (azp / client_id); absent for basic auth" }
+        version: { type: integer, description: The function version, for an invocation }
+        read_only_space: { type: boolean, description: The run sees the space (or the function's bundle) read-only }
+        parameters: { $ref: "#/components/schemas/Parameters" }
+        status: { $ref: "#/components/schemas/RunStatus" }
+        error_kind: { type: string, description: "e.g. execution_error, resource_pids, resource_tmp, missing_package, output_invalid, output_too_large, oom, timeout, docker_lost" }
+        fault: { type: string, enum: [notebook, caller, platform] }
+        retryable: { type: boolean, description: True only for interrupted and platform_error; the same request may succeed if sent again }
+        message: { type: string }
+        cancelled_by: { type: string }
+        cancel_reason: { type: string }
+        output_bytes: { type: integer, description: Size of the value the notebook returned, once succeeded }
+        queue_position: { type: integer, description: 1 = next to start; only while queued }
+        dependency_warnings: { type: array, items: { $ref: "#/components/schemas/DependencyWarning" } }
+        created_at: { type: string, format: date-time }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time }
+        result: { $ref: "#/components/schemas/Result" }
+    CallerResult:
+      type: object
+      description: |
+        A finished run, for its caller: output when the run succeeded, error
+        (with the reasons) for any other final status. Never both.
+      required: [run_id, status]
+      properties:
+        run_id: { type: string, format: uuid }
+        status: { $ref: "#/components/schemas/RunStatus" }
+        function: { type: string }
+        version: { type: integer }
+        output:
+          description: |
+            The value the notebook returned with nbsandbox.output; for a
+            streamed output, the list of its items (output[i-1] is item i).
+            Set when the run succeeded, and for a streamed run that failed
+            after sending items (partial).
+        items: { type: integer, description: "Streamed output: how many items the run sent" }
+        partial: { type: boolean, description: "A streamed run that ended before finishing: output holds the items so far" }
+        error:
+          type: object
+          required: [kind, fault, retryable, message]
+          properties:
+            kind: { type: string, description: The error_kind, or the status when there is none }
+            fault: { type: string, enum: [notebook, caller, platform] }
+            retryable: { type: boolean }
+            message: { type: string }
+            cell_index: { type: integer, description: 0-based, in the user's notebook }
+            execution_count: { type: integer }
+            exception_type: { type: string }
+            exception_message: { type: string }
+            cancelled_by: { type: string }
+            cancel_reason: { type: string }
+            peak_memory_bytes: { type: integer }
+            memory_limit_bytes: { type: integer }
+    Function:
+      type: object
+      required: [name, latest_version, created_at, updated_at]
+      properties:
+        name: { type: string }
+        latest_version: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        versions: { type: array, items: { $ref: "#/components/schemas/FunctionVersion" } }
+    FunctionVersion:
+      type: object
+      required: [function, version, notebook, files, notebook_sha256, bundle_bytes, created_by, created_at]
+      properties:
+        function: { type: string }
+        version: { type: integer }
+        notebook: { type: string }
+        files: { type: array, items: { type: string } }
+        notebook_sha256: { type: string }
+        bundle_bytes: { type: integer }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
+        contract: { $ref: "#/components/schemas/Contract" }
+    Contract:
+      type: object
+      required: [function, version, input, mode, mode_inferred, output, item]
+      properties:
+        function: { type: string }
+        version: { type: integer }
+        input: { description: JSON Schema for the parameters, or null }
+        mode: { type: string, enum: [single, stream], description: "single: one value (nbsandbox.output); stream: a sequence of items (nbsandbox.emit)" }
+        mode_inferred: { type: boolean, description: The mode comes from the notebook's calls, not the contract }
+        output: { description: "single: JSON Schema for the value, or null" }
+        item: { description: "stream: JSON Schema for each item, or null" }
+    RunList:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Run" } }
+        next_cursor: { type: string }
+    Result:
+      type: object
+      description: result.json, written once when the run finishes.
+      required: [schema_version, run_id, status, rendered, partial, log_truncated, usage, limits, image, runtime, finished_at]
+      properties:
+        schema_version: { type: integer, const: 2 }
+        run_id: { type: string }
+        space_id: { type: string }
+        notebook: { type: string }
+        notebook_sha256: { type: string }
+        function: { type: string }
+        version: { type: integer }
+        parameters: { $ref: "#/components/schemas/Parameters" }
+        status: { $ref: "#/components/schemas/RunStatus" }
+        error_kind: { type: string }
+        fault: { type: string }
+        retryable: { type: boolean }
+        message: { type: string }
+        cancelled_by: { type: string }
+        cancel_reason: { type: string }
+        output: { description: "The value returned with nbsandbox.output (succeeded runs), or a streamed run's items (also when it failed after sending some: output_partial)" }
+        output_mode: { type: string, enum: [stream], description: Set for a streamed output }
+        items: { type: integer }
+        output_partial: { type: boolean }
+        error:
+          type: object
+          properties:
+            cell_index: { type: integer, description: 0-based, in the user's notebook }
+            execution_count: { type: integer }
+            exception_type: { type: string }
+            exception_message: { type: string }
+        rendered: { type: boolean }
+        partial: { type: boolean, description: output.ipynb holds the cells that completed }
+        log_truncated: { type: boolean }
+        dependency_warnings: { type: array, items: { $ref: "#/components/schemas/DependencyWarning" } }
+        usage:
+          type: object
+          properties:
+            duration_seconds: { type: number }
+            peak_memory_bytes: { type: integer }
+            cpu_seconds: { type: number }
+        limits: { type: object }
+        image:
+          type: object
+          properties:
+            ref: { type: string }
+            id: { type: string }
+        runtime: { type: string, description: "runc (the default), runsc (gVisor), or the Kubernetes RuntimeClass the run Pod used" }
+        created_at: { type: string, format: date-time }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time }
+    RuntimeInfo:
+      type: object
+      required: [image, python_version, packages, runtime, limits]
+      properties:
+        image:
+          type: object
+          properties:
+            ref: { type: string }
+            id: { type: string }
+            repo_digests: { type: array, items: { type: string } }
+        python_version: { type: string }
+        packages: { type: object, additionalProperties: { type: string }, description: Distribution name → version }
+        modules: { type: array, items: { type: string }, description: "Top-level module names a notebook can import (standard library, installed packages, nbsandbox)" }
+        runtime: { type: string }
+        limits: { type: object }
+        docker:
+          type: object
+          properties:
+            version: { type: string }
+            operating_system: { type: string }
+        completions:
+          type: object
+          description: The runner image's completion index (GET /v1/runtime/completions); absent when the image has none
+          required: [sha256, bytes]
+          properties:
+            sha256: { type: string, description: Of the gzipped index; also its ETag }
+            bytes: { type: integer, description: Gzipped size }

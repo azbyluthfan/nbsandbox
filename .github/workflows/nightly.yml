@@ -1,0 +1,79 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Nightly: the full integration suite with the isolation report,
+# the backend conformance suite, fuzzing (5 min per target) and a
+# 1-hour soak. A `runsc` runtime is to be added to the matrix.
+
+name: nightly
+
+on:
+  schedule:
+    - cron: "0 19 * * *" # 02:00 in Jakarta
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write # to open an issue when the nightly fails
+
+jobs:
+  isolation:
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [runc]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      NBSANDBOX_DATA_DIR: ${{ github.workspace }}/../nbsandbox-data
+      NBSANDBOX_CPU_FAIRNESS_GATE: "0" # shared runners are noisy neighbours: CPU fairness is report-only here
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Runner image
+        run: make runner-image runner-test
+      - name: Data directory owned by uid 1000
+        run: |
+          make dev-data
+          sudo chown -R 1000:1000 "$NBSANDBOX_DATA_DIR"
+          echo "DOCKER_GID=$(getent group docker | cut -d: -f3)" >> "$GITHUB_ENV"
+      - name: Backend conformance (${{ matrix.runtime }})
+        run: make test-backend TESTFLAGS=-v
+      - name: Isolation report (${{ matrix.runtime }})
+        run: make report
+      - name: Soak (45 min, trends)
+        run: make soak SOAK_DURATION=45m
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: isolation-report-${{ matrix.runtime }}
+          path: |
+            docs/isolation-report.md
+            bin/findings/
+
+  fuzz:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - run: make fuzz FUZZTIME=5m
+
+  report-failure:
+    needs: [isolation, fuzz]
+    if: failure()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner, repo: context.repo.repo,
+              title: `Nightly failed: ${new Date().toISOString().slice(0, 10)}`,
+              body: `See ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              labels: ["nightly-failure"],
+            });

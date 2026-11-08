@@ -1,0 +1,10 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Local verification of the production stack (not for real deployments):
+# publishes nbsandboxd on loopback so the integration tests can reach it next
+# to Caddy. Used by `make prod-local`.
+services:
+  nbsandboxd:
+    ports:
+      - "127.0.0.1:${NBSANDBOX_DIRECT_PORT:-8085}:8080"

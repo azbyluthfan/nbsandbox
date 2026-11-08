@@ -1,0 +1,10 @@
+# Demo users for local development and integration tests ONLY.
+# Passwords: alice / alice-dev-password, bob / bob-dev-password.
+# Never deploy these. Create real users with: nbsandboxd hash-password
+#
+# nbsandboxd refuses this file if other users can read it: chmod 600 (or 640).
+users:
+  - username: alice
+    password_hash: "$2a$10$TJpv7hAD5qHTWT3Nmmm/K.t9ZUoUckHAXnbc1FK2HIkwPfBEdw3l2"
+  - username: bob
+    password_hash: "$2a$10$ssJfzp0aX.qw5vc3Ie0aAuNwj2WDXj7lOcVUblcb7Rfex.IQ9xY6S"

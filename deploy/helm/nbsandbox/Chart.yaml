@@ -1,0 +1,12 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: v2
+name: nbsandbox
+description: Run Jupyter notebooks in isolated sandboxes, as an API (API processes and workers that start each run as a Pod)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/azbyluthfan/nbsandbox
+sources:
+  - https://github.com/azbyluthfan/nbsandbox
+license: Apache-2.0

@@ -1,0 +1,169 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Production stack for one Linux host: Caddy (TLS) → nbsandboxd →
+# Docker socket proxy → Docker. See docs/deployment.md.
+#
+#   cp deploy/.env.example deploy/.env    # then edit it
+#   docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d
+#
+# The web UI is never enabled here.
+
+name: nbsandbox
+
+services:
+  caddy:
+    image: caddy:2-alpine@sha256:78bd35025c7ba85961dd149ae670315129954e77abe2383ac47c89106b35ade9
+    environment:
+      NBSANDBOX_DOMAIN: ${NBSANDBOX_DOMAIN:-localhost}
+      NBSANDBOX_TLS: ${NBSANDBOX_TLS:-internal}
+    ports:
+      - "${NBSANDBOX_HTTP_PORT:-80}:80"
+      - "${NBSANDBOX_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [edge]
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      nbsandboxd:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    # Metadata: spaces, runs, status events, functions. Only nbsandboxd can
+    # reach it (the db network); back it up with scripts/backup.sh (pg_dump).
+    image: postgres:17-alpine@sha256:3540c0362c809df084ffac0ae69fe794515f9de92692f02178bcdce0ef0302ac
+    environment:
+      POSTGRES_USER: nbsandbox
+      POSTGRES_PASSWORD: ${NBSANDBOX_DB_PASSWORD:?set NBSANDBOX_DB_PASSWORD in deploy/.env}
+      POSTGRES_DB: nbsandbox
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [db]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nbsandbox -d nbsandbox"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  rustfs:
+    # Object storage (S3-compatible) for file contents. Only nbsandboxd can
+    # reach it. To use your own S3 store or Azure Blob Storage instead, remove
+    # this service and set NBSANDBOX_STORAGE and its settings for nbsandboxd.
+    image: rustfs/rustfs:1.0.4@sha256:ed9210d6411d77ffceb70d94b964a3cb7d225983368bc25bebe01e995293dcc2
+    environment:
+      RUSTFS_ACCESS_KEY: nbsandbox
+      RUSTFS_SECRET_KEY: ${NBSANDBOX_S3_SECRET_KEY:?set NBSANDBOX_S3_SECRET_KEY in deploy/.env}
+    volumes:
+      - objects:/data
+    networks: [db]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://127.0.0.1:9000/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  nbsandboxd:
+    image: ${NBSANDBOX_IMAGE:-ghcr.io/azbyluthfan/nbsandboxd:0.1.0}
+    build:
+      context: ..
+      dockerfile: deploy/nbsandboxd.Dockerfile
+    user: "1000:1000"
+    environment:
+      NBSANDBOX_CONFIG: /etc/nbsandbox/settings.yaml
+      NBSANDBOX_DATA_DIR: ${NBSANDBOX_DATA_DIR:-/srv/nbsandbox}
+      NBSANDBOX_DATABASE_URL: postgres://nbsandbox:${NBSANDBOX_DB_PASSWORD}@postgres:5432/nbsandbox?sslmode=disable
+      NBSANDBOX_STORAGE: s3
+      NBSANDBOX_S3_ENDPOINT: rustfs:9000
+      NBSANDBOX_S3_BUCKET: nbsandbox
+      NBSANDBOX_S3_ACCESS_KEY: nbsandbox
+      NBSANDBOX_S3_SECRET_KEY: ${NBSANDBOX_S3_SECRET_KEY}
+      NBSANDBOX_S3_CREATE_BUCKET: "true"
+      NBSANDBOX_USERS_FILE: /etc/nbsandbox/users.yaml
+      NBSANDBOX_DOCKER_HOST: tcp://socket-proxy:2375
+      NBSANDBOX_RUNNER_IMAGE: ${NBSANDBOX_RUNNER_IMAGE:-ghcr.io/azbyluthfan/nbsandbox-runner:0.1.0}
+      NBSANDBOX_LOG_LEVEL: ${NBSANDBOX_LOG_LEVEL:-info}
+      NBSANDBOX_UI_ENABLED: "false" # never in production
+    volumes:
+      # Same absolute path inside and outside: Docker resolves the run
+      # containers' bind mounts on the host.
+      - ${NBSANDBOX_DATA_DIR:-/srv/nbsandbox}:${NBSANDBOX_DATA_DIR:-/srv/nbsandbox}
+      - ${NBSANDBOX_SETTINGS:-./settings.yaml}:/etc/nbsandbox/settings.yaml:ro
+      - ${NBSANDBOX_USERS:-./users.yaml}:/etc/nbsandbox/users.yaml:ro
+    networks: [edge, docker-api, db]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "/nbsandboxd", "health"]
+      interval: 10s
+      timeout: 6s
+      start_period: 20s
+      retries: 3
+    depends_on:
+      socket-proxy: { condition: service_started }
+      postgres: { condition: service_healthy }
+      rustfs: { condition: service_healthy }
+    # Longer than shutdown_grace, so active runs end cleanly.
+    stop_grace_period: 90s
+    restart: unless-stopped
+
+  socket-proxy:
+    image: wollomatic/socket-proxy:1@sha256:ff95d6ff6c27853005ef85eb8f4ab5923dc3d2f1e055f98fb6aeeaceec3fe848
+    # The docker group's id on the host: getent group docker | cut -d: -f3
+    group_add: ["${DOCKER_GID:?set DOCKER_GID to the docker group id}"]
+    command:
+      - -listenip=0.0.0.0
+      - -allowfrom=nbsandboxd
+      - -loglevel=info
+      - -allowHEAD=(/v[0-9.]+)?/_ping
+      - -allowGET=(/v[0-9.]+)?/(_ping|version|info|containers/json|containers/[a-zA-Z0-9_.-]+/(json|logs|stats)|images/.+/json)
+      - -allowPOST=(/v[0-9.]+)?/containers/(create|[a-zA-Z0-9_.-]+/(start|stop|kill|wait))
+      - -allowDELETE=(/v[0-9.]+)?/containers/[a-zA-Z0-9_.-]+
+      - -allowbindmountfrom=${NBSANDBOX_DATA_DIR:-/srv/nbsandbox}/spaces
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [docker-api]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  # Optional monitoring: docker compose --profile monitoring up -d
+  prometheus:
+    profiles: [monitoring]
+    image: prom/prometheus:v3.7.3@sha256:49214755b6153f90a597adcbff0252cc61069f8ab69ce8411285cd4a560e8038
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:${NBSANDBOX_PROMETHEUS_PORT:-9090}:9090"
+    networks: [edge]
+    restart: unless-stopped
+
+networks:
+  edge: {}
+  # Only nbsandboxd reaches the Docker API; run containers have no network.
+  docker-api:
+    internal: true
+  # Only nbsandboxd reaches the database.
+  db:
+    internal: true
+
+volumes:
+  pgdata: {}
+  objects: {}
+  caddy-data: {}
+  caddy-config: {}
+  prometheus-data: {}

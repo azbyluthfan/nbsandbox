@@ -1,0 +1,137 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Release on a tag vX.Y.Z: the isolation report for this
+# commit, binaries and SBOMs (GoReleaser), signed multi-arch images for
+# nbsandboxd and the runner on GHCR, and the signed Helm chart as an OCI
+# artifact on GHCR. See docs/releasing.md.
+
+name: release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write  # GitHub release
+  packages: write  # GHCR
+  id-token: write  # keyless cosign signing
+
+jobs:
+  report:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      NBSANDBOX_DATA_DIR: ${{ github.workspace }}/../nbsandbox-data
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - run: make runner-image runner-test
+      - run: |
+          make dev-data
+          sudo chown -R 1000:1000 "$NBSANDBOX_DATA_DIR"
+          echo "DOCKER_GID=$(getent group docker | cut -d: -f3)" >> "$GITHUB_ENV"
+      - name: Isolation report (must be complete and all passing)
+        run: make report
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: isolation-report
+          path: docs/isolation-report.md
+
+  images:
+    needs: report
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Versions
+        id: v
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: nbsandboxd image
+        id: nbsandboxd
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: deploy/nbsandboxd.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          build-args: VERSION=${{ steps.v.outputs.version }}
+          push: true
+          sbom: true
+          provenance: mode=max
+          tags: ghcr.io/azbyluthfan/nbsandboxd:${{ steps.v.outputs.version }}
+      - name: Runner image manifest (for the io.nbsandbox.manifest label)
+        run: |
+          docker build -t runner-manifest runner-image
+          echo "MANIFEST=$(docker run --rm --network none --entrypoint python runner-manifest /opt/nbsandbox/export_manifest.py)" >> "$GITHUB_ENV"
+      - name: Runner image
+        id: runner
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: runner-image
+          platforms: linux/amd64,linux/arm64
+          labels: io.nbsandbox.manifest=${{ env.MANIFEST }}
+          push: true
+          sbom: true
+          provenance: mode=max
+          tags: ghcr.io/azbyluthfan/nbsandbox-runner:${{ steps.v.outputs.version }}
+      - name: Sign images (keyless)
+        run: |
+          cosign sign --yes ghcr.io/azbyluthfan/nbsandboxd@${{ steps.nbsandboxd.outputs.digest }}
+          cosign sign --yes ghcr.io/azbyluthfan/nbsandbox-runner@${{ steps.runner.outputs.digest }}
+
+  chart:
+    needs: images
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - name: Package, push and sign the chart
+        env:
+          HELM: go run helm.sh/helm/v3/cmd/helm@v3.17.3
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          # The chart's own version must already match the tag.
+          grep -qx "version: $v" deploy/helm/nbsandbox/Chart.yaml
+          grep -qx "appVersion: \"$v\"" deploy/helm/nbsandbox/Chart.yaml
+          echo "$TOKEN" | $HELM registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          $HELM package deploy/helm/nbsandbox -d dist
+          $HELM push "dist/nbsandbox-$v.tgz" oci://ghcr.io/azbyluthfan/charts 2>&1 | tee push.log
+          digest=$(sed -n 's/^Digest: //p' push.log)
+          echo "$TOKEN" | cosign login ghcr.io -u "${{ github.actor }}" --password-stdin
+          cosign sign --yes "ghcr.io/azbyluthfan/charts/nbsandbox@$digest"
+
+  binaries:
+    needs: [report, images]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: isolation-report
+          path: docs
+      - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
+        with:
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

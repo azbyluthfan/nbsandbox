@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/azbyluthfan/nbsandbox/runner-image/status.schema.json",
+  "title": "nbsandbox runner status file (.nbsandbox-status.json), version 1",
+  "description": "Written by nbsandbox_runner.py inside the run container; read by nbsandboxd to classify the run. The run's own notebook can overwrite it, so nbsandboxd treats it as evidence about that run only.",
+  "type": "object",
+  "required": ["schema_version", "state", "finished_at", "cgroup"],
+  "properties": {
+    "schema_version": { "const": 2 },
+    "run_id": { "type": ["string", "null"] },
+    "state": { "enum": ["succeeded", "execution_error", "dead_kernel", "wrapper_error", "terminated"] },
+    "started_at": { "type": "string" },
+    "finished_at": { "type": "string" },
+    "python_version": { "type": "string" },
+    "papermill_version": { "type": "string" },
+    "message": { "type": "string" },
+    "rendered": { "type": "boolean" },
+    "render_error": { "type": "string" },
+    "error": {
+      "type": "object",
+      "properties": {
+        "cell_index": { "type": ["integer", "null"], "description": "0-based, in the user's notebook (papermill's injected cell is not counted)" },
+        "execution_count": { "type": ["integer", "null"] },
+        "ename": { "type": "string" },
+        "evalue": { "type": "string" }
+      }
+    },
+    "cgroup": {
+      "type": "object",
+      "properties": {
+        "oom": { "type": ["integer", "null"] },
+        "oom_kill": { "type": ["integer", "null"] },
+        "memory_peak_bytes": { "type": ["integer", "null"] },
+        "memory_max_bytes": { "type": ["integer", "null"] },
+        "pids_max_events": { "type": ["integer", "null"] },
+        "cpu_usage_usec": { "type": ["integer", "null"] },
+        "memory_peak_sampled": { "type": "boolean", "description": "memory_peak_bytes was sampled (gVisor keeps no peak), so a short spike can be missed" }
+      }
+    }
+  }
+}

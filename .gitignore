@@ -1,0 +1,33 @@
+# Build output
+/bin/
+/dist/
+*.test
+*.out
+coverage.*
+
+# Local data and secrets
+/data/
+.env
+*.local.yaml
+
+# Test and report scratch output
+/tmp/
+/tests/output/
+
+# Python caches
+__pycache__/
+*.pyc
+
+# Editors, tools and OS
+.DS_Store
+.idea/
+.vscode/
+.claude/
+*.swp
+
+# Internal planning and design notes (kept locally, not published)
+/docs/plan.md
+/docs/plan-next.md
+/docs/design.md
+/docs/spike-findings.md
+/spike/

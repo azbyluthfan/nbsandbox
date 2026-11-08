@@ -1,0 +1,32 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Load balancer of the cluster test stack (docker-compose.cluster.yml):
+# every request to any API process, round robin. No TLS: loopback only.
+
+{
+	admin off
+	auto_https off
+	servers {
+		# gRPC clients speak HTTP/2 without TLS (h2c) to this local port.
+		protocols h1 h2c
+	}
+}
+
+:8080 {
+	reverse_proxy {
+		dynamic a api 8080 {
+			refresh 2s
+		}
+		lb_policy round_robin
+		lb_try_duration 5s
+		# Send stream events as they arrive, never buffered.
+		flush_interval -1
+		transport http {
+			# h2c for gRPC; HTTP/1.1 for everything else.
+			versions h2c 1.1
+			read_timeout 0
+			write_timeout 0
+		}
+	}
+}

@@ -1,0 +1,616 @@
+// Copyright 2026 The nbsandbox Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// The nbsandbox API over gRPC (and gRPC-Web and Connect): the same
+// operations, scopes, errors and data as the REST API in api/openapi.yaml.
+// Every message has the fields of its REST JSON twin, with the same names,
+// so the two never disagree. Authenticate with the same Authorization value
+// ("Bearer <token>" or "Basic <...>") as request metadata.
+syntax = "proto3";
+
+package nbsandbox.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/azbyluthfan/nbsandbox/gen/nbsandbox/v1;nbsandboxv1";
+
+// ---------------------------------------------------------------- spaces
+
+service SpaceService {
+  rpc CreateSpace(CreateSpaceRequest) returns (Space);
+  rpc ListSpaces(ListSpacesRequest) returns (ListSpacesResponse);
+  rpc GetSpace(GetSpaceRequest) returns (Space);
+  rpc UpdateSpace(UpdateSpaceRequest) returns (Space);
+  rpc DeleteSpace(DeleteSpaceRequest) returns (DeleteSpaceResponse);
+
+  // Uploads files: the first message names the space and folder, then for
+  // each file a header message (name) followed by its data in chunks.
+  rpc UploadFiles(stream UploadFilesRequest) returns (UploadFilesResponse);
+  rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
+  // Downloads a file: its description first, then its data in chunks.
+  rpc GetFile(GetFileRequest) returns (stream FileChunk);
+  // Creates or replaces one file: the first message says where (and the
+  // version it replaces), the rest carry the data.
+  rpc PutFile(stream PutFileRequest) returns (PutFileResponse);
+  rpc MoveFile(MoveFileRequest) returns (File);
+  rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
+  rpc CreateFolder(CreateFolderRequest) returns (File);
+}
+
+message Space {
+  string id = 1;
+  string name = 2;
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp updated_at = 4;
+  Usage usage = 5;
+}
+
+message Usage {
+  int64 bytes_used = 1;
+  int64 quota_bytes = 2;
+  int64 file_count = 3;
+  int32 run_count = 4;
+}
+
+message CreateSpaceRequest { string name = 1; }
+message ListSpacesRequest {
+  string cursor = 1;
+  int32 limit = 2;
+}
+message ListSpacesResponse {
+  repeated Space items = 1;
+  string next_cursor = 2;
+}
+message GetSpaceRequest { string space_id = 1; }
+message UpdateSpaceRequest {
+  string space_id = 1;
+  string name = 2;
+}
+message DeleteSpaceRequest { string space_id = 1; }
+message DeleteSpaceResponse {}
+
+message File {
+  string path = 1;
+  string type = 2; // file | folder
+  int64 size = 3;
+  google.protobuf.Timestamp modified = 4;
+  string version = 5; // SHA-256 of a file's contents
+}
+
+message UploadFilesRequest {
+  oneof part {
+    UploadTarget target = 1; // first message
+    string file_name = 2;     // starts the next file
+    bytes data = 3;           // the current file's next chunk
+  }
+}
+message UploadTarget {
+  string space_id = 1;
+  string folder = 2;
+}
+message UploadFilesResponse { repeated File files = 1; }
+
+message ListFilesRequest { string space_id = 1; }
+message ListFilesResponse { repeated File items = 1; }
+
+message GetFileRequest {
+  string space_id = 1;
+  string path = 2;
+}
+message FileChunk {
+  File file = 1; // first message only
+  bytes data = 2;
+}
+
+message PutFileRequest {
+  oneof part {
+    PutTarget target = 1; // first message
+    bytes data = 2;
+  }
+}
+message PutTarget {
+  string space_id = 1;
+  string path = 2;
+  string if_match = 3;      // the version being replaced (needed to replace)
+  bool if_none_match = 4;   // create only
+}
+message PutFileResponse {
+  File file = 1;
+  bool created = 2;
+}
+
+message MoveFileRequest {
+  string space_id = 1;
+  string path = 2;
+  string new_path = 3;
+  string if_match = 4;
+}
+message DeleteFileRequest {
+  string space_id = 1;
+  string path = 2;
+  bool recursive = 3;
+}
+message DeleteFileResponse {}
+message CreateFolderRequest {
+  string space_id = 1;
+  string path = 2;
+}
+
+// ---------------------------------------------------------------- admin
+
+// Every owner's spaces, for callers with the nbsandbox.admin scope.
+service AdminService {
+  rpc AdminListSpaces(AdminListSpacesRequest) returns (AdminListSpacesResponse);
+  rpc AdminUpdateSpace(AdminUpdateSpaceRequest) returns (AdminSpace);
+  rpc AdminDeleteSpace(AdminDeleteSpaceRequest) returns (AdminDeleteSpaceResponse);
+}
+
+message AdminSpace {
+  string id = 1;
+  string name = 2;
+  string owner = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp updated_at = 5;
+  Usage usage = 6;
+}
+message AdminListSpacesRequest {
+  string owner = 1; // only this owner's; "" = everyone's
+  string cursor = 2;
+  int32 limit = 3;
+}
+message AdminListSpacesResponse {
+  repeated AdminSpace items = 1;
+  string next_cursor = 2;
+}
+message AdminUpdateSpaceRequest {
+  string space_id = 1;
+  string owner = 2; // the new owner's caller ID
+}
+message AdminDeleteSpaceRequest { string space_id = 1; }
+message AdminDeleteSpaceResponse {}
+
+// ---------------------------------------------------------------- functions
+
+service FunctionService {
+  rpc ListFunctions(ListFunctionsRequest) returns (ListFunctionsResponse);
+  rpc GetFunction(GetFunctionRequest) returns (Function);
+  rpc DeleteFunction(DeleteFunctionRequest) returns (DeleteFunctionResponse);
+  rpc PublishFunction(PublishFunctionRequest) returns (FunctionVersion);
+  rpc GetFunctionVersion(GetFunctionVersionRequest) returns (FunctionVersion);
+  rpc GetFunctionContract(GetFunctionContractRequest) returns (Contract);
+  // Calls a function: the run, or with wait set, its result once finished
+  // (or the run as it is when the wait ends).
+  rpc InvokeFunction(InvokeFunctionRequest) returns (RunOrResult);
+  // Calls a function and streams its result as it is made (see
+  // RunService.FollowRunResult). wait_seconds is ignored.
+  rpc InvokeFunctionStream(InvokeFunctionRequest) returns (stream ResultEvent);
+}
+
+message Function {
+  string name = 1;
+  int32 latest_version = 2;
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp updated_at = 4;
+  repeated FunctionVersion versions = 5;
+}
+
+message FunctionVersion {
+  string function = 1;
+  int32 version = 2;
+  string notebook = 3;
+  repeated string files = 4;
+  string notebook_sha256 = 5;
+  int64 bundle_bytes = 6;
+  string created_by = 7;
+  google.protobuf.Timestamp created_at = 8;
+  Contract contract = 9;
+}
+
+message Contract {
+  string function = 1;
+  int32 version = 2;
+  google.protobuf.Value input = 3;  // JSON Schema, or null
+  google.protobuf.Value output = 4; // single mode: the value's JSON Schema, or null
+  string mode = 5;                  // single | stream
+  bool mode_inferred = 6;           // from the notebook's calls, not declared
+  google.protobuf.Value item = 7;   // stream mode: each item's JSON Schema, or null
+}
+
+// A contract as written: input is a JSON Schema; output is a JSON Schema
+// (one value) or {"mode": "stream", "item": <JSON Schema>}.
+message ContractSpec {
+  google.protobuf.Value input = 1;
+  google.protobuf.Value output = 2;
+}
+
+message ListFunctionsRequest { string space_id = 1; }
+message ListFunctionsResponse { repeated Function items = 1; }
+message GetFunctionRequest {
+  string space_id = 1;
+  string name = 2;
+}
+message DeleteFunctionRequest {
+  string space_id = 1;
+  string name = 2;
+}
+message DeleteFunctionResponse {}
+message PublishFunctionRequest {
+  string space_id = 1;
+  string name = 2;
+  string notebook = 3;
+  repeated string files = 4;
+  ContractSpec contract = 5; // instead of the notebook's
+}
+message GetFunctionVersionRequest {
+  string space_id = 1;
+  string name = 2;
+  int32 version = 3; // 0 = the latest
+}
+message GetFunctionContractRequest {
+  string space_id = 1;
+  string name = 2;
+}
+message InvokeFunctionRequest {
+  string space_id = 1;
+  string name = 2;
+  int32 version = 3; // 0 = the latest
+  google.protobuf.Value parameters = 4;
+  string idempotency_key = 5;
+  int32 wait_seconds = 6; // 0..60
+}
+
+// ---------------------------------------------------------------- runs
+
+service RunService {
+  rpc GetRuntime(GetRuntimeRequest) returns (Runtime);
+  // The runner image's completion index for editors: gzipped JSON
+  // ({"modules": {"pandas": [[name, kind, signature, doc], ...]}}).
+  rpc GetCompletions(GetCompletionsRequest) returns (Completions);
+
+  rpc CreateRun(CreateRunRequest) returns (Run);
+  rpc ListRuns(ListRunsRequest) returns (ListRunsResponse);
+  rpc GetRun(GetRunRequest) returns (Run);
+  rpc CancelRun(CancelRunRequest) returns (Run);
+  // The short result once finished; with wait_seconds, waits for it (or
+  // returns the run as it is when the wait ends).
+  rpc GetRunResult(GetRunResultRequest) returns (RunOrResult);
+  rpc DeleteRun(DeleteRunRequest) returns (DeleteRunResponse);
+
+  rpc GetRunNotebook(GetRunFileRequest) returns (stream FileChunk);
+  rpc GetRunHTML(GetRunFileRequest) returns (stream FileChunk);
+  rpc GetRunLog(GetRunFileRequest) returns (stream FileChunk);
+  rpc ListArtifacts(ListArtifactsRequest) returns (ListArtifactsResponse);
+  rpc GetArtifact(GetArtifactRequest) returns (stream FileChunk);
+  rpc PromoteArtifact(PromoteArtifactRequest) returns (File);
+
+  // The log, line by line, live; ends with the final status.
+  rpc FollowRunLog(FollowRunLogRequest) returns (stream LogEvent);
+  // The result as it is made: each item of a streamed output as soon as it
+  // is recorded, progress if asked, then the result; a finished run
+  // replays. The items are exactly the result's output list.
+  rpc FollowRunResult(FollowRunResultRequest) returns (stream ResultEvent);
+  // A run's status changes (and, if asked, progress and cell events); ends
+  // after the final status.
+  rpc FollowRunEvents(FollowRunEventsRequest) returns (stream RunEvent);
+  // Every run's events in a space, until the caller stops.
+  rpc FollowSpaceEvents(FollowSpaceEventsRequest) returns (stream RunEvent);
+}
+
+message Run {
+  string id = 1;
+  string space_id = 2;
+  string notebook = 3;
+  string notebook_sha256 = 4;
+  string function = 5;
+  int32 version = 6;
+  bool read_only_space = 7;
+  string client = 23; // the application that started it on its user's behalf
+  google.protobuf.Value parameters = 8;
+  string status = 9;
+  string error_kind = 10;
+  string fault = 11;
+  bool retryable = 12;
+  string message = 13;
+  string cancelled_by = 14;
+  string cancel_reason = 15;
+  int64 output_bytes = 16;
+  int32 queue_position = 17;
+  repeated DependencyWarning dependency_warnings = 18;
+  google.protobuf.Timestamp created_at = 19;
+  google.protobuf.Timestamp started_at = 20;
+  google.protobuf.Timestamp finished_at = 21;
+  RunRecord result = 22;
+}
+
+message DependencyWarning {
+  string module = 1;
+  optional int32 cell = 2;
+  string source = 3;
+}
+
+// The full record of a finished run (result.json).
+message RunRecord {
+  int32 schema_version = 1;
+  string run_id = 2;
+  string space_id = 3;
+  string notebook = 4;
+  string notebook_sha256 = 5;
+  string function = 6;
+  int32 version = 7;
+  google.protobuf.Value parameters = 8;
+  string status = 9;
+  string error_kind = 10;
+  string fault = 11;
+  bool retryable = 12;
+  string message = 13;
+  string cancelled_by = 14;
+  string cancel_reason = 15;
+  CellError error = 16;
+  google.protobuf.Value output = 17;
+  bool rendered = 18;
+  bool partial = 19;
+  bool log_truncated = 20;
+  repeated DependencyWarning dependency_warnings = 21;
+  RunUsage usage = 22;
+  RunLimits limits = 23;
+  RunImage image = 24;
+  string runtime = 25;
+  string output_mode = 29;   // stream, or "" for one value
+  optional int32 items = 30; // streamed runs: how many items
+  bool output_partial = 31;  // a streamed run that ended before finishing: output holds the items so far
+  google.protobuf.Timestamp created_at = 26;
+  google.protobuf.Timestamp started_at = 27;
+  google.protobuf.Timestamp finished_at = 28;
+}
+
+message CellError {
+  optional int32 cell_index = 1;
+  optional int32 execution_count = 2;
+  string exception_type = 3;
+  string exception_message = 4;
+}
+
+message RunUsage {
+  double duration_seconds = 1;
+  optional int64 peak_memory_bytes = 2;
+  optional double cpu_seconds = 3;
+}
+
+message RunLimits {
+  int64 memory_bytes = 1;
+  double cpus = 2;
+  int64 pids = 3;
+  int64 tmp_bytes = 4;
+  double timeout_seconds = 5;
+  int64 log_bytes = 6;
+}
+
+message RunImage {
+  string ref = 1;
+  string id = 2;
+}
+
+// The short answer for programs: the output if the run succeeded, else why
+// it didn't.
+message Result {
+  string run_id = 1;
+  string status = 2;
+  string function = 3;
+  int32 version = 4;
+  google.protobuf.Value output = 5; // one value, or a streamed run's items
+  ResultError error = 6;
+  optional int32 items = 7; // streamed runs: how many items
+  bool partial = 8;         // the run ended before finishing its items (output: the items so far)
+}
+
+message ResultError {
+  string kind = 1;
+  string fault = 2;
+  bool retryable = 3;
+  string message = 4;
+  optional int32 cell_index = 5;
+  optional int32 execution_count = 6;
+  string exception_type = 7;
+  string exception_message = 8;
+  string cancelled_by = 9;
+  string cancel_reason = 10;
+  optional int64 peak_memory_bytes = 11;
+  int64 memory_limit_bytes = 12;
+}
+
+message RunOrResult {
+  oneof answer {
+    Result result = 1; // finished
+    Run run = 2;       // not finished yet (or, without a wait, just created)
+  }
+  bool replay = 3; // the Idempotency-Key matched an earlier request: its run
+}
+
+message Runtime {
+  RuntimeImage image = 1;
+  string python_version = 2;
+  map<string, string> packages = 3;
+  repeated string modules = 4;
+  string runtime = 5;
+  RuntimeLimits limits = 6;
+  RuntimeDocker docker = 7;
+  RuntimeCompletions completions = 8;
+}
+message RuntimeImage {
+  string ref = 1;
+  string id = 2;
+  repeated string repo_digests = 3;
+}
+message RuntimeLimits {
+  int64 memory_bytes = 1;
+  double cpus = 2;
+  int64 pids = 3;
+  int64 tmp_bytes = 4;
+  double timeout_seconds = 5;
+  int64 log_bytes = 6;
+  int64 max_file_bytes = 7;
+  int64 max_space_bytes = 8;
+  int32 concurrency = 9;
+}
+message RuntimeDocker {
+  string version = 1;
+  string operating_system = 2;
+}
+
+message GetRuntimeRequest {}
+message GetCompletionsRequest {}
+message Completions {
+  string sha256 = 1;
+  bytes index_gzip = 2;
+}
+message RuntimeCompletions {
+  string sha256 = 1;
+  int64 bytes = 2;
+}
+message CreateRunRequest {
+  string space_id = 1;
+  string notebook = 2;
+  google.protobuf.Value parameters = 3;
+  bool read_only_space = 4;
+  string idempotency_key = 5;
+}
+message ListRunsRequest {
+  string space_id = 1;
+  string status = 2;
+  google.protobuf.Timestamp created_after = 3;
+  google.protobuf.Timestamp created_before = 4;
+  string cursor = 5;
+  int32 limit = 6;
+}
+message ListRunsResponse {
+  repeated Run items = 1;
+  string next_cursor = 2;
+}
+message GetRunRequest {
+  string space_id = 1;
+  string run_id = 2;
+}
+message CancelRunRequest {
+  string space_id = 1;
+  string run_id = 2;
+  string reason = 3;
+}
+message GetRunResultRequest {
+  string space_id = 1;
+  string run_id = 2;
+  int32 wait_seconds = 3; // 0..60
+}
+message DeleteRunRequest {
+  string space_id = 1;
+  string run_id = 2;
+}
+message DeleteRunResponse {}
+message GetRunFileRequest {
+  string space_id = 1;
+  string run_id = 2;
+}
+message ListArtifactsRequest {
+  string space_id = 1;
+  string run_id = 2;
+}
+message ListArtifactsResponse { repeated File items = 1; }
+message GetArtifactRequest {
+  string space_id = 1;
+  string run_id = 2;
+  string path = 3;
+}
+message PromoteArtifactRequest {
+  string space_id = 1;
+  string run_id = 2;
+  string artifact = 3;
+  string to = 4;
+}
+
+message FollowRunLogRequest {
+  string space_id = 1;
+  string run_id = 2;
+  int64 after = 3; // resume after this line number
+}
+message LogEvent {
+  oneof event {
+    LogLine line = 1;
+    LogEnd end = 2; // last message
+  }
+}
+message LogLine {
+  int64 seq = 1; // the line number
+  string text = 2;
+}
+message LogEnd {
+  string status = 1;   // the run's final status; "" when dropped
+  int64 last_seq = 2;  // resume after this line
+  bool dropped = 3;    // the reader fell too far behind: resume after last_seq
+}
+
+message FollowRunEventsRequest {
+  string space_id = 1;
+  string run_id = 2;
+  int64 after = 3;              // resume after this event
+  repeated string include = 4;  // "progress", "cell"
+}
+message FollowSpaceEventsRequest {
+  string space_id = 1;
+  string function = 2; // only invocations of this function
+  int64 after = 3;
+  repeated string include = 4;
+}
+
+message FollowRunResultRequest {
+  string space_id = 1;
+  string run_id = 2;
+  int32 after = 3;            // resume after this item
+  bool include_progress = 4;
+}
+
+message ResultEvent {
+  oneof event {
+    ResultItem item = 1;
+    RunEvent progress = 2;
+    Result result = 3; // last
+  }
+}
+
+// One item of a streamed output.
+message ResultItem {
+  string run_id = 1;
+  string kind = 2; // "item"
+  string function = 3;
+  int32 version = 4;
+  int32 index = 5; // 1, 2, ...: output[index-1] in the result
+  optional int32 total = 6; // if the notebook declared it
+  google.protobuf.Value item = 7;
+}
+// One event of a run. kind says which fields are set: "status" (status,
+// queue_position, result), "progress" (fraction, message), "cell"
+// (cell_index, state, outcome, duration_seconds).
+message RunEvent {
+  int64 seq = 1; // resume after it; 0 when it isn't a stored event
+  string kind = 2;
+  string run_id = 3;
+  string function = 4;
+  int32 version = 5;
+
+  string status = 6;
+  int32 queue_position = 7;
+  Result result = 8;
+
+  reserved 9;
+
+  optional double fraction = 10;
+  string message = 11;
+
+  optional int32 cell_index = 12;
+  string state = 13;   // started | finished
+  string outcome = 14; // ok | error
+  optional double duration_seconds = 15;
+
+  // Set instead of the above when events after the resume point were
+  // pruned: re-read the runs you wait for.
+  string pruned = 16;
+}

@@ -1,0 +1,63 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Main pipeline: on every merge to main, build the runner image,
+# test it, and run the integration suite against the dev stack on Linux
+# (runc). PR checks live in pr.yml.
+
+name: main
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: main
+  cancel-in-progress: false
+
+jobs:
+  integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      NBSANDBOX_DATA_DIR: ${{ github.workspace }}/../nbsandbox-data
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      - name: Runner image (build, manifest label, tests)
+        run: |
+          make runner-image
+          make runner-test
+
+      - name: Data directory owned by uid 1000
+        run: |
+          make dev-data
+          sudo chown -R 1000:1000 "$NBSANDBOX_DATA_DIR"
+          echo "DOCKER_GID=$(getent group docker | cut -d: -f3)" >> "$GITHUB_ENV"
+
+      - name: Preflight
+        run: sudo -E NBSANDBOX_DATA_DIR="$NBSANDBOX_DATA_DIR" scripts/preflight.sh
+
+      - name: Integration tests (runc)
+        env:
+          REPORT_DIR: ${{ github.workspace }}/findings
+        run: make test-integration TESTFLAGS=-v
+
+      - name: Stack logs on failure
+        if: failure()
+        run: docker compose -f deploy/docker-compose.dev.yml logs --no-color | tail -300
+
+      - name: Findings
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: findings-runc
+          path: findings/
+          if-no-files-found: ignore

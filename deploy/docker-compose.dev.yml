@@ -1,0 +1,138 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Development stack: nbsandboxd, PostgreSQL and the Docker socket proxy, no
+# TLS. Use `make up`, which sets NBSANDBOX_DATA_DIR and installs the demo
+# users file first. Works on Docker Desktop and on Linux. The database lives
+# and the file contents (RustFS) in the volumes nbsandbox-dev_pgdata and
+# nbsandbox-dev_objects: `make down` keeps them, `make wipe-dev` removes them
+# (the data folder is left to you).
+
+name: nbsandbox-dev
+
+services:
+  socket-proxy:
+    # wollomatic/socket-proxy 1.13.2, pinned by digest.
+    image: wollomatic/socket-proxy:1@sha256:ff95d6ff6c27853005ef85eb8f4ab5923dc3d2f1e055f98fb6aeeaceec3fe848
+    # The Docker socket is root:root 0660 on Docker Desktop. On Linux set
+    # DOCKER_GID to the docker group's id (getent group docker).
+    group_add: ["${DOCKER_GID:-0}"]
+    command:
+      - -listenip=0.0.0.0
+      - -allowfrom=nbsandboxd
+      - -loglevel=info
+      # Exactly the calls nbsandboxd needs; the proxy
+      # anchors each pattern. Everything else gets 403.
+      - -allowHEAD=(/v[0-9.]+)?/_ping
+      - -allowGET=(/v[0-9.]+)?/(_ping|version|info|containers/json|containers/[a-zA-Z0-9_.-]+/(json|logs|stats)|images/.+/json)
+      - -allowPOST=(/v[0-9.]+)?/containers/(create|[a-zA-Z0-9_.-]+/(start|stop|kill|wait))
+      - -allowDELETE=(/v[0-9.]+)?/containers/[a-zA-Z0-9_.-]+
+      # Run containers may only bind-mount folders under the spaces directory.
+      - -allowbindmountfrom=${NBSANDBOX_DATA_DIR:?set NBSANDBOX_DATA_DIR}/spaces
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [docker-api]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  postgres:
+    # Metadata: spaces, runs, status events, functions. Reachable only on the
+    # compose network (run containers have no network at all).
+    image: postgres:17-alpine@sha256:3540c0362c809df084ffac0ae69fe794515f9de92692f02178bcdce0ef0302ac
+    environment:
+      POSTGRES_USER: nbsandbox
+      POSTGRES_PASSWORD: nbsandbox-dev
+      POSTGRES_DB: nbsandbox
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [default]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nbsandbox -d nbsandbox"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  rustfs:
+    # Object storage (S3-compatible) for file contents. Reachable only on the
+    # compose network.
+    image: rustfs/rustfs:1.0.4@sha256:ed9210d6411d77ffceb70d94b964a3cb7d225983368bc25bebe01e995293dcc2
+    environment:
+      RUSTFS_ACCESS_KEY: nbsandbox
+      RUSTFS_SECRET_KEY: nbsandbox-dev-secret
+    volumes:
+      - objects:/data
+    networks: [default]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://127.0.0.1:9000/ || exit 1"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  nbsandboxd:
+    build:
+      context: ..
+      dockerfile: deploy/nbsandboxd.Dockerfile
+    image: nbsandboxd:dev
+    user: "1000:1000"
+    environment:
+      NBSANDBOX_CONFIG: /etc/nbsandbox/settings.yaml
+      NBSANDBOX_DATA_DIR: ${NBSANDBOX_DATA_DIR}
+      NBSANDBOX_DATABASE_URL: postgres://nbsandbox:nbsandbox-dev@postgres:5432/nbsandbox?sslmode=disable
+      NBSANDBOX_STORAGE: s3
+      NBSANDBOX_S3_ENDPOINT: rustfs:9000
+      NBSANDBOX_S3_BUCKET: nbsandbox
+      NBSANDBOX_S3_ACCESS_KEY: nbsandbox
+      NBSANDBOX_S3_SECRET_KEY: nbsandbox-dev-secret
+      NBSANDBOX_S3_CREATE_BUCKET: "true"
+      NBSANDBOX_USERS_FILE: ${NBSANDBOX_DATA_DIR}/users.yaml
+      NBSANDBOX_DOCKER_HOST: tcp://socket-proxy:2375
+      NBSANDBOX_LOG_LEVEL: ${NBSANDBOX_LOG_LEVEL:-info}
+      # Overridable for tests (make test-integration uses short values).
+      NBSANDBOX_SHUTDOWN_GRACE: ${NBSANDBOX_SHUTDOWN_GRACE:-60s}
+      NBSANDBOX_RUN_TIMEOUT: ${NBSANDBOX_RUN_TIMEOUT:-10m}
+      NBSANDBOX_RUN_CONCURRENCY: ${NBSANDBOX_RUN_CONCURRENCY:-2}
+      # Cleanup timers; the soak test shortens them ("" = the settings file's).
+      NBSANDBOX_RUN_RETENTION: ${NBSANDBOX_RUN_RETENTION:-}
+      NBSANDBOX_EVENT_RETENTION: ${NBSANDBOX_EVENT_RETENTION:-}
+      NBSANDBOX_IDEMPOTENCY_WINDOW: ${NBSANDBOX_IDEMPOTENCY_WINDOW:-}
+      NBSANDBOX_CLEANUP_EVERY: ${NBSANDBOX_CLEANUP_EVERY:-}
+      # Local web UI. Inside the container it must listen on all
+      # interfaces; the port below is published to 127.0.0.1 on the host only.
+      NBSANDBOX_UI_ENABLED: ${NBSANDBOX_UI_ENABLED:-true}
+      NBSANDBOX_UI_LISTEN: 0.0.0.0:8090
+    volumes:
+      # Same absolute path inside and outside: Docker resolves run containers'
+      # bind mounts on the host.
+      - ${NBSANDBOX_DATA_DIR}:${NBSANDBOX_DATA_DIR}
+      # Another settings file: NBSANDBOX_SETTINGS (the gVisor reference run
+      # uses one with smaller limits).
+      - ${NBSANDBOX_SETTINGS:-../config/settings.yaml}:/etc/nbsandbox/settings.yaml:ro
+    ports:
+      - "127.0.0.1:${NBSANDBOX_PORT:-8080}:8080"
+      - "127.0.0.1:${NBSANDBOX_UI_PORT:-8090}:8090" # web UI: never publish beyond loopback
+    networks: [docker-api, default]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      socket-proxy: { condition: service_started }
+      postgres: { condition: service_healthy }
+      rustfs: { condition: service_healthy }
+    restart: unless-stopped
+    # Longer than shutdown_grace, so active runs can finish or be stopped
+    # cleanly before Docker kills nbsandboxd.
+    stop_grace_period: 90s
+
+networks:
+  # The Docker API is reachable only from nbsandboxd, never from run containers
+  # (they have no network at all) or from outside.
+  docker-api:
+    internal: true
+
+volumes:
+  pgdata:
+  objects:

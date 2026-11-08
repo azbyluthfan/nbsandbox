@@ -1,0 +1,15 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Top-level packages in the curated runner image. Lock with `make runner-lock`,
+# which writes requirements.txt with exact versions and hashes.
+
+# Execution
+papermill
+nbconvert
+ipykernel
+
+# Data and plotting
+numpy
+pandas
+matplotlib

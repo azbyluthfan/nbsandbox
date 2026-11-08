@@ -1,0 +1,59 @@
+<!doctype html>
+<!-- Copyright 2026 The nbsandbox Authors. SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csp-nonce" content="">
+  <title>nbsandbox</title>
+  <link rel="icon" href="icons/box.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="app.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <button id="explorer-toggle" type="button" class="icon-button" aria-controls="explorer" aria-expanded="true" title="Show or hide files"><span class="icon i-sidebar"></span></button>
+    <a class="brand" href="#/"><span class="icon i-box"></span>nbsandbox</a>
+    <span class="crumb-sep" aria-hidden="true">/</span>
+    <label class="space-picker">
+      <span class="visually-hidden">Space</span>
+      <select id="space-select" aria-label="Space"></select>
+    </label>
+    <span class="topbar-spacer"></span>
+    <span id="runtime-status" class="status-pill" hidden></span>
+    <button id="runs-toggle" type="button" class="ghost" aria-controls="drawer" title="Runs in this space"><span class="icon i-activity"></span><span>Runs</span><span id="runs-count" class="count" hidden></span></button>
+    <button id="fns-toggle" type="button" class="ghost" aria-controls="drawer" title="Functions in this space"><span class="icon i-function"></span><span>Functions</span></button>
+    <label class="user-picker" title="This page acts as the chosen user without a password. Keep it on your machine.">
+      <span class="avatar" id="user-avatar" aria-hidden="true"></span>
+      <select id="user-select" aria-label="User"></select>
+      <span class="local-note">local · no login</span>
+    </label>
+  </header>
+
+  <div class="shell">
+    <aside id="explorer" class="explorer" aria-label="Files">
+      <div class="explorer-head">
+        <span class="label">Files</span>
+        <span id="explorer-tools" class="explorer-tools"></span>
+      </div>
+      <div id="file-tree" class="tree"></div>
+    </aside>
+
+    <main id="main" class="main"></main>
+
+    <aside id="drawer" class="drawer" aria-label="Runs and functions" hidden>
+      <div class="drawer-head">
+        <div class="tabs" role="tablist">
+          <button id="tab-runs" type="button" role="tab" aria-selected="true">Runs</button>
+          <button id="tab-fns" type="button" role="tab" aria-selected="false">Functions</button>
+        </div>
+        <button id="drawer-close" type="button" class="icon-button" title="Close"><span class="icon i-x"></span></button>
+      </div>
+      <ul id="run-list" class="item-list" role="tabpanel" aria-labelledby="tab-runs"></ul>
+      <ul id="fn-list" class="item-list" role="tabpanel" aria-labelledby="tab-fns" hidden></ul>
+    </aside>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

@@ -1,0 +1,92 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+# The runs namespace: run Pods only, no traffic in or out, and a Role that
+# lets the workers (and nobody else in this release) manage Pods there.
+{{- if .Values.runs.createNamespace }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.runs.namespace }}
+  labels:
+    {{- include "nbsandbox.labels" . | nindent 4 }}
+    # Run Pods meet the restricted Pod Security Standard.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+{{- end }}
+---
+# No ingress, no egress for anything in the namespace: notebooks have no
+# network at all. Workers check it with a probe Pod and refuse runs if it
+# isn't enforced (the network plugin must support NetworkPolicy).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all
+  namespace: {{ .Values.runs.namespace }}
+  labels: {{- include "nbsandbox.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "nbsandbox.fullname" . }}-worker
+  namespace: {{ .Values.runs.namespace }}
+  labels: {{- include "nbsandbox.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [create, get, list, watch, delete]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [pods/exec]   # copying the run's files in and out, stopping the runner
+    verbs: [create, get]
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "nbsandbox.fullname" . }}-worker
+  namespace: {{ .Values.runs.namespace }}
+  labels: {{- include "nbsandbox.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "nbsandbox.fullname" . }}-worker
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "nbsandbox.fullname" . }}-worker
+    namespace: {{ .Release.Namespace }}
+---
+# Reading the runs namespace and, with a runtime class, checking it exists
+# are cluster-scoped reads.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "nbsandbox.fullname" . }}-{{ .Release.Namespace }}-worker
+  labels: {{- include "nbsandbox.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [get]
+  - apiGroups: [node.k8s.io]
+    resources: [runtimeclasses]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "nbsandbox.fullname" . }}-{{ .Release.Namespace }}-worker
+  labels: {{- include "nbsandbox.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "nbsandbox.fullname" . }}-{{ .Release.Namespace }}-worker
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "nbsandbox.fullname" . }}-worker
+    namespace: {{ .Release.Namespace }}

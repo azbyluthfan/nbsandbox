@@ -1,0 +1,25 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Dependency updates: Go modules, pinned images, GitHub Actions by digest, and the runner's Python lock file.",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests", ":semanticCommits"],
+  "labels": ["dependencies"],
+  "schedule": ["before 6am on monday"],
+  "pip-compile": { "fileMatch": ["^runner-image/requirements\\.txt$"] },
+  "pip_requirements": { "enabled": false },
+  "packageRules": [
+    { "matchManagers": ["dockerfile", "docker-compose"], "pinDigests": true },
+    { "matchManagers": ["github-actions"], "groupName": "GitHub Actions" },
+    { "matchManagers": ["pip-compile"], "groupName": "runner image Python packages", "schedule": ["before 6am on the first day of the month"] }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "gVisor release pinned in deploy/gvisor.version",
+      "fileMatch": ["^deploy/gvisor\\.version$"],
+      "matchStrings": ["(?<currentValue>\\d{8}\\.\\d+)"],
+      "depNameTemplate": "google/gvisor",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^release-(?<version>.*)$"
+    }
+  ]
+}

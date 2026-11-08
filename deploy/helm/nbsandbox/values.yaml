@@ -1,0 +1,115 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# nbsandbox on Kubernetes: API processes (the REST/gRPC API) and workers
+# (each run is a Pod in the runs namespace). Both need PostgreSQL and object
+# storage (S3-compatible or Azure Blob Storage), which this chart doesn't
+# install. See docs/kubernetes.md.
+
+image:
+  repository: ghcr.io/azbyluthfan/nbsandboxd
+  tag: ""                   # default: the chart's appVersion
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# The image notebooks run in (pinned by digest in production).
+runnerImage: ghcr.io/azbyluthfan/nbsandbox-runner:0.1.0
+
+api:
+  replicas: 2
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { memory: 512Mi }
+  service:
+    type: ClusterIP
+    port: 8080
+    nodePort: null          # with type NodePort
+  podLabels: {}
+  podAnnotations: {}
+
+worker:
+  replicas: 2
+  concurrency: 2            # runs at a time per worker
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 1Gi }
+  # Scratch space for the runs it executes (copies of their spaces and
+  # outputs): at least concurrency x 2 x uploads.maxSpace.
+  scratchSize: 4Gi
+  podLabels: {}
+  podAnnotations: {}
+
+# Where run Pods go. The chart creates the namespace (unless it exists),
+# a deny-all NetworkPolicy for it, and a Role letting only the workers
+# manage Pods there.
+runs:
+  namespace: nbsandbox-runs
+  createNamespace: true
+  runtimeClass: ""          # e.g. kata (AKS Pod Sandboxing) or gvisor; must exist
+  nodeSelector: {}         # e.g. { agentpool: runs }
+  tolerations: []          # e.g. [{ key: nbsandbox.io/runs, operator: Exists, effect: NoSchedule }]
+  lease: 30s                # take over a lost worker's runs after this; above your database's failover time
+  timeout: 10m
+  memory: 2GiB
+  cpus: 1
+  retention: 720h
+
+uploads:
+  maxFile: 100MiB
+  maxSpace: 512MiB
+
+# PostgreSQL: a URL in a Secret (postgres://user:pass@host:5432/db?sslmode=require).
+database:
+  existingSecret: ""        # required
+  key: database-url
+
+# Object storage for file contents and run outputs.
+storage:
+  kind: s3                  # s3 | azure
+  s3:
+    endpoint: ""            # host[:port], no scheme
+    bucket: nbsandbox
+    region: ""
+    tls: true
+    prefix: ""
+    createBucket: false
+    existingSecret: ""      # with access-key and secret-key; empty: the cloud's identity (IRSA, ...)
+  azure:
+    accountURL: ""          # https://<account>.blob.core.windows.net
+    container: nbsandbox
+    prefix: ""
+    createContainer: false  # Workload Identity is used (see serviceAccount)
+
+# Callers: bearer tokens from your identity provider (recommended), and/or
+# basic auth from a users file (development).
+auth:
+  basic: false
+  usersSecret: ""           # a Secret with users.yaml, when basic is true
+  oidc:
+    issuer: ""
+    audience: ""
+    idPrefix: ""
+    idClaims: []
+
+functions:
+  requireSchemas: false
+
+# The service accounts. Annotations and pod labels are where cloud identity
+# goes (AKS Workload Identity: annotation azure.workload.identity/client-id
+# and pod label azure.workload.identity/use: "true").
+serviceAccount:
+  annotations: {}
+podLabels: {}
+
+# More NBSANDBOX_* variables for both kinds of process.
+extraEnv: []
+
+podDisruptionBudget:
+  enabled: true
+
+ingress:
+  enabled: false
+  className: ""
+  host: ""
+  tls: []
+  annotations: {}

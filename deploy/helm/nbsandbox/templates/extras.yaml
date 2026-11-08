@@ -1,0 +1,43 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+{{- if .Values.podDisruptionBudget.enabled }}
+{{- range $role := list "api" "worker" }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "nbsandbox.fullname" $ }}-{{ $role }}
+  labels: {{- include "nbsandbox.labels" $ | nindent 4 }}
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels: {{- include "nbsandbox.selector" $ | nindent 6 }}
+      app.kubernetes.io/component: {{ $role }}
+{{- end }}
+{{- end }}
+{{- if .Values.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "nbsandbox.fullname" . }}
+  labels: {{- include "nbsandbox.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - host: {{ required "ingress.host is required" .Values.ingress.host | quote }}
+      http:
+        paths:
+          # Only the API (REST under /v1, gRPC under /nbsandbox.v1.);
+          # health and metrics stay inside the cluster.
+          - { path: /v1/, pathType: Prefix, backend: { service: { name: {{ include "nbsandbox.fullname" . }}, port: { name: http } } } }
+          - { path: /nbsandbox.v1., pathType: Prefix, backend: { service: { name: {{ include "nbsandbox.fullname" . }}, port: { name: http } } } }
+{{- end }}

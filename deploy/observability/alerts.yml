@@ -1,0 +1,39 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+# Example alerts. Thresholds are starting points; tune them.
+groups:
+  - name: nbsandbox
+    rules:
+      - alert: NbsandboxDown
+        expr: up{job="nbsandboxd"} == 0
+        for: 2m
+        labels: {severity: page}
+        annotations:
+          summary: nbsandboxd is not answering /metrics
+          runbook: docs/operations.md#nbsandboxd-down
+      - alert: NbsandboxDockerDown
+        expr: nbsandbox_docker_up == 0
+        for: 2m
+        labels: {severity: page}
+        annotations:
+          summary: nbsandboxd cannot reach Docker; no runs can start
+          runbook: docs/operations.md#docker-down
+      - alert: NbsandboxQueueBacklog
+        expr: nbsandbox_queue_length > 10
+        for: 15m
+        labels: {severity: ticket}
+        annotations:
+          summary: "{{ $value }} runs waiting for 15 minutes; consider raising runs.concurrency or the host size"
+          runbook: docs/operations.md#queue-backlog
+      - alert: NbsandboxPlatformErrors
+        expr: sum(increase(nbsandbox_runs_total{status=~"platform_error|interrupted"}[30m])) > 3
+        labels: {severity: ticket}
+        annotations:
+          summary: Runs are failing for platform reasons (not the notebooks)
+          runbook: docs/operations.md#platform-errors
+      - alert: NbsandboxOOMWave
+        expr: sum(increase(nbsandbox_runs_total{status="oom"}[1h])) > 10
+        labels: {severity: info}
+        annotations:
+          summary: Many runs hit the memory limit; check limits.memory and the notebooks
+          runbook: docs/operations.md#capacity

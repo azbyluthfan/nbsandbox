@@ -1,0 +1,65 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nbsandbox.fullname" . }}
+  labels: {{- include "nbsandbox.labels" . | nindent 4 }}
+data:
+  settings.yaml: |
+    listen: ":8080"
+    data_dir: /srv/nbsandbox
+    users_file: /etc/nbsandbox/users.yaml
+    backend: kubernetes
+    docker:
+      image: {{ .Values.runnerImage | quote }}
+    kubernetes:
+      namespace: {{ .Values.runs.namespace | quote }}
+      runtime_class: {{ .Values.runs.runtimeClass | quote }}
+      {{- with .Values.runs.nodeSelector }}
+      node_selector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.runs.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+    limits:
+      memory: {{ .Values.runs.memory | quote }}
+      cpus: {{ .Values.runs.cpus }}
+      timeout: {{ .Values.runs.timeout | quote }}
+    uploads:
+      max_file: {{ .Values.uploads.maxFile | quote }}
+      max_space: {{ .Values.uploads.maxSpace | quote }}
+    runs:
+      concurrency: {{ .Values.worker.concurrency }}
+      retention: {{ .Values.runs.retention | quote }}
+      lease: {{ .Values.runs.lease | quote }}
+    functions:
+      require_schemas: {{ .Values.functions.requireSchemas }}
+    storage:
+      kind: {{ .Values.storage.kind | quote }}
+      {{- if eq .Values.storage.kind "s3" }}
+      s3:
+        endpoint: {{ required "storage.s3.endpoint is required" .Values.storage.s3.endpoint | quote }}
+        bucket: {{ .Values.storage.s3.bucket | quote }}
+        region: {{ .Values.storage.s3.region | quote }}
+        tls: {{ .Values.storage.s3.tls }}
+        prefix: {{ .Values.storage.s3.prefix | quote }}
+        create_bucket: {{ .Values.storage.s3.createBucket }}
+      {{- else }}
+      azure:
+        account_url: {{ required "storage.azure.accountURL is required" .Values.storage.azure.accountURL | quote }}
+        container: {{ .Values.storage.azure.container | quote }}
+        prefix: {{ .Values.storage.azure.prefix | quote }}
+        create_container: {{ .Values.storage.azure.createContainer }}
+      {{- end }}
+    auth:
+      basic: {{ .Values.auth.basic }}
+      {{- if .Values.auth.oidc.issuer }}
+      oidc:
+        issuer: {{ .Values.auth.oidc.issuer | quote }}
+        audience: {{ required "auth.oidc.audience is required" .Values.auth.oidc.audience | quote }}
+        id_prefix: {{ .Values.auth.oidc.idPrefix | quote }}
+        {{- with .Values.auth.oidc.idClaims }}
+        id_claims: {{ toJson . }}
+        {{- end }}
+      {{- end }}

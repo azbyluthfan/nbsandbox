@@ -1,0 +1,7 @@
+nbsandbox is installed: {{ .Values.api.replicas }} API process(es), {{ .Values.worker.replicas }} worker(s), runs in namespace {{ .Values.runs.namespace }}.
+
+Check the workers are ready to run notebooks (the network probe must pass):
+
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+
+A worker that isn't ready says why at /readyz (port 8080). See docs/kubernetes.md.

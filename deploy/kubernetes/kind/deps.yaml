@@ -1,0 +1,69 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# PostgreSQL and RustFS for the local cluster only (in production, use a
+# managed database and object storage). Data lives as long as the Pods.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nbsandbox
+---
+apiVersion: v1
+kind: Secret
+metadata: { name: nbsandbox-db, namespace: nbsandbox }
+stringData:
+  database-url: postgres://nbsandbox:nbsandbox-dev@postgres:5432/nbsandbox?sslmode=disable
+---
+apiVersion: v1
+kind: Secret
+metadata: { name: nbsandbox-s3, namespace: nbsandbox }
+stringData: { access-key: nbsandbox, secret-key: nbsandbox-dev-secret }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: postgres, namespace: nbsandbox }
+spec:
+  selector: { matchLabels: { app: postgres } }
+  template:
+    metadata: { labels: { app: postgres } }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:17-alpine@sha256:3540c0362c809df084ffac0ae69fe794515f9de92692f02178bcdce0ef0302ac
+          env:
+            - { name: POSTGRES_USER, value: nbsandbox }
+            - { name: POSTGRES_PASSWORD, value: nbsandbox-dev }
+            - { name: POSTGRES_DB, value: nbsandbox }
+          ports: [{ containerPort: 5432 }]
+          readinessProbe: { exec: { command: [pg_isready, -U, nbsandbox] }, periodSeconds: 2 }
+          volumeMounts: [{ name: data, mountPath: /var/lib/postgresql/data }]
+      volumes: [{ name: data, emptyDir: {} }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: postgres, namespace: nbsandbox }
+spec: { selector: { app: postgres }, ports: [{ port: 5432 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: rustfs, namespace: nbsandbox }
+spec:
+  selector: { matchLabels: { app: rustfs } }
+  template:
+    metadata: { labels: { app: rustfs } }
+    spec:
+      containers:
+        - name: rustfs
+          image: rustfs/rustfs:1.0.4@sha256:ed9210d6411d77ffceb70d94b964a3cb7d225983368bc25bebe01e995293dcc2
+          env:
+            - { name: RUSTFS_ACCESS_KEY, value: nbsandbox }
+            - { name: RUSTFS_SECRET_KEY, value: nbsandbox-dev-secret }
+          ports: [{ containerPort: 9000 }]
+          readinessProbe: { tcpSocket: { port: 9000 }, periodSeconds: 2 }
+          volumeMounts: [{ name: data, mountPath: /data }]
+      volumes: [{ name: data, emptyDir: {} }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: rustfs, namespace: nbsandbox }
+spec: { selector: { app: rustfs }, ports: [{ port: 9000 }] }

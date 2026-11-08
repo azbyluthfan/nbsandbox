@@ -1,0 +1,50 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+# The workers: they claim queued runs and start each one as a Pod in the
+# runs namespace. They serve only health and metrics.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nbsandbox.fullname" . }}-worker
+  labels: {{- include "nbsandbox.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ .Values.worker.replicas }}
+  selector:
+    matchLabels: {{- include "nbsandbox.selector" . | nindent 6 }}
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels: {{- include "nbsandbox.selector" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+        {{- with merge (dict) .Values.podLabels .Values.worker.podLabels }}{{ toYaml . | nindent 8 }}{{ end }}
+      annotations:
+        checksum/settings: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.worker.podAnnotations }}{{ toYaml . | nindent 8 }}{{ end }}
+    spec:
+      serviceAccountName: {{ include "nbsandbox.fullname" . }}-worker
+      securityContext: { runAsNonRoot: true, fsGroup: 1000, seccompProfile: { type: RuntimeDefault } }
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # Active runs get the shutdown grace to finish, then end as interrupted.
+      terminationGracePeriodSeconds: 90
+      containers:
+        - name: nbsandboxd
+          image: {{ include "nbsandbox.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports: [{ name: http, containerPort: 8080 }]
+          env:
+            - { name: NBSANDBOX_ROLE, value: worker }
+            # The network probe checks run Pods can't reach the worker or its node's kubelet.
+            - { name: NBSANDBOX_POD_IP, valueFrom: { fieldRef: { fieldPath: status.podIP } } }
+            - { name: NBSANDBOX_NODE_IP, valueFrom: { fieldRef: { fieldPath: status.hostIP } } }
+            {{- include "nbsandbox.env" . | nindent 12 }}
+          securityContext: {{- include "nbsandbox.containerSecurity" . | nindent 12 }}
+          resources: {{- toYaml .Values.worker.resources | nindent 12 }}
+          volumeMounts: {{- include "nbsandbox.volumeMounts" . | nindent 12 }}
+          {{- include "nbsandbox.probes" . | nindent 10 }}
+      volumes:
+        - name: data
+          emptyDir: { sizeLimit: {{ .Values.worker.scratchSize }} }
+        {{- include "nbsandbox.volumes" . | nindent 8 }}

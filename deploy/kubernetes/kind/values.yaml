@@ -1,0 +1,30 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Chart values for the local kind cluster (make k8s-up): the images built
+# locally, PostgreSQL and RustFS from deps.yaml, the demo users, the API on
+# 127.0.0.1:8080.
+image: { repository: nbsandboxd, tag: dev, pullPolicy: Never }
+runnerImage: nbsandbox-runner:dev
+api:
+  replicas: 2
+  service: { type: NodePort, nodePort: 30080 }
+worker:
+  replicas: 2
+  concurrency: 1
+  scratchSize: 2Gi
+runs:
+  # Run Pods reserve their whole memory limit (requests = limits). kind's
+  # one node has what Docker Desktop gives it (4 GB), so 1 GiB lets two
+  # runs and the probe share it.
+  memory: 1GiB
+  lease: 10s
+  timeout: 150s    # runs start slowly on kind in Docker Desktop
+database: { existingSecret: nbsandbox-db }
+storage:
+  kind: s3
+  s3: { endpoint: "rustfs:9000", bucket: nbsandbox, tls: false, createBucket: true, existingSecret: nbsandbox-s3 }
+auth: { basic: true, usersSecret: nbsandbox-users }
+extraEnv:
+  - { name: NBSANDBOX_SHUTDOWN_GRACE, value: 5s }
+podDisruptionBudget: { enabled: false }

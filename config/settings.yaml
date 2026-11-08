@@ -1,0 +1,83 @@
+# nbsandbox service settings. Every key is optional; the values below are the
+# defaults. NBSANDBOX_* environment variables override this file:
+#   NBSANDBOX_LISTEN, NBSANDBOX_DATA_DIR, NBSANDBOX_USERS_FILE, NBSANDBOX_LOG_LEVEL,
+#   NBSANDBOX_DOCKER_HOST (falls back to DOCKER_HOST), NBSANDBOX_DOCKER_RUNTIME,
+#   NBSANDBOX_RUNNER_IMAGE, NBSANDBOX_RUN_CONCURRENCY, NBSANDBOX_RUN_RETENTION,
+#   NBSANDBOX_EVENT_RETENTION, NBSANDBOX_IDEMPOTENCY_WINDOW, NBSANDBOX_CLEANUP_EVERY,
+#   NBSANDBOX_AUTH_BASIC, NBSANDBOX_OIDC_ISSUER (turns tokens on), NBSANDBOX_OIDC_AUDIENCE,
+#   NBSANDBOX_OIDC_JWKS_URL, NBSANDBOX_OIDC_ID_PREFIX, NBSANDBOX_OIDC_ID_CLAIMS,
+#   NBSANDBOX_ROLE, NBSANDBOX_WORKER_ID, NBSANDBOX_RUN_LEASE
+# Unknown keys are an error, so a typo can't be silently ignored.
+
+listen: ":8080"
+role: all                           # all | api | worker (docs/scaling.md); all = one process does everything
+worker_id: ""                       # names this worker in run leases; "" = the host name. Must be unique.
+data_dir: /srv/nbsandbox              # must be the same absolute path on the host and in the nbsandboxd container
+users_file: /etc/nbsandbox/users.yaml # must not be readable by other users (chmod 600); needed for basic auth and the web UI
+log_level: info                     # debug | info | warn | error
+
+docker:
+  host: ""                          # "" = DOCKER_HOST, then /var/run/docker.sock; Docker Desktop: unix://<home>/.docker/run/docker.sock
+  runtime: ""                       # "" = runc; "runsc" = gVisor (never falls back to runc)
+  image: nbsandbox-runner:dev
+
+# Per-run limits. Set here only; requests can never change them.
+limits:
+  memory: 2GiB                      # swap disabled
+  cpus: 1
+  pids: 256
+  tmp_size: 256MiB                  # /tmp tmpfs; counts toward memory
+  shm_size: 64MiB
+  log_cap: 10MiB
+  timeout: 10m
+
+uploads:
+  max_file: 50MiB
+  max_space: 500MiB
+
+# Per-owner limits. An owner is a caller ID: a basic user's name, or
+# "<prefix>:<claim>..." for a token (e.g. entra:<tid>:<oid>).
+quotas:
+  max_spaces: 0          # spaces per owner; 0 = no limit
+  # owners:
+  #   - owner: alice
+  #     max_spaces: 50
+  #     max_space: 5GiB    # this owner's space quota instead of uploads.max_space
+
+runs:
+  concurrency: 2
+  retention: 720h                   # 30 days
+  stop_grace: 5s                    # SIGTERM → SIGKILL
+  dependency_check: warn            # warn | reject
+  max_parameters: 1MiB              # a run's parameters, as JSON (any nested JSON)
+  max_output: 1MiB                  # the value a notebook returns with nbsandbox.output
+  event_retention: 24h              # how long status events can be replayed (SSE resume)
+  idempotency_window: 24h           # how long an Idempotency-Key returns the original run
+  cleanup_every: 1h                 # how often finished runs, events and keys past retention are removed
+  lease: 30s                        # a worker's hold on a run; a run whose worker went away is taken over after this
+
+# Publishing notebooks as functions (docs/functions.md).
+functions:
+  require_schemas: false            # NBSANDBOX_REQUIRE_SCHEMAS; true: refuse a function without input and output schemas
+
+shutdown_grace: 60s                 # wait for active runs on SIGTERM
+
+# Local web UI. It acts as any user WITHOUT a password: keep it
+# off on shared servers, and never expose it beyond this machine.
+ui:
+  enabled: false                    # NBSANDBOX_UI_ENABLED
+  listen: 127.0.0.1:8090            # NBSANDBOX_UI_LISTEN; must differ from listen
+
+# Who may call the API (docs/auth.md). Basic auth uses users_file; bearer
+# tokens come from an OpenID Connect provider. Spaces belong to the caller's ID.
+auth:
+  basic: true                       # set false in production once tokens work
+  # oidc:
+  #   issuer: https://login.microsoftonline.com/<tenant id>/v2.0
+  #   audience: <nbsandbox's client id>
+  #   id_prefix: entra                # part of every space's owner: never change it
+  #   id_claims: [tid, oid]           # stable and never reused (Keycloak: [sub]); never email or upn
+  #   jwks_url: ""                    # default: from the issuer's discovery document
+  #   leeway: 60s
+  #   max_lifetime: 24h
+  #   keys_refresh: 1h

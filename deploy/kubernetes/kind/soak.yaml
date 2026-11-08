@@ -1,0 +1,11 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# make soak-k8s: on top of values.yaml, the soak's shortened cleanup timers,
+# so every cleanup path runs many times in 45 minutes.
+extraEnv:
+  - { name: NBSANDBOX_SHUTDOWN_GRACE, value: 5s }
+  - { name: NBSANDBOX_RUN_RETENTION, value: 10m }
+  - { name: NBSANDBOX_EVENT_RETENTION, value: 10m }
+  - { name: NBSANDBOX_IDEMPOTENCY_WINDOW, value: 10m }
+  - { name: NBSANDBOX_CLEANUP_EVERY, value: 2m }

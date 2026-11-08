@@ -1,0 +1,36 @@
+# golangci-lint v2 configuration. Install golangci-lint yourself (see CONTRIBUTING.md).
+version: "2"
+
+linters:
+  # "standard" = errcheck, govet, ineffassign, staticcheck, unused
+  default: standard
+  enable:
+    - bodyclose     # unclosed HTTP bodies (Docker log streams, SSE)
+    - contextcheck  # functions that should take the caller's context
+    - errorlint     # error wrapping and comparison with errors.Is/As
+    - gosec         # security patterns: file permissions, paths, etc.
+    - misspell
+    - noctx         # HTTP requests without a context
+    - unconvert
+  settings:
+    errcheck:
+      check-type-assertions: true
+  exclusions:
+    rules:
+      # Tests build requests with httptest.NewRequest and write fixture files
+      # with ordinary modes on purpose; these rules target production code.
+      - path: _test\.go
+        linters: [noctx, gosec]
+      # The backend conformance suite is test-harness code: it reads workload
+      # notebooks and writes them readable by the run's uid 1000 on purpose.
+      - path: internal/isolation/backendtest/
+        linters: [gosec]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/azbyluthfan/nbsandbox
