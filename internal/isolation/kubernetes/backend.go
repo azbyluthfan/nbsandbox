@@ -480,20 +480,33 @@ const diskPoll = 5 * time.Second
 // after the stream broke (the API server restarted, say).
 const eventsRetry = time.Second
 
+// followEvents prints what is appended to the events file from byte $1 on,
+// checking its size four times a second. Not `tail -f`: it waits for inotify,
+// which doesn't fire for another container's writes in a gVisor sandbox, so
+// events arrived only when the run ended. Only a regular file is read, never
+// a link the notebook planted.
+const followEvents = `f=/run/` + isolation.RunEventsFile + `; off=$1
+while :; do
+  if [ -f "$f" ] && [ ! -L "$f" ]; then
+    size=$(stat -c %s "$f")
+    if [ "$size" -gt "$off" ]; then
+      tail -c "+$((off + 1))" "$f" | head -c "$((size - off))"
+      off=$size
+    fi
+  fi
+  sleep 0.25
+done`
+
 // syncEvents follows the run's events file in the Pod and appends what the
 // run writes to the worker's copy of the run's folder, where nbsandboxd reads
 // it as on Docker (where the folder is shared): items and progress reach
-// callers as they are written. One long-lived exec per run (polling with an
-// exec at a time was too slow on a busy cluster); if it breaks, it starts
-// again where it stopped. The whole folder comes back when the run ends.
-// Only a regular file is followed, never a link the notebook planted, and
-// tail keeps the file it opened.
+// callers as they are written. One long-lived exec per run (an exec per poll
+// was too slow on a busy cluster); if it breaks, it starts again where it
+// stopped. The whole folder comes back when the run ends.
 func (b *Backend) syncEvents(ctx context.Context, name, localDir string) {
 	w := &appender{dir: localDir, file: isolation.RunEventsFile}
 	for ctx.Err() == nil {
-		cmd := []string{"sh", "-c", `f=/run/` + isolation.RunEventsFile +
-			`; until [ -f "$f" ] && [ ! -L "$f" ]; do sleep 0.2; done; exec tail -c "+$1" -f "$f"`,
-			"follow-events", strconv.FormatInt(w.n+1, 10)}
+		cmd := []string{"sh", "-c", followEvents, "follow-events", strconv.FormatInt(w.n, 10)}
 		if err := b.exec(ctx, name, filesContainer, cmd, nil, w); err != nil && ctx.Err() == nil {
 			b.log.Debug("follow run events; starting again", "pod", name, "error", err)
 		}
