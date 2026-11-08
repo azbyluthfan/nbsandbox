@@ -128,7 +128,9 @@ The API is described in [api/openapi.yaml](api/openapi.yaml). When you add a rou
 | Isolation | probe notebooks and the isolation reports | `make report` (this machine's Docker); `make report-linux` (Linux with Docker Engine, `runc` and gVisor, in a Lima VM: [docs/gvisor.md](docs/gvisor.md#reproduce)); `make report-k8s` (kind; `K8S_RUNTIME_CLASS=gvisor` adds gVisor) | yes, Linux for authoritative results |
 | Soak | a long mix of runs, failing on any steady growth | `make soak` (45 min), `make soak-cluster`, `make soak-k8s` | yes |
 | Web UI | the main screens in a headless browser, retaking the tour's screenshots | `make tour` (with `make up` running) | yes |
-| Fuzzing | the parsers of outside input | `go test ./internal/<pkg> -run '^$' -fuzz '^FuzzName$' -fuzztime 2m` ([docs/security/review.md](docs/security/review.md#fuzzing) lists them) | no |
+| Fuzzing | the parsers of outside input | `make fuzz` (every target, 30 s each; `FUZZTIME=3m` for longer) or one target with `go test ./internal/<pkg> -run '^$' -fuzz '^FuzzName$'` ([docs/security/review.md](docs/security/review.md#fuzzing) lists them) | no |
+
+**In CI:** every pull request runs `make check`, govulncheck, the Compose and workflow lints and shellcheck (`pr`); every push to `main` runs the integration suite on Linux (`main`). Once a week, and on demand from the Actions tab, `weekly` runs every scenario side by side in about 1.5 hours: Docker with runc and gVisor (conformance, isolation report, soak), Kubernetes on kind with both runtimes, all fuzz targets, and a security scan of the code and both images; a failure opens an issue.
 
 Coverage thresholds: at least 80 % for core packages (`runs`, `logs`, `spaces`, `store`, `isolation/docker`) and at least 70 % overall. `make cover` enforces both.
 

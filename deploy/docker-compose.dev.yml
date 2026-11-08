@@ -90,6 +90,8 @@ services:
       NBSANDBOX_S3_CREATE_BUCKET: "true"
       NBSANDBOX_USERS_FILE: ${NBSANDBOX_DATA_DIR}/users.yaml
       NBSANDBOX_DOCKER_HOST: tcp://socket-proxy:2375
+      # "" = runc; runsc = gVisor (installed on this host; docs/gvisor.md).
+      NBSANDBOX_DOCKER_RUNTIME: ${NBSANDBOX_DOCKER_RUNTIME:-}
       NBSANDBOX_LOG_LEVEL: ${NBSANDBOX_LOG_LEVEL:-info}
       # Overridable for tests (make test-integration uses short values).
       NBSANDBOX_SHUTDOWN_GRACE: ${NBSANDBOX_SHUTDOWN_GRACE:-60s}

@@ -84,12 +84,14 @@ cover: test-race ## Race-tested unit tests plus the coverage gate
 FUZZTIME ?= 30s
 
 .PHONY: fuzz
-fuzz: ## Run every fuzz target for FUZZTIME each (default 30s; nightly CI uses 5m)
-	$(GO) test ./internal/spaces/ -run '^$$' -fuzz FuzzValidatePath -fuzztime $(FUZZTIME)
-	$(GO) test ./internal/runs/ -run '^$$' -fuzz FuzzNormalizeParameters -fuzztime $(FUZZTIME)
-	$(GO) test ./internal/deps/ -run '^$$' -fuzz FuzzScanners -fuzztime $(FUZZTIME)
-	$(GO) test ./internal/isolation/docker/ -run '^$$' -fuzz FuzzLineWriter -fuzztime $(FUZZTIME)
-	$(GO) test ./internal/auth/ -run '^$$' -fuzz FuzzVerify -fuzztime $(FUZZTIME)
+fuzz: ## Run every fuzz target for FUZZTIME each (default 30s; the weekly CI run uses 3m)
+	@set -e; for t in \
+		spaces:FuzzValidatePath spaces:FuzzValidateNotebook runs:FuzzNormalizeParameters runs:FuzzParseRunEvent \
+		deps:FuzzScanners isolation/docker:FuzzLineWriter auth:FuzzVerify auth:FuzzParseBasic \
+		tarfs:FuzzReadTar contract:FuzzFromNotebook api:FuzzResumePoint blob:FuzzValidKey config:FuzzParseSize; do \
+		echo "== $${t#*:} (internal/$${t%%:*})"; \
+		$(GO) test ./internal/$${t%%:*}/ -run '^$$' -fuzz "^$${t#*:}$$" -fuzztime $(FUZZTIME); \
+	done
 
 .PHONY: fmt
 fmt: ## Format Go code
@@ -380,7 +382,7 @@ test-backend: ## Backend conformance suite against the local Docker daemon
 .PHONY: test-integration
 # The soak: several spaces at once, sampled every minute, judged on trends;
 # cleanup timers shortened so every cleanup path runs many times. 45 min by
-# default (nightly); SOAK_DURATION=3h before a release. docs/perf.md has the
+# default (the weekly CI run); SOAK_DURATION=3h before a release. docs/perf.md has the
 # baseline it is compared with.
 SOAK_DURATION ?= 45m
 SOAK_ENV := NBSANDBOX_SHUTDOWN_GRACE=5s NBSANDBOX_RUN_TIMEOUT=60s NBSANDBOX_RUN_CONCURRENCY=4 \

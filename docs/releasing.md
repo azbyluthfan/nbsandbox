@@ -16,7 +16,7 @@ Before v1.0, a minor version may change behaviour; changes are listed in the cha
 
 ## Checklist
 
-1. **Main is green:** PR, main and nightly pipelines; the last nightly isolation report has no failures.
+1. **Main is green:** the PR and main pipelines, and the weekly one (start it from the Actions tab: "weekly" → "Run workflow"), which runs every scenario: Docker with runc and gVisor, Kubernetes with both, fuzzing and the security scan.
 2. **Soak:** for a minor or major release, a 24 h soak on the reference host (Linux with Docker Engine):
    ```bash
    SOAK_DURATION=24h make test-integration TESTFLAGS="-v -run TestSoak -timeout 25h"

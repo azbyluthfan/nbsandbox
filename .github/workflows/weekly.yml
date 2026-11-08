@@ -1,0 +1,158 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Weekly: everything too slow for every push, and what can break without a
+# push. Every scenario runs side by side, so the whole run takes about as
+# long as its longest job (about 1.5 h; each job is capped below 2 h):
+#   - Docker with runc and with gVisor: backend conformance, the isolation
+#     report and a 45-minute soak;
+#   - Kubernetes (kind with Cilium) with the default runtime and with a
+#     gVisor RuntimeClass: the isolation report;
+#   - every fuzz target for a few minutes;
+#   - a security scan (govulncheck, and Trivy on both images), which reports
+#     newly published advisories even in weeks without commits.
+# A failure opens an issue. Also runs from the Actions tab ("Run workflow"),
+# e.g. before a release.
+
+name: weekly
+
+on:
+  schedule:
+    - cron: "0 19 * * 0" # Sundays 19:00 UTC: Monday 02:00 in Jakarta
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write # to open an issue when the weekly run fails
+
+jobs:
+  docker:
+    name: Docker (${{ matrix.runtime }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [runc, runsc]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    env:
+      NBSANDBOX_DATA_DIR: ${{ github.workspace }}-data
+      NBSANDBOX_CPU_FAIRNESS_GATE: "0" # shared runners are noisy neighbours: CPU fairness is report-only here
+      NBSANDBOX_DOCKER_RUNTIME: ${{ matrix.runtime == 'runsc' && 'runsc' || '' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Install pinned gVisor
+        if: matrix.runtime == 'runsc'
+        run: |
+          set -euo pipefail
+          version="$(cat deploy/gvisor.version)"
+          base="https://storage.googleapis.com/gvisor/releases/release/${version}/$(uname -m)"
+          cd "$(mktemp -d)"
+          curl -fsSLO "${base}/gvisor.tar.bz2"
+          curl -fsSLO "${base}/gvisor.tar.bz2.sha512"
+          sha512sum -c gvisor.tar.bz2.sha512
+          tar -xjf gvisor.tar.bz2
+          for bin in runsc containerd-shim-runsc-v1; do
+            sudo install -m 0755 "$(find . -type f -name "$bin" | head -n 1)" /usr/local/bin/
+          done
+          sudo /usr/local/bin/runsc install
+          sudo systemctl restart docker
+          docker info --format '{{json .Runtimes}}' | grep -q runsc
+      - name: Runner image
+        run: make runner-image runner-test
+      - name: Data directory owned by uid 1000
+        run: |
+          make dev-data
+          sudo chown -R 1000:1000 "$NBSANDBOX_DATA_DIR"
+          echo "DOCKER_GID=$(getent group docker | cut -d: -f3)" >> "$GITHUB_ENV"
+      - name: Backend conformance
+        run: make test-backend TESTFLAGS=-v
+      - name: Isolation report
+        run: make report
+      - name: Soak (45 min, trends)
+        run: make soak SOAK_DURATION=45m
+      - name: Stack logs on failure
+        if: failure()
+        run: docker compose -f deploy/docker-compose.dev.yml logs --no-color | tail -300
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: isolation-report-docker-${{ matrix.runtime }}
+          path: |
+            docs/isolation-report.md
+            bin/findings/
+
+  kubernetes:
+    name: Kubernetes (${{ matrix.runtime_class || 'default runtime' }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime_class: ["", gvisor]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Isolation report on kind (Cilium)
+        run: make report-k8s K8S_RUNTIME_CLASS=${{ matrix.runtime_class }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: isolation-report-kubernetes-${{ matrix.runtime_class || 'default' }}
+          path: |
+            docs/isolation-report-kubernetes.md
+            bin/findings-k8s/
+
+  fuzz:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Every fuzz target, 3 minutes each
+        run: make fuzz FUZZTIME=3m
+
+  security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: govulncheck (vulnerabilities our code reaches)
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+      - name: Build both images
+        run: |
+          make runner-image
+          docker build -q -f deploy/nbsandboxd.Dockerfile -t nbsandboxd:dev .
+      - name: Trivy (HIGH and CRITICAL with a fix available)
+        # Advisories without a published fix are accepted until there is one
+        # (docs/security/review.md); a fixable one fails this job.
+        run: |
+          for image in nbsandboxd:dev nbsandbox-runner:dev; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock:ro \
+              aquasec/trivy:0.58.1@sha256:ab70a02200597efa04748f210f793936eb647cbcdb0ea69cc30b226d6f5a22c7 \
+              image --quiet --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$image"
+          done
+
+  report-failure:
+    needs: [docker, kubernetes, fuzz, security]
+    if: failure()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner, repo: context.repo.repo,
+              title: `Weekly run failed: ${new Date().toISOString().slice(0, 10)}`,
+              body: `See ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              labels: ["weekly-failure"],
+            });

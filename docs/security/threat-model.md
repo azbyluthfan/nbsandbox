@@ -84,7 +84,7 @@ client ──HTTPS──▶ Caddy ──▶ nbsandboxd ──▶ socket proxy �
 | Threat | Mitigation | Checked by |
 |---|---|---|
 | Vulnerable dependency in the image or service | Pinned with hashes; scans; Renovate; monthly image rebuild; pip removed from the runner image (runs have no network); Debian security updates applied at build | `govulncheck` in CI; Trivy and `pip-audit` before each release ([review](review.md)) |
-| A leak in nbsandboxd degrades the service over time | Soak test watching goroutines, open files, memory and leftover containers | `TestSoak` (nightly 1 h; 24 h before releases) |
+| A leak in nbsandboxd degrades the service over time | Soak test watching goroutines, open files, memory and leftover containers | `TestSoak` (weekly 45 min; 3 h before releases) |
 
 ## Platform notes
 
