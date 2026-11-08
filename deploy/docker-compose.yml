@@ -43,8 +43,18 @@ services:
       POSTGRES_USER: nbsandbox
       POSTGRES_PASSWORD: ${NBSANDBOX_DB_PASSWORD:?set NBSANDBOX_DB_PASSWORD in deploy/.env}
       POSTGRES_DB: nbsandbox
+    # Hardened like the rest: its own user from the start (the image's
+    # postgres, uid 70, which owns the data volume), no capabilities, a
+    # read-only root; only the data volume and two in-memory folders are
+    # writable.
+    user: "70:70"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    tmpfs:
+      - /var/run/postgresql
+      - /tmp
+    read_only: true
+    cap_drop: [ALL]
     networks: [db]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U nbsandbox -d nbsandbox"]
@@ -62,8 +72,15 @@ services:
     environment:
       RUSTFS_ACCESS_KEY: nbsandbox
       RUSTFS_SECRET_KEY: ${NBSANDBOX_S3_SECRET_KEY:?set NBSANDBOX_S3_SECRET_KEY in deploy/.env}
+    # The image's own non-root user, no capabilities, a read-only root;
+    # writable: the data volume and in-memory /logs and /tmp.
     volumes:
       - objects:/data
+    tmpfs:
+      - /logs:size=64m
+      - /tmp
+    read_only: true
+    cap_drop: [ALL]
     networks: [db]
     healthcheck:
       test: ["CMD-SHELL", "curl -s -o /dev/null http://127.0.0.1:9000/ || exit 1"]

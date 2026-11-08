@@ -67,7 +67,7 @@ handler: runsc
 EOF
 
 # Check: a Pod under gVisor reports gVisor's kernel.
-for i in $(seq 30); do node kubectl --kubeconfig=/etc/kubernetes/admin.conf get --raw /readyz >/dev/null 2>&1 && break; sleep 2; done
+for _ in $(seq 30); do node kubectl --kubeconfig=/etc/kubernetes/admin.conf get --raw /readyz >/dev/null 2>&1 && break; sleep 2; done
 node kubectl --kubeconfig=/etc/kubernetes/admin.conf delete pod gvisor-check --ignore-not-found >/dev/null
 node kubectl --kubeconfig=/etc/kubernetes/admin.conf run gvisor-check --image=nbsandbox-runner:dev --image-pull-policy=Never \
 	--restart=Never --overrides='{"spec":{"runtimeClassName":"gvisor"}}' --command -- sh -c 'dmesg | head -1' >/dev/null

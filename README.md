@@ -45,7 +45,7 @@ client ──HTTPS──> nbsandboxd (API) ───────┐
 
 ## Quickstart (local, Docker Desktop or Linux)
 
-Needs Docker, Go 1.27+, `make`, `curl` and `jq`.
+Needs Docker, Go 1.27.3+, `make`, `curl` and `jq`.
 
 ```bash
 git clone https://github.com/azbyluthfan/nbsandbox.git && cd nbsandbox

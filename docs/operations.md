@@ -1,24 +1,24 @@
 # Operating nbsandbox
 
-Monitoring, backups, upgrades, capacity and runbooks. The commands assume the production Compose stack from [deployment.md](deployment.md), run from the repository folder:
+Monitoring, backups, upgrades, capacity and runbooks. The commands assume the production Compose stack from [deployment.md](deployment.md), run from the repository folder, with this shell function defined (it works in bash and zsh):
 
 ```bash
-COMPOSE="sudo docker compose -f deploy/docker-compose.yml --env-file deploy/.env"
+compose() { sudo docker compose -f deploy/docker-compose.yml --env-file deploy/.env "$@"; }
 ```
 
 ## Monitoring
 
-- **Health:** nbsandboxd's container healthcheck runs `nbsandboxd health`, which asks `/readyz`. `$COMPOSE ps` shows `healthy` or `unhealthy`.
+- **Health:** nbsandboxd's container healthcheck runs `nbsandboxd health`, which asks `/readyz`. `compose ps` shows `healthy` or `unhealthy`.
 - **Readiness details:** each failing check names its reason.
   ```bash
-  $COMPOSE exec nbsandboxd /nbsandboxd health   # exit 0 = ready; otherwise prints the failing checks
+  compose exec nbsandboxd /nbsandboxd health   # exit 0 = ready; otherwise prints the failing checks
   ```
 - **Metrics:** nbsandboxd's `/metrics` is internal (Caddy doesn't forward it). The optional Prometheus profile scrapes it and loads the example alerts:
   ```bash
-  $COMPOSE --profile monitoring up -d prometheus      # then http://127.0.0.1:9090 on the host
+  compose --profile monitoring up -d prometheus      # then http://127.0.0.1:9090 on the host
   ```
   `deploy/observability/alerts.yml` alerts on nbsandboxd being down, Docker unreachable, a queue backlog, platform errors, and waves of out-of-memory runs. `deploy/observability/grafana-dashboard.json` is an example dashboard: import it into Grafana with a Prometheus data source.
-- **Logs:** `$COMPOSE logs -f nbsandboxd` gives JSON lines. Every run line carries `run_id` and `space_id`; credentials and parameter values are never logged.
+- **Logs:** `compose logs -f nbsandboxd` gives JSON lines. Every run line carries `run_id` and `space_id`; credentials and parameter values are never logged.
 
 ## Backup
 
@@ -40,25 +40,26 @@ This replaces the current data. Back it up first if you might want it back (the 
 
 1. Stop nbsandbox, and remove its database and object store volumes:
    ```bash
-   $COMPOSE down
+   compose down
    sudo docker volume rm nbsandbox_pgdata nbsandbox_objects
    ```
 2. Create the stack without starting it (this makes empty volumes), and put the object store's files back:
    ```bash
-   $COMPOSE create
+   compose create
    sudo docker run --rm -i -v nbsandbox_objects:/data --entrypoint tar \
-     postgres:17-alpine -C /data -xzf - < /var/backups/nbsandbox/objects-<time>.tar.gz
+     postgres:17-alpine@sha256:3540c0362c809df084ffac0ae69fe794515f9de92692f02178bcdce0ef0302ac \
+     -C /data -xzf - < /var/backups/nbsandbox/objects-<time>.tar.gz
    ```
 3. Start PostgreSQL alone and restore the database:
    ```bash
-   $COMPOSE up -d --wait postgres
-   $COMPOSE exec -T postgres pg_restore -U nbsandbox -d nbsandbox --clean --if-exists < /var/backups/nbsandbox/nbsandbox-<time>.dump
+   compose up -d --wait postgres
+   compose exec -T postgres pg_restore -U nbsandbox -d nbsandbox --clean --if-exists < /var/backups/nbsandbox/nbsandbox-<time>.dump
    ```
-4. Start nbsandbox: `$COMPOSE up -d --wait`.
+4. Start nbsandbox: `compose up -d --wait`.
 
 Runs that were active when the backup was taken end as `interrupted` when nbsandbox starts; everything else is as it was.
 
-**Not drilled yet:** this procedure (database plus object store) replaced the earlier one on 2026-11-08 and hasn't been rehearsed end to end. Rehearse it on a test host before relying on it.
+**Drilled on 2026-11-08** with the production Compose stack (`make prod-local`): a space with files in folders, a finished run with an artifact, a published function and a call; a backup; then a file deleted, another added and a run started; then the restore above. Afterwards every file (version and bytes), run (status, output, artifact, log, rendered notebook) and function version matched the backup exactly, the changes made after it were gone, and new runs, calls and uploads worked. Rehearse it on your own test host before relying on it.
 
 ## Upgrade
 
@@ -68,7 +69,7 @@ Runs that were active when the backup was taken end as `interrupted` when nbsand
 4. Pull and restart:
    ```bash
    sudo docker pull <new nbsandboxd and runner images>
-   $COMPOSE up -d --wait
+   compose up -d --wait
    ```
    - **Database migrations** run automatically at startup, inside a transaction each.
    - **Active runs:** nbsandboxd is stopped gracefully (`shutdown_grace`, 60 s by default). Runs still active after that end as `interrupted`, and queued runs stay queued and start after the upgrade.
@@ -104,13 +105,13 @@ Retention (`runs.retention`, 30 days) deletes old runs automatically. Raise `run
 ## Runbooks
 
 ### nbsandboxd down
-- **Symptom:** alert `NbsandboxDown`, or `$COMPOSE ps` not healthy.
-- **Check:** `$COMPOSE logs --tail 100 nbsandboxd`. The usual causes are a bad setting (startup prints every problem at once), an unreadable users file, or the data directory's permissions.
-- **Fix** the cause, then `$COMPOSE up -d --wait`. Active runs at the time of a crash end as `interrupted` when nbsandboxd comes back, and their containers are removed.
+- **Symptom:** alert `NbsandboxDown`, or `compose ps` not healthy.
+- **Check:** `compose logs --tail 100 nbsandboxd`. The usual causes are a bad setting (startup prints every problem at once), an unreadable users file, or the data directory's permissions.
+- **Fix** the cause, then `compose up -d --wait`. Active runs at the time of a crash end as `interrupted` when nbsandboxd comes back, and their containers are removed.
 
 ### Docker down
 - **Symptom:** alert `NbsandboxDockerDown`; `/readyz` says `docker unreachable`; new runs get `503 docker_unavailable`.
-- **Check:** `systemctl status docker` and `$COMPOSE ps socket-proxy`.
+- **Check:** `systemctl status docker` and `compose ps socket-proxy`.
 - **Fix:** restart Docker or the proxy. nbsandboxd reconnects on its own (with backoff up to 30 s), cleans up leftover containers, and resumes the queue. Runs that were active end as `interrupted` (a platform fault, not the notebook's).
 
 ### Disk full
@@ -125,7 +126,7 @@ Retention (`runs.retention`, 30 days) deletes old runs automatically. Raise `run
 
 ### Platform errors
 - **Symptom:** alert `NbsandboxPlatformErrors`; runs end as `platform_error` or `interrupted`.
-- **Check:** the `message` of those runs, `$COMPOSE logs nbsandboxd | grep run_id`, and that the runner image exists and is supported (`/readyz`).
+- **Check:** the `message` of those runs, `compose logs nbsandboxd | grep run_id`, and that the runner image exists and is supported (`/readyz`).
 - **Usual causes:** a missing or replaced runner image, Docker restarts, or a full disk.
 
 ### Leftover run containers
@@ -136,7 +137,7 @@ sudo docker ps -a --filter label=nbsandbox.run
 Restarting nbsandboxd reconciles them. Never remove containers of runs that are still active.
 
 ### Users
-With basic auth, edit `/etc/nbsandbox/users.yaml` to add a user or change a password (hashes from `nbsandboxd hash-password`) and restart nbsandboxd: `$COMPOSE restart nbsandboxd`. With an identity provider there is nothing to do here: access follows the provider ([auth.md](auth.md)). Either way, removing someone doesn't delete their spaces: an administrator can give them to someone else or delete them (`/v1/admin/spaces`).
+With basic auth, edit `/etc/nbsandbox/users.yaml` to add a user or change a password (hashes from `nbsandboxd hash-password`) and restart nbsandboxd: `compose restart nbsandboxd`. With an identity provider there is nothing to do here: access follows the provider ([auth.md](auth.md)). Either way, removing someone doesn't delete their spaces: an administrator can give them to someone else or delete them (`/v1/admin/spaces`).
 
 ### TLS
-With Let's Encrypt, Caddy renews certificates automatically; its state lives in the `caddy-data` volume. To change the host name, edit `NBSANDBOX_DOMAIN` and `$COMPOSE up -d caddy`.
+With Let's Encrypt, Caddy renews certificates automatically; its state lives in the `caddy-data` volume. To change the host name, edit `NBSANDBOX_DOMAIN` and `compose up -d caddy`.

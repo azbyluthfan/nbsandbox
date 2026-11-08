@@ -23,8 +23,8 @@ runtime=""
 sed -e "s/^  memory: [^ ]*/  memory: $MEMORY/" -e "s/^  runtime: \"\"/  runtime: \"$runtime\"/" \
 	"$REPO/config/settings.yaml" > "$STATE/settings-$RT.yaml"
 
-export NBSANDBOX_DATA_DIR="$STATE/data" NBSANDBOX_SETTINGS="$STATE/settings-$RT.yaml" \
-	DOCKER_GID="$(getent group docker | cut -d: -f3)" \
+DOCKER_GID=$(getent group docker | cut -d: -f3)
+export NBSANDBOX_DATA_DIR="$STATE/data" NBSANDBOX_SETTINGS="$STATE/settings-$RT.yaml" DOCKER_GID \
 	NBSANDBOX_SHUTDOWN_GRACE=5s NBSANDBOX_RUN_TIMEOUT=60s REPORT_DIR="$STATE/findings" HOME=/root \
 	NBSANDBOX_CPU_FAIRNESS_GATE=1
 rm -rf "$STATE/findings/$RT"

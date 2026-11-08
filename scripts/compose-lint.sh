@@ -8,7 +8,8 @@
 set -eu
 FILE="${1:-deploy/docker-compose.yml}"
 
-DOCKER_GID=999 NBSANDBOX_DATA_DIR=/srv/nbsandbox docker compose -f "$FILE" --profile monitoring config --format json | python3 -c '
+# Placeholder secrets: the file needs them to render, and they are never used.
+DOCKER_GID=999 NBSANDBOX_DATA_DIR=/srv/nbsandbox NBSANDBOX_DB_PASSWORD=lint NBSANDBOX_S3_SECRET_KEY=lint docker compose -f "$FILE" --profile monitoring config --format json | python3 -c '
 import json, sys
 c = json.load(sys.stdin)
 s, nets = c["services"], c.get("networks", {})

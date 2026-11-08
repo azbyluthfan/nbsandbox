@@ -36,7 +36,7 @@ Install these yourself. Tools used only by some targets (kind and Helm for `make
 
 | Tool | Needed for | Install |
 |---|---|---|
-| Go 1.27+ | everything | https://go.dev/dl/ |
+| Go 1.27.3+ | everything | https://go.dev/dl/ |
 | golangci-lint v2 | `make lint` | https://golangci-lint.run/welcome/install/ (release binary or Homebrew; not `go install`) |
 | govulncheck | `make vuln` | `go install golang.org/x/vuln/cmd/govulncheck@latest` |
 | Docker Desktop (macOS) or Docker Engine (Linux) | integration tests | https://docs.docker.com/ |

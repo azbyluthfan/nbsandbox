@@ -53,7 +53,7 @@ The first release (to be tagged 0.1.0). Everything below is new. A guided tour: 
 
 ### Operations
 
-- **Deployment:** production Docker Compose with Caddy (automatic TLS), PostgreSQL and RustFS ([docs/deployment.md](docs/deployment.md)); a Helm chart and Terraform examples for AKS and existing clusters.
+- **Deployment:** production Docker Compose with Caddy (automatic TLS), PostgreSQL and RustFS ([docs/deployment.md](docs/deployment.md)), every service with a read-only root, no capabilities and `no-new-privileges` (checked by `scripts/compose-lint.sh`); a Helm chart and Terraform examples for AKS and existing clusters.
 - **Health, readiness and Prometheus metrics**, with example alerts and a Grafana dashboard; graceful shutdown; recovery after Docker or nbsandboxd restarts.
 - **Backup and restore** of the database and the object store (`scripts/backup.sh`, [docs/operations.md](docs/operations.md)).
 - **Releases** with signed multi-arch images, SBOMs, a signed Helm chart, and the isolation report for the tagged commit ([docs/releasing.md](docs/releasing.md)).
