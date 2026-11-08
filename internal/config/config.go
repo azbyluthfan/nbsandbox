@@ -266,6 +266,14 @@ func Load(path string, getenv func(string) string) (Settings, error) {
 	if err := applyEnv(&s, getenv); err != nil {
 		return s, err
 	}
+	// The data folder (and the users file, often inside it) is bind-mounted
+	// at the same path in containers, and Docker cleans a mount's path:
+	// ".../work/../data" is mounted at ".../data". Use the same, clean paths.
+	for _, p := range []*string{&s.DataDir, &s.UsersFile} {
+		if *p != "" {
+			*p = filepath.Clean(*p)
+		}
+	}
 	return s, s.Validate()
 }
 

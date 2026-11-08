@@ -224,3 +224,18 @@ func TestRepositorySettingsFileIsTheDefaults(t *testing.T) {
 		t.Fatalf("config/settings.yaml differs from the defaults:\n file %+v\n defaults %+v", got, want)
 	}
 }
+
+// The data folder's and users file's paths are cleaned, as Docker cleans a bind mount's path.
+func TestDataDirIsCleaned(t *testing.T) {
+	s, err := Load("", envOf(map[string]string{
+		"NBSANDBOX_DATABASE_URL": "postgres://u:p@db:5432/nbsandbox",
+		"NBSANDBOX_DATA_DIR":     "/home/runner/work/nbsandbox/../nbsandbox-data/",
+		"NBSANDBOX_USERS_FILE":   "/home/runner/work/nbsandbox/../nbsandbox-data/users.yaml",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.DataDir != "/home/runner/work/nbsandbox-data" || s.UsersFile != "/home/runner/work/nbsandbox-data/users.yaml" {
+		t.Fatalf("data_dir %q, users_file %q", s.DataDir, s.UsersFile)
+	}
+}
