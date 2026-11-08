@@ -1,12 +1,24 @@
-# nbsandbox service settings. Every key is optional; the values below are the
-# defaults. NBSANDBOX_* environment variables override this file:
-#   NBSANDBOX_LISTEN, NBSANDBOX_DATA_DIR, NBSANDBOX_USERS_FILE, NBSANDBOX_LOG_LEVEL,
-#   NBSANDBOX_DOCKER_HOST (falls back to DOCKER_HOST), NBSANDBOX_DOCKER_RUNTIME,
-#   NBSANDBOX_RUNNER_IMAGE, NBSANDBOX_RUN_CONCURRENCY, NBSANDBOX_RUN_RETENTION,
-#   NBSANDBOX_EVENT_RETENTION, NBSANDBOX_IDEMPOTENCY_WINDOW, NBSANDBOX_CLEANUP_EVERY,
-#   NBSANDBOX_AUTH_BASIC, NBSANDBOX_OIDC_ISSUER (turns tokens on), NBSANDBOX_OIDC_AUDIENCE,
-#   NBSANDBOX_OIDC_JWKS_URL, NBSANDBOX_OIDC_ID_PREFIX, NBSANDBOX_OIDC_ID_CLAIMS,
-#   NBSANDBOX_ROLE, NBSANDBOX_WORKER_ID, NBSANDBOX_RUN_LEASE
+# nbsandbox service settings. Every key is optional except database_url; the
+# values below are the defaults. NBSANDBOX_* environment variables override
+# this file (secrets belong there, not here):
+#   service:  NBSANDBOX_LISTEN, NBSANDBOX_ROLE, NBSANDBOX_WORKER_ID, NBSANDBOX_DATA_DIR,
+#             NBSANDBOX_USERS_FILE, NBSANDBOX_LOG_LEVEL, NBSANDBOX_SHUTDOWN_GRACE,
+#             NBSANDBOX_DATABASE_URL
+#   runs:     NBSANDBOX_BACKEND, NBSANDBOX_RUNNER_IMAGE, NBSANDBOX_RUN_CONCURRENCY,
+#             NBSANDBOX_RUN_TIMEOUT, NBSANDBOX_RUN_RETENTION, NBSANDBOX_RUN_LEASE,
+#             NBSANDBOX_EVENT_RETENTION, NBSANDBOX_IDEMPOTENCY_WINDOW, NBSANDBOX_CLEANUP_EVERY,
+#             NBSANDBOX_REQUIRE_SCHEMAS
+#   docker:   NBSANDBOX_DOCKER_HOST (falls back to DOCKER_HOST), NBSANDBOX_DOCKER_RUNTIME
+#   kubernetes: NBSANDBOX_K8S_NAMESPACE, NBSANDBOX_K8S_RUNTIME_CLASS, NBSANDBOX_K8S_PROBE_TARGETS,
+#             NBSANDBOX_KUBECONFIG
+#   storage:  NBSANDBOX_STORAGE, NBSANDBOX_S3_ENDPOINT, NBSANDBOX_S3_TLS, NBSANDBOX_S3_REGION,
+#             NBSANDBOX_S3_BUCKET, NBSANDBOX_S3_PREFIX, NBSANDBOX_S3_ACCESS_KEY,
+#             NBSANDBOX_S3_SECRET_KEY, NBSANDBOX_S3_CREATE_BUCKET, NBSANDBOX_AZURE_ACCOUNT_URL,
+#             NBSANDBOX_AZURE_CONNECTION_STRING, NBSANDBOX_AZURE_CONTAINER,
+#             NBSANDBOX_AZURE_PREFIX, NBSANDBOX_AZURE_CREATE_CONTAINER
+#   auth:     NBSANDBOX_AUTH_BASIC, NBSANDBOX_OIDC_ISSUER (turns tokens on), NBSANDBOX_OIDC_AUDIENCE,
+#             NBSANDBOX_OIDC_JWKS_URL, NBSANDBOX_OIDC_ID_PREFIX, NBSANDBOX_OIDC_ID_CLAIMS
+#   web UI:   NBSANDBOX_UI_ENABLED, NBSANDBOX_UI_LISTEN
 # Unknown keys are an error, so a typo can't be silently ignored.
 
 listen: ":8080"
@@ -16,10 +28,45 @@ data_dir: /srv/nbsandbox              # must be the same absolute path on the ho
 users_file: /etc/nbsandbox/users.yaml # must not be readable by other users (chmod 600); needed for basic auth and the web UI
 log_level: info                     # debug | info | warn | error
 
+# PostgreSQL: spaces, file index, runs, functions (required). The URL holds a
+# password: set NBSANDBOX_DATABASE_URL rather than writing it here. Never logged.
+# database_url: postgres://nbsandbox:<password>@postgres:5432/nbsandbox?sslmode=disable
+
+# Object storage: file contents, run outputs and published versions, each
+# stored once. Secrets (secret_key, connection_string) go in the environment.
+storage:
+  kind: s3                          # s3 (RustFS, Ceph, AWS S3, ...) | azure
+  s3:
+    endpoint: localhost:9000        # host[:port], no scheme
+    tls: false                      # https; set true for anything but a local store
+    region: ""                      # when the store needs one (AWS)
+    bucket: nbsandbox
+    prefix: ""                      # e.g. "nbsandbox/" in a shared bucket
+    access_key: ""                  # empty with secret_key: the standard AWS variables or the instance identity
+    secret_key: ""                  # NBSANDBOX_S3_SECRET_KEY
+    create_bucket: false            # create it if missing (development)
+  # azure:
+  #   account_url: https://<account>.blob.core.windows.net   # with a managed or workload identity
+  #   connection_string: ""         # instead of account_url, with an account key (Azurite); NBSANDBOX_AZURE_CONNECTION_STRING
+  #   container: nbsandbox
+  #   prefix: ""
+  #   create_container: false
+
+backend: docker                     # docker | kubernetes: what runs start as (containers or Pods)
+
 docker:
   host: ""                          # "" = DOCKER_HOST, then /var/run/docker.sock; Docker Desktop: unix://<home>/.docker/run/docker.sock
-  runtime: ""                       # "" = runc; "runsc" = gVisor (never falls back to runc)
+  runtime: ""                       # "" = runc; "runsc" = gVisor (never falls back to runc; docs/gvisor.md)
   image: nbsandbox-runner:dev
+
+# With backend: kubernetes (docs/kubernetes.md; the Helm chart writes this part).
+# kubernetes:
+#   namespace: nbsandbox-runs       # where run Pods go: must exist, with a deny-all NetworkPolicy
+#   runtime_class: ""               # e.g. gvisor or kata; must exist, never replaced by the default
+#   node_selector: {}               # e.g. {pool: runs}
+#   tolerations: []                 # to let run Pods onto a tainted node pool
+#   kubeconfig: ""                  # "" = the Pod's service account
+#   probe_targets: []               # host:port pairs a run Pod must not reach, besides the API server and the internet
 
 # Per-run limits. Set here only; requests can never change them.
 limits:

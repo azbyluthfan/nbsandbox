@@ -71,8 +71,10 @@ The chart is in [deploy/helm/nbsandbox](../deploy/helm/nbsandbox). It doesn't in
 ```bash
 kubectl create namespace nbsandbox
 kubectl -n nbsandbox create secret generic nbsandbox-db --from-literal=database-url='postgres://…?sslmode=require'
-helm upgrade --install nbsandbox deploy/helm/nbsandbox -n nbsandbox -f my-values.yaml
+helm upgrade --install nbsandbox oci://ghcr.io/azbyluthfan/charts/nbsandbox --version 0.1.0 -n nbsandbox -f my-values.yaml
 ```
+
+Releases publish the chart signed, on GHCR ([releasing.md](releasing.md) shows how to verify it); from a checkout, use `deploy/helm/nbsandbox` instead of the `oci://` address.
 
 What it creates:
 - **API Deployment and Service:** no Kubernetes permissions.
@@ -108,4 +110,4 @@ The API is on http://127.0.0.1:8080 (the demo users, as with `make up`).
 | `make test-k8s` | the integration suite through the Kubernetes stack |
 | `make report-k8s` | the same, writing [isolation-report-kubernetes.md](isolation-report-kubernetes.md): every isolation, resource and failure check, observed on run Pods. With `K8S_RUNTIME_CLASS=gvisor` it adds gVisor's results beside the default runtime's |
 
-On kind, runs get 1 GiB (run Pods reserve their whole limit, and the node has what Docker Desktop gives it). Starting a run takes longer than with Docker (about 25 s on a laptop): the Pod is scheduled, and the files are copied in through the API. Cancelling takes up to about 10 s more for the same reason.
+On kind, runs get 1 GiB (run Pods reserve their whole limit, and the node has what Docker Desktop gives it). Starting a run takes longer than with Docker (8–30 s on a laptop, [perf.md](perf.md#starting-a-run)): the Pod is scheduled, and the files are copied in through the API. Cancelling takes up to about 10 s more for the same reason.

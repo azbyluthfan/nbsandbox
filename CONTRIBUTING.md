@@ -1,6 +1,6 @@
 # Contributing to nbsandbox
 
-Thanks for your interest. nbsandbox is early (pre-release); what's next is in [ROADMAP.md](ROADMAP.md). Users and operators start with the [README](README.md), [docs/user-guide.md](docs/user-guide.md), [docs/deployment.md](docs/deployment.md) and [docs/operations.md](docs/operations.md). Before starting anything large, open an issue so we can agree on the approach.
+Thanks for your interest. nbsandbox is young (v0.x: expect changes between minor versions); what's next is in [ROADMAP.md](ROADMAP.md). Users and operators start with the [README](README.md), [docs/user-guide.md](docs/user-guide.md), [docs/deployment.md](docs/deployment.md) and [docs/operations.md](docs/operations.md). Before starting anything large, open an issue so we can agree on the approach.
 
 ## Sign your commits (DCO)
 
@@ -32,7 +32,7 @@ git rebase --signoff main
 
 ## Tools
 
-Install these yourself; the project doesn't download them for you.
+Install these yourself. Tools used only by some targets (kind and Helm for `make k8s-up`, buf for `make proto`) are fetched at pinned versions through `go run`, so there is nothing else to install for them.
 
 | Tool | Needed for | Install |
 |---|---|---|
@@ -74,12 +74,12 @@ Both ways use `~/.local/share/nbsandbox` as the data directory (override with `N
 
 ```bash
 make runner-image   # once: the image notebooks run in
-make up             # nbsandboxd + Docker socket proxy in containers, on 127.0.0.1:8080
+make up             # nbsandboxd, PostgreSQL, RustFS and the Docker socket proxy in containers, on 127.0.0.1:8080
 make down
 ```
 
 ```bash
-make run-native     # nbsandboxd directly on your Mac against Docker Desktop (no proxy)
+make run-native     # nbsandboxd directly on your Mac against Docker Desktop (no proxy), with the test PostgreSQL and RustFS
 ```
 
 ```bash
@@ -99,7 +99,6 @@ scripts/nbsandbox.sh runs log <space-id> <run-id>      # the log so far
 |---|---|---|---|---|
 | **Single process** (`role: all`): one nbsandboxd, web UI on :8090 | `make up` / `make down` | `make logs` | `make wipe-dev` | `~/.local/share/nbsandbox` |
 | **Cluster** (`role: api` ×2 behind a load balancer, `role: worker` ×2), see [docs/scaling.md](docs/scaling.md) | `make cluster-up` / `make cluster-down` | `make cluster-logs` | `make wipe-cluster` | `~/.local/share/nbsandbox-cluster` |
-
 | **Kubernetes** (the same cluster mode, with runs as Pods), see [docs/kubernetes.md](docs/kubernetes.md) | `make k8s-up` / `make k8s-down` | `make k8s-logs` | `make k8s-down` (the cluster and its data go together) | inside the kind cluster |
 
 All three serve the API on 127.0.0.1:8080, so starting one stops the others. Each has its own database and object storage. Only single-process mode has the web UI. The Kubernetes mode is kind running inside Docker: still nothing to install beyond Docker. Runs there are slower (Docker Desktop starts containers in nested Kubernetes slowly); use it for the backend, not everyday work.
@@ -108,9 +107,9 @@ The runner image must be built with `make runner-image` (not a plain `docker bui
 
 ### Local web UI
 
-`make up` and `make run-native` also start a small web UI at **http://127.0.0.1:8090**: pick a user and a space, browse files, view notebooks read-only, run them, and watch the live log.
+`make up` and `make run-native` also start the web UI at **http://127.0.0.1:8090**: pick a user, then manage spaces and files, edit notebooks with completion from the runner image, run them and follow the live log, and publish and call functions ([docs/tour.md](docs/tour.md) shows each screen). `make ui-preview` runs it without Docker, for work on the UI itself (runs can't start there).
 
-**It has no login: it acts as whichever user you pick.** Keep it on your machine. It is off by default (`ui.enabled` in `settings.yaml`), listens on `127.0.0.1` unless configured otherwise (nbsandboxd warns at startup if not), and must never be exposed through a reverse proxy. The main API on port 8080 still requires a password. The UI's files are plain HTML, CSS and JavaScript in `internal/ui/web/`, embedded in the binary; after changing them, rebuild (`make up`) and repeat the check in [docs/ui-check.md](docs/ui-check.md). `make ui-preview` runs a native nbsandboxd with the UI on http://127.0.0.1:18090, its own data folder and no Docker (runs can't start), to work on the UI without touching the dev stack.
+**It has no login: it acts as whichever user you pick.** Keep it on your machine. It is off by default (`ui.enabled` in `settings.yaml`), listens on `127.0.0.1` unless configured otherwise (nbsandboxd warns at startup if not), and must never be exposed through a reverse proxy. The main API on port 8080 still requires a password. The UI's files are plain HTML, CSS and JavaScript in `internal/ui/web/`, embedded in the binary; after changing them, rebuild (`make up`) and check it in a browser, and run `make tour`: it drives the main screens in a headless browser and retakes the screenshots of [docs/tour.md](docs/tour.md), so a broken screen shows up as a failed step or a wrong picture. `make ui-preview` runs a native nbsandboxd with the UI on http://127.0.0.1:18090, its own data folder and no Docker (runs can't start), to work on the UI without touching the dev stack.
 
 The editor is CodeMirror 6, vendored as one bundle in `internal/ui/web/vendor/` (with its licences and `SHA256SUMS`, which a test checks). To update it, change versions in `internal/ui/vendor-src/package.json`, delete `package-lock.json`, and run `make ui-vendor` (Docker and network needed); commit the new lockfile and bundle together.
 
@@ -126,7 +125,10 @@ The API is described in [api/openapi.yaml](api/openapi.yaml). When you add a rou
 | Integration | the API against the dev stack: runs, cancellation, restarts, Docker loss | `make test-integration` (restarts the stack); `make test-quick` skips the slow limit and isolation tests (about 6 min) | yes |
 | Cluster | the same suite through the cluster stack, plus failure tests (killing workers, API processes, Postgres) | `make test-cluster`; `make test-cluster-failures` for only the failure tests | yes |
 | Kubernetes | the backend conformance suite against real Pods; the integration suite through the kind stack | `make test-k8s-conformance`; `make test-k8s` | yes |
-| Isolation | probe notebooks and the isolation report | `make report` | yes, Linux for authoritative results |
+| Isolation | probe notebooks and the isolation reports | `make report` (this machine's Docker); `make report-linux` (Linux with Docker Engine, `runc` and gVisor, in a Lima VM: [docs/gvisor.md](docs/gvisor.md#reproduce)); `make report-k8s` (kind; `K8S_RUNTIME_CLASS=gvisor` adds gVisor) | yes, Linux for authoritative results |
+| Soak | a long mix of runs, failing on any steady growth | `make soak` (45 min), `make soak-cluster`, `make soak-k8s` | yes |
+| Web UI | the main screens in a headless browser, retaking the tour's screenshots | `make tour` (with `make up` running) | yes |
+| Fuzzing | the parsers of outside input | `go test ./internal/<pkg> -run '^$' -fuzz '^FuzzName$' -fuzztime 2m` ([docs/security/review.md](docs/security/review.md#fuzzing) lists them) | no |
 
 Coverage thresholds: at least 80 % for core packages (`runs`, `logs`, `spaces`, `store`, `isolation/docker`) and at least 70 % overall. `make cover` enforces both.
 

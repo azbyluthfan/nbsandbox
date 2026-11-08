@@ -1,10 +1,10 @@
 # Deploying nbsandbox
 
-From a fresh Linux server to a working nbsandbox behind HTTPS. Every command is meant to be copied as is. If a step doesn't work as written, that's a documentation bug: please open an issue.
+From a fresh Linux server to a working nbsandbox behind HTTPS, with Docker Compose. For Kubernetes, see [kubernetes.md](kubernetes.md); for several machines without it, [scaling.md](scaling.md). Every command is meant to be copied as is. If a step doesn't work as written, that's a documentation bug: please open an issue.
 
 **Reference host:** Ubuntu 24.04 LTS, x86_64 or arm64, cgroup v2 (the default). Sizing is in [operations.md](operations.md#capacity); a start is 4 CPUs, 8 GB RAM and 50 GB disk for the default two concurrent runs of 2 GB each.
 
-**What runs:** Caddy (TLS) → nbsandboxd → a Docker socket proxy → Docker, which starts one locked-down container per run. Only Caddy is reachable from outside.
+**What runs:** Caddy (TLS) → nbsandboxd → a Docker socket proxy → Docker, which starts one locked-down container per run. nbsandboxd keeps its records in PostgreSQL and file contents in an S3-compatible object store (RustFS), both bundled. Only Caddy is reachable from outside.
 
 ## 1. Get the release
 
@@ -25,7 +25,7 @@ It installs Docker Engine, sets Docker's log defaults, makes sure uid 1000 exist
 
 ## 3. Add users
 
-Each user needs a bcrypt hash. Run this once per user and type the password (at least 8 characters) twice:
+In production, sign people in with your identity provider (Entra ID, Keycloak, Okta and so on): see [auth.md](auth.md), then turn basic auth off. For a first check, or a small private host, basic-auth users are enough. Each user needs a bcrypt hash. Run this once per user and type the password (at least 8 characters) twice:
 
 ```bash
 sudo docker run --rm -it ghcr.io/azbyluthfan/nbsandboxd:0.1.0 hash-password
@@ -58,6 +58,7 @@ Set at least the following:
 - **`NBSANDBOX_TLS`:** your e-mail address, for Let's Encrypt (ports 80 and 443 must be reachable from the internet). For a private host without public DNS, use `internal`: Caddy then uses its own certificate authority, and clients need `-k` or Caddy's root certificate.
 - **`DOCKER_GID`.**
 - **`NBSANDBOX_DB_PASSWORD`:** the password of the bundled PostgreSQL, long and random (`openssl rand -hex 24`; hex, because it goes into a URL). The database lives in the Docker volume `nbsandbox_pgdata`. To use your own PostgreSQL instead, remove the `postgres` service and set `NBSANDBOX_DATABASE_URL` for nbsandboxd.
+- **`NBSANDBOX_S3_SECRET_KEY`:** the secret key of the bundled object store, long and random (`openssl rand -hex 24`). File contents live in the Docker volume `nbsandbox_objects`. To use your own S3 store or Azure Blob Storage instead, remove the `rustfs` service and set `NBSANDBOX_STORAGE` and its settings for nbsandboxd (`storage:` in `settings.yaml` documents them).
 
 Per-run limits, concurrency, retention and the rest are in `/etc/nbsandbox/settings.yaml`, which documents each setting.
 

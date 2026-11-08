@@ -6,7 +6,7 @@ For people who run notebooks on an nbsandbox server. The examples use `curl` and
 export NBSANDBOX_URL=https://nbsandbox.example.com NBSANDBOX_USER=alice NBSANDBOX_PASSWORD=...
 ```
 
-Every request uses HTTP basic auth. Another user's spaces never show up: they answer `404`, as if they didn't exist.
+The examples use basic auth, as on a development or small private server. Where nbsandbox signs people in with an identity provider, send `Authorization: Bearer <token>` instead of `-u` ([auth.md](auth.md)). Another user's spaces never show up: they answer `404`, as if they didn't exist.
 
 ## Spaces
 
@@ -83,7 +83,7 @@ for i, region in enumerate(regions):
 
 **Cancel:** `scripts/nbsandbox.sh runs cancel "$ID" "$RUN"`. The kernel gets 5 seconds to stop, then it's killed. An optional body `{"reason": "..."}` is recorded with the result, along with who cancelled.
 
-**Waiting for the end:** `GET .../runs/{id}/result?wait=30s` holds the request until the run finishes (at most 60 s). `GET .../runs/{id}/events` streams its status changes (Server-Sent Events), and `GET .../spaces/{id}/events` streams those of every run in the space. See [functions.md](functions.md#5-follow-status-server-sent-events).
+**Waiting for the end:** `GET .../runs/{id}/result?wait=30s` holds the request until the run finishes (at most 60 s). `GET .../runs/{id}/events` streams its status changes (Server-Sent Events), and `GET .../spaces/{id}/events` streams those of every run in the space. See [functions.md](functions.md#6-follow-status-server-sent-events).
 
 ### What a run gets
 
@@ -166,4 +166,4 @@ What it can do:
 - **Run and publish:** run a notebook (optionally read-only) and follow the live log; publish it as a function and call it from a form built from its input schema.
 
 
-When enabled by whoever runs nbsandbox on their own machine, a small web UI at `http://127.0.0.1:8090` lets you pick a user and a space, browse files, read notebooks, run one, and follow the live log. It has **no login**, so it is never part of a production deployment.
+It's enabled by whoever runs nbsandbox on their own machine, at `http://127.0.0.1:8090`. It has **no login** (you pick a user), so it is never part of a production deployment. [tour.md](tour.md) shows each screen.

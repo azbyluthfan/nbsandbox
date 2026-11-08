@@ -12,10 +12,12 @@ region = "jakarta"
 cfg = {"months": 6, "include": ["sales"]}
 
 # ... load the model and compute ...
+import pickle
 import nbsandbox, pandas as pd
 with open("models/model.pkl", "rb") as f:     # files are read relative to the space
     model = pickle.load(f)
 forecast = model.predict(cfg["months"])
+df = pd.DataFrame({"month": range(1, cfg["months"] + 1), "forecast": forecast})
 
 nbsandbox.output({"region": region, "forecast": forecast, "table": df})
 ```

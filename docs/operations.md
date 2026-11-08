@@ -22,41 +22,43 @@ COMPOSE="sudo docker compose -f deploy/docker-compose.yml --env-file deploy/.env
 
 ## Backup
 
+Everything worth keeping is in two places: the **database** (spaces, files and their versions, runs, functions) and the **object store** (the contents of every file, run output and published version, each stored once). The host data folder holds only the working copies of runs that are active right now, so it isn't backed up.
+
+With the bundled PostgreSQL and RustFS:
+
 ```bash
-sudo NBSANDBOX_DATA_DIR=/srv/nbsandbox scripts/backup.sh /var/backups/nbsandbox
+sudo scripts/backup.sh /var/backups/nbsandbox
 ```
 
-It writes `nbsandbox-<time>.dump`, a consistent snapshot of the PostgreSQL database (`pg_dump` in the `postgres` container), and `spaces-<time>.tar.gz`, the spaces with their files, run outputs and published function versions. It's safe while nbsandbox runs. A run writing at the same moment may be copied half-way, but only that run's own files are affected. Copy the backups off the host.
+It writes two files: `nbsandbox-<time>.dump`, a consistent snapshot of the database (`pg_dump`), and `objects-<time>.tar.gz`, the object store's volume. It's safe while nbsandbox runs. Copy the backups off the host.
 
-With your own PostgreSQL (a managed service, say) instead of the bundled one, back the database up with that service's tools and keep only step 2 of the script (the spaces archive).
+With your own services instead, back up each with its own tools: a managed PostgreSQL with its snapshots or `pg_dump`, an S3 bucket with versioning or replication, Azure Blob Storage with soft delete or object replication.
 
 ### Restore
 
-1. Stop nbsandbox:
+This replaces the current data. Back it up first if you might want it back (the command above).
+
+1. Stop nbsandbox, and remove its database and object store volumes:
    ```bash
    $COMPOSE down
+   sudo docker volume rm nbsandbox_pgdata nbsandbox_objects
    ```
-2. Move the current data aside instead of deleting it:
+2. Create the stack without starting it (this makes empty volumes), and put the object store's files back:
    ```bash
-   sudo mv /srv/nbsandbox /srv/nbsandbox.before-restore
+   $COMPOSE create
+   sudo docker run --rm -i -v nbsandbox_objects:/data --entrypoint tar \
+     postgres:17-alpine -C /data -xzf - < /var/backups/nbsandbox/objects-<time>.tar.gz
    ```
-3. Restore the spaces:
+3. Start PostgreSQL alone and restore the database:
    ```bash
-   sudo install -d -m 700 -o 1000 -g 1000 /srv/nbsandbox
-   sudo tar -C /srv/nbsandbox -xzf /var/backups/nbsandbox/spaces-<time>.tar.gz
-   sudo chown -R 1000:1000 /srv/nbsandbox
-   ```
-4. Restore the database into a fresh volume (the old one is kept until you remove it):
-   ```bash
-   docker volume rename nbsandbox_pgdata nbsandbox_pgdata_before_restore  # or docker volume create + copy, on older Docker
    $COMPOSE up -d --wait postgres
    $COMPOSE exec -T postgres pg_restore -U nbsandbox -d nbsandbox --clean --if-exists < /var/backups/nbsandbox/nbsandbox-<time>.dump
    ```
-5. Start nbsandbox: `$COMPOSE up -d --wait`.
+4. Start nbsandbox: `$COMPOSE up -d --wait`.
 
-At startup nbsandboxd reconciles the two halves. Space folders without a database row are removed; rows without a folder are logged as errors. Runs that were active at backup time end as `interrupted`.
+Runs that were active when the backup was taken end as `interrupted` when nbsandbox starts; everything else is as it was.
 
-The SQLite version of this procedure was drilled on 2026-11-06; the PostgreSQL version still needs a drill (`pg_restore` into a fresh volume).
+**Not drilled yet:** this procedure (database plus object store) replaced the earlier one on 2026-11-08 and hasn't been rehearsed end to end. Rehearse it on a test host before relying on it.
 
 ## Upgrade
 
@@ -91,8 +93,9 @@ To add packages for your own deployment:
 | Resource | Rule of thumb | Basis |
 |---|---|---|
 | Memory | `runs.concurrency × limits.memory` + 1 GB for the host and nbsandboxd | default 2 × 2 GB → 5 GB, so 8 GB hosts |
-| CPU | `runs.concurrency × limits.cpus` + 1 | each run is capped; a neighbour's CPU hog slowed a run by 1.05× ([perf.md](perf.md)) |
-| Disk | `number of active spaces × uploads.max_space` (500 MB default; includes run outputs and published function versions) + images (~1 GB) | checked at upload, publish and submit, and every few seconds while a run writes (a run over quota is stopped) |
+| CPU | `runs.concurrency × limits.cpus` + 1 | each run is capped; a neighbour spinning every core slowed a run by at most 1.22× on Docker, 1.11× on Linux ([perf.md](perf.md)) |
+| Disk: object store | `number of spaces × uploads.max_space` (500 MB default; includes run outputs and published function versions) at most; identical files are stored once | quota checked at upload, publish and submit, and every few seconds while a run writes (a run over quota is stopped) |
+| Disk: host | `runs.concurrency × uploads.max_space` for the working copies of active runs, + images (~1.5 GB) | a run's copy is removed when it ends |
 | Log volume | ≤ `limits.log_cap` (10 MB) per run in `log.txt`, plus at most 5 MB of output stored in `output.ipynb` | `endless-output` test |
 | Live viewers | thousands of lines per second per viewer; 100 viewers on one run were measured at about 60 k lines/s | [perf.md](perf.md) |
 
@@ -112,8 +115,8 @@ Retention (`runs.retention`, 30 days) deletes old runs automatically. Raise `run
 
 ### Disk full
 - **Symptom:** `/readyz` says `data_dir: only N MiB free`; uploads or runs fail.
-- **Check:** `df -h /srv/nbsandbox` and `sudo du -sh /srv/nbsandbox/spaces/* | sort -h | tail`.
-- **Fix:** lower `runs.retention`, ask users to delete old runs (`DELETE .../runs/{id}`), or grow the disk. Docker images can be pruned with `docker image prune` (not the runner image in use).
+- **Check:** `df -h /srv/nbsandbox` (working copies of active runs) and `sudo docker system df -v | grep -E 'nbsandbox_(objects|pgdata)'` (the object store and the database). `GET /v1/admin/spaces` lists every owner's spaces; `GET /v1/spaces/{id}` shows a space's usage to its owner.
+- **Fix:** lower `runs.retention` (old runs and their outputs go, and contents nothing refers to any more are removed an hour later), ask users to delete old runs or spaces, or grow the disk. Docker images can be pruned with `docker image prune` (not the runner image in use).
 
 ### Queue backlog
 - **Symptom:** alert `NbsandboxQueueBacklog`.
@@ -133,7 +136,7 @@ sudo docker ps -a --filter label=nbsandbox.run
 Restarting nbsandboxd reconciles them. Never remove containers of runs that are still active.
 
 ### Users
-To add a user or change a password, edit `/etc/nbsandbox/users.yaml` (hashes from `nbsandboxd hash-password`) and restart nbsandboxd: `$COMPOSE restart nbsandboxd`. Removing a user doesn't delete their spaces; they stay on disk until deleted.
+With basic auth, edit `/etc/nbsandbox/users.yaml` to add a user or change a password (hashes from `nbsandboxd hash-password`) and restart nbsandboxd: `$COMPOSE restart nbsandboxd`. With an identity provider there is nothing to do here: access follows the provider ([auth.md](auth.md)). Either way, removing someone doesn't delete their spaces: an administrator can give them to someone else or delete them (`/v1/admin/spaces`).
 
 ### TLS
 With Let's Encrypt, Caddy renews certificates automatically; its state lives in the `caddy-data` volume. To change the host name, edit `NBSANDBOX_DOMAIN` and `$COMPOSE up -d caddy`.

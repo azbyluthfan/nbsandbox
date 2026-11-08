@@ -5,7 +5,7 @@ One nbsandboxd process can do everything (`role: all`, the default). To run more
 | Role | Serves | Needs | Scale by |
 |---|---|---|---|
 | `api` | REST API, SSE streams, web UI (if enabled), health, metrics | PostgreSQL, object storage | adding replicas behind a load balancer |
-| `worker` | health and metrics only | PostgreSQL, object storage, Docker (or later Kubernetes) | adding replicas; each runs `runs.concurrency` notebooks |
+| `worker` | health and metrics only | PostgreSQL, object storage, and Docker or the Kubernetes API | adding replicas; each runs `runs.concurrency` notebooks |
 | `all` | everything | all of the above | not at all: one process |
 
 Set it with `role` in `settings.yaml` or `NBSANDBOX_ROLE`.
@@ -53,4 +53,4 @@ Two API processes behind a load balancer on `http://127.0.0.1:8080`, two workers
 
 ## Kubernetes
 
-Same shape: an `api` Deployment behind a Service, a `worker` Deployment (or StatefulSet) with access to a container runtime, PostgreSQL, and S3-compatible storage or Azure Blob Storage. A Kubernetes backend for workers, which starts runs as pods instead of Docker containers, is on the roadmap.
+Same shape: the Helm chart runs an `api` Deployment behind a Service and a `worker` Deployment, with your PostgreSQL and object storage. Workers start each run as a Pod through the Kubernetes API, with no Docker anywhere: see [kubernetes.md](kubernetes.md).

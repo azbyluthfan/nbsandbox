@@ -6,6 +6,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -199,5 +200,27 @@ func TestSizeString(t *testing.T) {
 		if z.String() != want {
 			t.Errorf("%d.String() = %q, want %q", int64(z), z.String(), want)
 		}
+	}
+}
+
+// The repository's settings file documents every key with its default: it
+// loads, and it changes nothing (only a database URL must be supplied).
+func TestRepositorySettingsFileIsTheDefaults(t *testing.T) {
+	env := envOf(map[string]string{"NBSANDBOX_DATABASE_URL": "postgres://u:p@db:5432/nbsandbox"})
+	got, err := Load("../../config/settings.yaml", env)
+	if err != nil {
+		t.Fatalf("config/settings.yaml: %v", err)
+	}
+	want, err := Load("", env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// auth.basic is unset by default and written out as true: the same.
+	if got.Auth.BasicEnabled() != want.Auth.BasicEnabled() {
+		t.Fatalf("auth.basic: file %v, default %v", got.Auth.BasicEnabled(), want.Auth.BasicEnabled())
+	}
+	got.Auth.Basic, want.Auth.Basic = nil, nil
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("config/settings.yaml differs from the defaults:\n file %+v\n defaults %+v", got, want)
 	}
 }

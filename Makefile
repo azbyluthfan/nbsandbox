@@ -431,6 +431,7 @@ report-linux: ## Run the integration suite on Linux (Lima VM) with runc and runs
 PROD_DATA ?= $(HOME)/.local/share/nbsandbox-prod
 PROD := NBSANDBOX_DATA_DIR="$(PROD_DATA)" NBSANDBOX_USERS="$(PROD_DATA)/users.yaml" NBSANDBOX_SETTINGS=../config/settings.yaml \
 	NBSANDBOX_IMAGE=nbsandboxd:prod-local NBSANDBOX_RUNNER_IMAGE=$(RUNNER_IMAGE) NBSANDBOX_HTTP_PORT=8081 NBSANDBOX_HTTPS_PORT=8443 \
+	NBSANDBOX_DB_PASSWORD=prod-local-only NBSANDBOX_S3_SECRET_KEY=prod-local-only-secret \
 	DOCKER_GID=$${DOCKER_GID:-0} docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.local.yml
 
 .PHONY: prod-local
