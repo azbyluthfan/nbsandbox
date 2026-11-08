@@ -125,13 +125,16 @@ jobs:
           go-version-file: go.mod
       - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
       - uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
+      # Outside the checkout: docs/isolation-report.md is tracked, and
+      # GoReleaser refuses to release from a modified tree.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: isolation-report
-          path: docs
+          path: ${{ runner.temp }}/report
       - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
         with:
           version: "~> v2"
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISOLATION_REPORT: ${{ runner.temp }}/report/isolation-report.md
