@@ -81,4 +81,6 @@ jobs:
       - name: Production Compose hardening
         run: scripts/compose-lint.sh
       - name: shellcheck
-        run: shellcheck -S warning deploy/provision/provision.sh scripts/*.sh runner-image/tests/image_test.sh
+        run: shellcheck -S warning deploy/provision/provision.sh scripts/*.sh scripts/tour/*.sh runner-image/tests/image_test.sh
+      - name: actionlint (workflow files, including which contexts each expression may use)
+        run: docker run --rm -v "$PWD":/repo -w /repo rhysd/actionlint:1.7.4@sha256:82244e1db1c60d82c7792180a48dd0bcb838370bb589d53ff132503fc9485868

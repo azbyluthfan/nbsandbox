@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
-      NBSANDBOX_DATA_DIR: ${{ runner.temp }}/nbsandbox-data
+      NBSANDBOX_DATA_DIR: ${{ github.workspace }}-data
       NBSANDBOX_CPU_FAIRNESS_GATE: "0" # shared runners are noisy neighbours: CPU fairness is report-only here
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
