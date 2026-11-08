@@ -59,10 +59,16 @@ func (c *collector) all() []string {
 func (h Harness) spec(t *testing.T, notebook string, mem int64) isolation.RunSpec {
 	t.Helper()
 	// /space (the space's files) and /run (this run's folder, holding the
-	// notebook snapshot as input.ipynb). The run executes as uid 1000; both
-	// folders must be writable by it.
+	// notebook snapshot as input.ipynb). The run executes as uid 1000; the
+	// folders must be writable by it. The test creates artifacts/ itself:
+	// on Linux, a folder the run created would belong to uid 1000, and the
+	// test (another user) couldn't remove the files in it afterwards.
 	space, runDir := h.TempDir(t), h.TempDir(t)
-	for _, d := range []string{space, runDir} {
+	artifacts := filepath.Join(runDir, "artifacts")
+	if err := os.Mkdir(artifacts, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range []string{space, runDir, artifacts} {
 		if err := os.Chmod(d, 0o777); err != nil {
 			t.Fatal(err)
 		}
