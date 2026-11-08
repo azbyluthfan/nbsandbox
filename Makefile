@@ -157,8 +157,14 @@ export NBSANDBOX_DATA_DIR
 
 .PHONY: dev-data
 dev-data: ## Create the local data dir and install the demo users file
-	@mkdir -p "$(NBSANDBOX_DATA_DIR)/spaces" && chmod 700 "$(NBSANDBOX_DATA_DIR)"
-	@install -m 600 config/users.yaml "$(NBSANDBOX_DATA_DIR)/users.yaml"
+	@# A folder you can't write to was prepared for nbsandboxd's own user
+	@# (on Linux: chown 1000:1000, as CI does after this target): use it as it is.
+	@if [ -d "$(NBSANDBOX_DATA_DIR)" ] && [ ! -w "$(NBSANDBOX_DATA_DIR)" ]; then \
+		echo "dev-data: $(NBSANDBOX_DATA_DIR) belongs to another user; using it as it is"; \
+	else \
+		mkdir -p "$(NBSANDBOX_DATA_DIR)/spaces" && chmod 700 "$(NBSANDBOX_DATA_DIR)" && \
+		install -m 600 config/users.yaml "$(NBSANDBOX_DATA_DIR)/users.yaml"; \
+	fi
 
 .PHONY: up
 up: dev-data ## Start the dev stack: API on 127.0.0.1:8080, web UI on 127.0.0.1:8090
