@@ -7,7 +7,7 @@
 openapi: 3.1.0
 info:
   title: nbsandbox API
-  version: 0.1.0-dev
+  version: 0.1.0
   description: |
     Run Jupyter notebooks headless in isolated spaces. Every /v1 endpoint needs
     HTTP basic auth (users.yaml) or a bearer access token from the configured

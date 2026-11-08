@@ -4,7 +4,9 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
-The first release (to be tagged 0.1.0). Everything below is new. A guided tour: [docs/tour.md](docs/tour.md).
+## [0.1.0] - 2026-11-08
+
+The first release. Everything below is new. A guided tour: [docs/tour.md](docs/tour.md).
 
 ### Running notebooks
 
