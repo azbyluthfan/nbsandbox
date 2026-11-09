@@ -99,6 +99,17 @@ func (b *Backend) Run(ctx context.Context, spec isolation.RunSpec, out isolation
 		remove()
 		return res, fmt.Errorf("%w: copy the run's files in: %w", isolation.ErrStart, err)
 	}
+	// Events (items, progress, cells) come back while the run works. The
+	// follower starts now, not once the runner has: opening an exec can take
+	// seconds on a busy cluster, and started late it would deliver the first
+	// items together instead of as they are written.
+	eventsCtx, stopEvents := context.WithCancel(context.WithoutCancel(ctx))
+	defer stopEvents()
+	syncDone := make(chan struct{})
+	go func() {
+		defer close(syncDone)
+		b.syncEvents(eventsCtx, name, spec.RunDir)
+	}()
 
 	// Follow the runner's output.
 	if err := b.waitFor(ctx, name, func(p *corev1.Pod) (bool, error) {
@@ -128,13 +139,6 @@ func (b *Backend) Run(ctx context.Context, spec isolation.RunSpec, out isolation
 			b.terminate(ctx, name)
 		})
 	}
-	// Events (items, progress, cells) come back while the run works.
-	syncDone := make(chan struct{})
-	go func() {
-		defer close(syncDone)
-		b.syncEvents(watchCtx, name, spec.RunDir)
-	}()
-
 	// Wait for the runner to end; on cancel, stop it (TERM, then KILL).
 	ended := func(p *corev1.Pod) (bool, error) { return terminated(p, runnerContainer) != nil, nil }
 	waitCtx, stopWait := context.WithCancel(context.WithoutCancel(ctx))
@@ -161,6 +165,7 @@ func (b *Backend) Run(ctx context.Context, spec isolation.RunSpec, out isolation
 		}
 	}
 	stopWatch()
+	stopEvents()
 	<-syncDone // before the run's folder is copied back over its events
 	select {
 	case <-followDone:
