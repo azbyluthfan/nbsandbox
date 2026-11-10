@@ -20,7 +20,7 @@ const streamingNotebook = `{"nbformat": 4, "nbformat_minor": 5, "metadata": {"ke
  "cells": [
   {"cell_type": "code", "metadata": {}, "execution_count": null, "outputs": [], "source": "import time, nbsandbox"},
   {"cell_type": "code", "metadata": {}, "execution_count": null, "outputs": [],
-   "source": "for i in range(3):\n    nbsandbox.emit({'step': i}, total=3)\n    nbsandbox.progress((i + 1) / 3, f'step {i}')\n    time.sleep(1)"}
+   "source": "for i in range(5):\n    nbsandbox.emit({'step': i}, total=5)\n    nbsandbox.progress((i + 1) / 5, f'step {i}')\n    time.sleep(1)"}
  ]}`
 
 type sseLine struct {
@@ -97,15 +97,15 @@ func TestStreamedOutput(t *testing.T) {
 		spread = last.at.Sub(items[0].at)
 	}
 	// Live: the items arrive as they are emitted, a second apart, so the
-	// last comes 2 s after the first (at least 1 s on a busy cluster, where
-	// copying them out of a Pod batches a little); not all at once (0 s) when
-	// the run ends.
-	live := len(items) == 3 && spread > 1500*time.Millisecond && items[2].at.Sub(items[0].at) > time.Second
-	ok := live && last.name == "result" && res.Status == "succeeded" && res.Items == 3 &&
-		strings.Join(ids, ",") == "1,2,3" && strings.Count(strings.Join(names, ","), "progress") == 3 &&
-		string(res.Output) == `[{"step":0},{"step":1},{"step":2}]` && string(j.Output) == string(res.Output) && len(status) == 3
-	finding(t, "streamed-output", "a notebook emits three items a second apart; follow the result stream, then read the result as JSON",
-		"items arrive live (ids 1, 2, 3), then the result with the same list; JSON gives the same list; the status stream has only status",
+	// last comes 4 s after the first; not all at once (0 s) when the run
+	// ends. At least 2 s: on a busy cluster, copying them out of a Pod can
+	// deliver one or two late, together with the next, and that is still live.
+	live := len(items) == 5 && itemSpan(items) >= 2*time.Second
+	ok := live && last.name == "result" && res.Status == "succeeded" && res.Items == 5 &&
+		strings.Join(ids, ",") == "1,2,3,4,5" && strings.Count(strings.Join(names, ","), "progress") == 5 &&
+		string(res.Output) == `[{"step":0},{"step":1},{"step":2},{"step":3},{"step":4}]` && string(j.Output) == string(res.Output) && len(status) == 3
+	finding(t, "streamed-output", "a notebook emits five items a second apart; follow the result stream, then read the result as JSON",
+		"items arrive live (ids 1 to 5, the last at least 2 s after the first), then the result with the same list; JSON gives the same list; the status stream has only status",
 		fmt.Sprintf("events %v; first item %.1fs before the end, last %.1fs after the first; JSON output %s; %d status events", names, spread.Seconds(), itemSpan(items).Seconds(), j.Output, len(status)), ok)
 	if !ok {
 		t.Fatalf("events %+v, result %+v, JSON %s", evs, res, j.Output)
