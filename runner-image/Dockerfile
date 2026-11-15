@@ -4,8 +4,30 @@
 # nbsandbox runner image: the only environment notebooks run in.
 # Build: make runner-image
 
+# The builder image (target "builder"): the runner's exact packages (the
+# same hash-pinned requirements) plus pip, for building spaces' package sets
+# (build_packages.py). Only build containers use it; runs never do.
 # python:3.13-slim, pinned by multi-arch index digest (amd64 + arm64).
-FROM python:3.13-slim@sha256:09a17cad02668ae61ece136b4fd36ac3849e14f670ebedb637ea3e15580525bc
+FROM python:3.13-slim@sha256:09a17cad02668ae61ece136b4fd36ac3849e14f670ebedb637ea3e15580525bc AS builder
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONDONTWRITEBYTECODE=1
+COPY requirements.txt /tmp/requirements.txt
+RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/* \
+ && pip install --root-user-action=ignore --require-hashes --no-deps -r /tmp/requirements.txt \
+ && rm /tmp/requirements.txt \
+ && find / -xdev -type f -perm /6000 -exec chmod a-s {} + \
+ && groupadd --gid 1000 nbsandbox \
+ && useradd --uid 1000 --gid 1000 --no-create-home --home-dir /tmp --shell /usr/sbin/nologin nbsandbox
+COPY build_packages.py /opt/nbsandbox/
+ENV HOME=/tmp
+USER 1000:1000
+WORKDIR /tmp
+ENTRYPOINT ["python", "/opt/nbsandbox/build_packages.py"]
+
+# The runner image (the default target).
+# python:3.13-slim, pinned by multi-arch index digest (amd64 + arm64).
+FROM python:3.13-slim@sha256:09a17cad02668ae61ece136b4fd36ac3849e14f670ebedb637ea3e15580525bc AS runner
 
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \

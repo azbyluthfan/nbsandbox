@@ -317,3 +317,24 @@ func TestLoginLimitTrustedProxiesAndIntrospectionFromEnv(t *testing.T) {
 		}
 	}
 }
+
+func TestPackagesSettings(t *testing.T) {
+	s, err := Load("", envOf(map[string]string{"NBSANDBOX_PACKAGES_ENABLED": "true", "NBSANDBOX_PACKAGES_ALLOWED": "requests, scikit-learn",
+		"NBSANDBOX_PACKAGES_INDEX_URL": "https://mirror.example/simple", "NBSANDBOX_PACKAGES_TIMEOUT": "5m", "NBSANDBOX_PACKAGES_NETWORK": "builds"}))
+	if err != nil || !s.Packages.Enabled || len(s.Packages.Allowed) != 2 || s.Packages.IndexURL != "https://mirror.example/simple" ||
+		s.Packages.BuildTimeout != 5*time.Minute || s.Packages.Network != "builds" {
+		t.Fatalf("env: %+v %v", s.Packages, err)
+	}
+	for name, env := range map[string]map[string]string{
+		"kubernetes":    {"NBSANDBOX_BACKEND": "kubernetes", "NBSANDBOX_K8S_NAMESPACE": "runs"},
+		"plain http":    {"NBSANDBOX_PACKAGES_INDEX_URL": "http://mirror.example/simple"},
+		"not a name":    {"NBSANDBOX_PACKAGES_ALLOWED": "requests==2"},
+		"a short build": {"NBSANDBOX_PACKAGES_TIMEOUT": "5s"},
+		"no builder":    {"NBSANDBOX_PACKAGES_BUILDER_IMAGE": " "},
+	} {
+		env["NBSANDBOX_PACKAGES_ENABLED"] = "true"
+		if _, err := Load("", envOf(env)); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}

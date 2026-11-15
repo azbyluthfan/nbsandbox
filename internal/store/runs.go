@@ -46,6 +46,7 @@ type NewRun struct {
 	ClientApp                                    string       // the application that called on its user's behalf ('' if unknown)
 	ReadOnlySpace                                bool         // /space mounted read-only; may run beside other runs
 	Files                                        []ContentRef // the notebook snapshot and parameters, recorded with the run
+	PackageKey                                   string       // the package set it needs ("" if none): it waits until the set is ready
 }
 
 func boolInt(b bool) int {

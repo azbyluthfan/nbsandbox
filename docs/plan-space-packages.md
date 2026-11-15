@@ -118,3 +118,9 @@ packages:
 2. **Wheels only**: no source builds.
 3. **Off by default** (`packages.enabled: false`).
 4. **Docker in this milestone**, Kubernetes in the next PR (step 6).
+5. **Open when on:** any package from the index (with a wheel, not conflicting with the runner's packages) may be installed. `packages.allowed` is an optional allow-list for operators who want approval; empty by default.
+6. **A run waits for its build** (queued, holding no run slot; builds have their own concurrency, one per worker); publishing waits for its build; "build now" in the API and the UI.
+7. **No silent drift:** a space keeps its last lock, and a rebuild of unchanged requirements (after a runner upgrade, or after the set expired) tries that lock first, resolving afresh only if it no longer fits the image (said in the build log).
+8. **Building needs `nbsandbox.runs`.**
+9. **`packages.network`** chooses the Docker network of build containers (default: bridge); a proxy or mirror recipe for locked-down hosts.
+10. **Kubernetes (next PR):** a per-node cache of sets, mounted read-only, not a copy per run.

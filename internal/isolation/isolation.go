@@ -46,6 +46,35 @@ type RunSpec struct {
 	// OutputMode is how the notebook returns its result: single or stream
 	// (NBSANDBOX_OUTPUT_MODE, read by the nbsandbox module).
 	OutputMode string
+	// PackagesDir, if set, is the space's package set (installed packages),
+	// mounted read-only at PackagesPath; the kernel adds it to sys.path
+	// after the image's own packages.
+	PackagesDir string
+}
+
+// PackagesPath is where a run sees its space's package set.
+const PackagesPath = "/opt/nbsandbox/packages"
+
+// BuildSpec is one package set build: the builder image, with network, the
+// request in InDir (read-only, at /in) and the result written to OutDir
+// (at /out). No space files.
+type BuildSpec struct {
+	ID      string // names the container; unique per build
+	Worker  string // the worker building it (labels the container)
+	InDir   string
+	OutDir  string
+	Image   string // the builder image
+	Runtime string
+	Network string // the Docker network (build containers are the only ones with network)
+	Limits  Limits
+}
+
+// PackageBuilder is a backend that can build package sets (Docker).
+type PackageBuilder interface {
+	BuildPackages(ctx context.Context, spec BuildSpec, out LineSink) (RunResult, error)
+	// RemoveBuildOrphans removes the build containers worker left behind
+	// (an earlier life of the same worker).
+	RemoveBuildOrphans(ctx context.Context, worker string) error
 }
 
 // Limits are the per-run resource limits.

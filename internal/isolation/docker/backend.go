@@ -15,6 +15,8 @@ import (
 
 	"github.com/moby/moby/api/pkg/stdcopy"
 
+	"github.com/moby/moby/api/types/container"
+
 	"github.com/azbyluthfan/nbsandbox/internal/isolation"
 )
 
@@ -42,11 +44,17 @@ func (b *Backend) Name() string { return "docker" }
 // calls made with the cancelled context would fail at once and leave the
 // container running.
 func (b *Backend) Run(ctx context.Context, spec isolation.RunSpec, out isolation.LineSink) (isolation.RunResult, error) {
-	var res isolation.RunResult
 	cfg, host := buildContainerConfig(spec)
+	return b.runContainer(ctx, ContainerName(spec.RunID), spec.RunID, cfg, host, spec.Limits.StopGrace, out)
+}
 
+// runContainer creates, starts and follows a container until it ends (or
+// ctx does: then it is stopped with grace), and removes it.
+func (b *Backend) runContainer(ctx context.Context, name, logID string, cfg *container.Config, host *container.HostConfig,
+	stopGrace time.Duration, out isolation.LineSink) (isolation.RunResult, error) {
+	var res isolation.RunResult
 	cctx, cancel := freshContext(ctx) // creating must not be cut short by an early cancel
-	id, err := b.client.ContainerCreate(cctx, ContainerName(spec.RunID), cfg, host)
+	id, err := b.client.ContainerCreate(cctx, name, cfg, host)
 	cancel()
 	if err != nil {
 		return res, fmt.Errorf("%w: create container: %w", isolation.ErrStart, err)
@@ -56,7 +64,7 @@ func (b *Backend) Run(ctx context.Context, spec isolation.RunSpec, out isolation
 		cctx, cancel := freshContext(ctx)
 		defer cancel()
 		if err := b.client.ContainerRemove(cctx, id); err != nil && !IsNotFound(err) {
-			b.log.Warn("remove run container", "run_id", spec.RunID, "error", err)
+			b.log.Warn("remove run container", "run_id", logID, "error", err)
 			return
 		}
 		res.Removed = true
@@ -82,7 +90,7 @@ func (b *Backend) Run(ctx context.Context, spec isolation.RunSpec, out isolation
 	followDone := make(chan struct{})
 	go func() {
 		defer close(followDone)
-		b.follow(logsCtx, id, out, spec.RunID)
+		b.follow(logsCtx, id, out, logID)
 	}()
 
 	// Wait with a context that only ends when we give up, never with ctx.
@@ -98,15 +106,15 @@ func (b *Backend) Run(ctx context.Context, spec isolation.RunSpec, out isolation
 	case <-ctx.Done():
 		res.Stopped = true
 		cctx, cancel := freshContext(ctx)
-		if err := b.client.ContainerStop(cctx, id, spec.Limits.StopGrace); err != nil && !IsNotFound(err) {
-			b.log.Warn("stop run container", "run_id", spec.RunID, "error", err)
+		if err := b.client.ContainerStop(cctx, id, stopGrace); err != nil && !IsNotFound(err) {
+			b.log.Warn("stop run container", "run_id", logID, "error", err)
 		}
 		cancel()
 		select {
 		case <-waitRes:
 		case err := <-waitErr:
 			lost = err
-		case <-time.After(spec.Limits.StopGrace + 15*time.Second):
+		case <-time.After(stopGrace + 15*time.Second):
 			lost = errors.New("container did not stop")
 		}
 	}
@@ -226,3 +234,38 @@ func (b *Backend) Kill(ctx context.Context, runID string) error {
 }
 
 var _ isolation.Backend = (*Backend)(nil)
+
+// BuildPackages implements isolation.PackageBuilder: it runs the builder
+// image until it ends, ctx ends (stopped, 1 s grace), or the build times out
+// with ctx.
+func (b *Backend) BuildPackages(ctx context.Context, spec isolation.BuildSpec, out isolation.LineSink) (isolation.RunResult, error) {
+	cfg, host := buildBuilderConfig(spec)
+	return b.runContainer(ctx, BuildContainerName(spec.ID), "build-"+spec.ID, cfg, host, time.Second, out)
+}
+
+// RemoveBuildOrphans implements isolation.PackageBuilder: build containers
+// an earlier life of worker left on this Docker host are stopped and removed
+// (their builds' leases run out, and another build takes over). Other
+// workers' builds are left alone.
+func (b *Backend) RemoveBuildOrphans(ctx context.Context, worker string) error {
+	list, err := b.client.ContainerList(ctx, LabelBuild)
+	if err != nil {
+		return err
+	}
+	for _, c := range list {
+		if c.Labels[LabelBuildWorker] != worker {
+			continue
+		}
+		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
+		if err := b.client.ContainerStop(cctx, c.ID, time.Second); err != nil && !IsNotFound(err) {
+			b.log.Warn("stop leftover build container", "container", c.ID, "error", err)
+		}
+		if err := b.client.ContainerRemove(cctx, c.ID); err != nil && !IsNotFound(err) {
+			b.log.Warn("remove leftover build container", "container", c.ID, "error", err)
+		}
+		cancel()
+	}
+	return nil
+}
+
+var _ isolation.PackageBuilder = (*Backend)(nil)

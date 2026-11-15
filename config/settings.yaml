@@ -21,6 +21,8 @@
 #             NBSANDBOX_OIDC_INTROSPECTION_CLIENT_ID, NBSANDBOX_OIDC_INTROSPECTION_CLIENT_SECRET,
 #             NBSANDBOX_OIDC_INTROSPECTION_CACHE, NBSANDBOX_LOGIN_LIMIT_FAILURES,
 #             NBSANDBOX_TRUSTED_PROXIES
+#   packages: NBSANDBOX_PACKAGES_ENABLED, NBSANDBOX_PACKAGES_INDEX_URL, NBSANDBOX_PACKAGES_ALLOWED,
+#             NBSANDBOX_PACKAGES_TIMEOUT, NBSANDBOX_PACKAGES_BUILDER_IMAGE, NBSANDBOX_PACKAGES_NETWORK
 #   audit:    NBSANDBOX_AUDIT_ENABLED, NBSANDBOX_AUDIT_RETENTION, NBSANDBOX_AUDIT_DOWNLOADS
 #   web UI:   NBSANDBOX_UI_ENABLED, NBSANDBOX_UI_LISTEN, NBSANDBOX_UI_AUTH, NBSANDBOX_UI_PUBLIC_URL,
 #             NBSANDBOX_UI_NO_LOGIN_BEYOND_LOOPBACK, NBSANDBOX_UI_SESSION_IDLE, NBSANDBOX_UI_SESSION_MAX,
@@ -120,6 +122,20 @@ audit:
   enabled: true                     # NBSANDBOX_AUDIT_ENABLED
   retention: 2160h                  # NBSANDBOX_AUDIT_RETENTION: 90 days; 24h to 87600h
   downloads: true                   # NBSANDBOX_AUDIT_DOWNLOADS: also record downloads of files and run outputs
+
+# A space's own packages (docs/packages.md): its requirements.txt is built,
+# once, into a package set its runs import. Build containers are the only
+# containers with network; they install wheels only.
+packages:
+  enabled: false                    # NBSANDBOX_PACKAGES_ENABLED; off: requirements.txt is only checked
+  index_url: https://pypi.org/simple  # NBSANDBOX_PACKAGES_INDEX_URL: or a private mirror
+  allowed: []                       # NBSANDBOX_PACKAGES_ALLOWED: distributions spaces may install; empty = any
+  max_size: 1GiB                    # a set, unpacked
+  build_timeout: 10m                # NBSANDBOX_PACKAGES_TIMEOUT
+  retention: 720h                   # sets nobody used for this long are removed
+  cache_size: 20GiB                 # sets a worker keeps unpacked on its disk
+  builder_image: nbsandbox-runner-builder:dev  # NBSANDBOX_PACKAGES_BUILDER_IMAGE (make runner-image)
+  network: bridge                   # NBSANDBOX_PACKAGES_NETWORK: the Docker network of build containers
 
 shutdown_grace: 60s                 # wait for active runs on SIGTERM
 

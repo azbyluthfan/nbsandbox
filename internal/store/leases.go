@@ -29,6 +29,9 @@ func (db *DB) ClaimRun(ctx context.Context, worker string, d time.Duration) (Run
 		WHERE id = (
 			SELECT id FROM runs WHERE status = 'queued' AND worker = ''
 				AND NOT (SELECT draining FROM drain WHERE id = 1)
+				-- a run that needs packages waits until its set is ready
+				AND (runs.package_key = '' OR EXISTS (
+					SELECT 1 FROM package_sets p WHERE p.key = runs.package_key AND p.status = 'ready'))
 			ORDER BY queue_seq FOR UPDATE SKIP LOCKED LIMIT 1)
 		RETURNING `+runCols, worker, d.Milliseconds()))
 	if errors.Is(err, sql.ErrNoRows) {
