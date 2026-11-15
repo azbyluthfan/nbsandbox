@@ -1,0 +1,11 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Advisories accepted after review (docs/security/review.md). Each needs a
+# reason; review this file before every release.
+
+# setuptools path traversal in its package downloader (setuptools.package_index).
+# Reported for the pkg_resources that pip bundles from setuptools 70.3.0 in the
+# builder image (nbsandbox-runner-builder); pip doesn't bundle the downloader,
+# and builds install wheels from the configured index only.
+CVE-2025-47273

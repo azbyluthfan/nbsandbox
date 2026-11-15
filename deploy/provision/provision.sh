@@ -65,7 +65,7 @@ install -d -m 0750 -o root -g 1000 /etc/nbsandbox
 echo "== 5. Configuration"
 [ -f /etc/nbsandbox/settings.yaml ] || install -m 0640 -o root -g 1000 "$REPO_DIR/config/settings.yaml" /etc/nbsandbox/settings.yaml
 if [ ! -f /etc/nbsandbox/users.yaml ]; then
-	printf '# Add users with: docker run --rm -i ghcr.io/azbyluthfan/nbsandboxd:0.1.2 hash-password\nusers: []\n' > /etc/nbsandbox/users.yaml
+	printf '# Add users with: docker run --rm -i ghcr.io/azbyluthfan/nbsandboxd:0.2.0 hash-password\nusers: []\n' > /etc/nbsandbox/users.yaml
 	chown 1000:1000 /etc/nbsandbox/users.yaml
 	chmod 600 /etc/nbsandbox/users.yaml
 fi

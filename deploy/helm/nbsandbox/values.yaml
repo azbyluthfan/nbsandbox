@@ -13,7 +13,7 @@ image:
 imagePullSecrets: []
 
 # The image notebooks run in (pinned by digest in production).
-runnerImage: ghcr.io/azbyluthfan/nbsandbox-runner:0.1.2
+runnerImage: ghcr.io/azbyluthfan/nbsandbox-runner:0.2.0
 
 api:
   replicas: 2

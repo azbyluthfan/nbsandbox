@@ -17,6 +17,10 @@ The notebooks:
 
 - [notebooks/sales_report.ipynb](notebooks/sales_report.ipynb) takes `region` and `months`, reads `data/sales.csv`, returns the totals as one value (`nbsandbox.output`), and writes `monthly.csv` as an artifact. Its input contract only allows the three regions in the data, so a wrong value is refused with `400 invalid_parameters` before anything runs.
 - [notebooks/sales_by_month.ipynb](notebooks/sales_by_month.ipynb) takes the same input but streams its output: one item per month (`nbsandbox.emit`), half a second apart, as a chart would draw them. Its contract declares `{"mode": "stream", "item": …}`; the result's `output` is the list of the items.
+- [notebooks/sales_dashboard.ipynb](notebooks/sales_dashboard.ipynb) draws charts with matplotlib from 26 weeks of a made-up chain of stores in Java (`data/orders.csv`, `data/stores.csv`): weekly revenue per province with 4-week averages, revenue by month and category (stacked), each store's revenue and growth, and each category's weekly units. Every chart is shown in the notebook (and `output.html`) and kept as a PNG artifact; the totals come back as JSON. Inputs: `provinces` (a subset of the six) and `weeks`.
+- [notebooks/sales_map.ipynb](notebooks/sales_map.ipynb) draws a map of the same stores with matplotlib alone (runs have no network, so no map tiles): Java's provinces shaded by `metric` (`revenue`, `units` or `growth`), each store a bubble sized by revenue and coloured by growth, with labels, a scale bar and a north arrow. It keeps `map.png` and `provinces.geojson` (the provinces with their figures, for QGIS or any GIS tool) as artifacts.
+
+The data: `sales.csv` is the small table the first two use; `orders.csv` and `stores.csv` are synthetic, written by [data/make_orders.py](notebooks/data/make_orders.py) (deterministic: run it again for the same files; the store locations are the real cities'); `java_provinces.geojson` is Java's six provinces from [Natural Earth](https://www.naturalearthdata.com/) (public domain), simplified to 13 KB.
 
 ## Running them
 
@@ -36,6 +40,12 @@ go run ./examples/go/runnotebook -region surabaya
 
 ```bash
 go run ./examples/go/runnotebook -stream
+```
+
+The chart and map notebooks need no client: `make seed` puts them in alice's **Sales analysis** space with their data and runs them once, so the web UI shows their charts and the map. Or run one by hand:
+
+```bash
+scripts/nbsandbox.sh runs start "$ID" sales_map.ipynb '{"metric": "growth"}'
 ```
 
 ```bash

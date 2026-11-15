@@ -1,8 +1,9 @@
 // Copyright 2026 The nbsandbox Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// Command seed fills a development stack with example spaces, notebooks,
-// data, runs and a published function, through the API as the demo users
+// Command seed fills a development stack with example spaces, notebooks
+// (a report, a charts dashboard and a map), data, runs and a published
+// function, through the API as the demo users
 // (make seed). Safe to run again: a space that already exists (by name, for
 // its owner) is left as it is.
 //
@@ -55,9 +56,18 @@ var seeds = []space{
 		files: []file{
 			{"", "sales_report.ipynb", "examples/notebooks/sales_report.ipynb"},
 			{"", "sales_by_month.ipynb", "examples/notebooks/sales_by_month.ipynb"},
+			{"", "sales_dashboard.ipynb", "examples/notebooks/sales_dashboard.ipynb"},
+			{"", "sales_map.ipynb", "examples/notebooks/sales_map.ipynb"},
 			{"data", "sales.csv", "examples/notebooks/data/sales.csv"},
+			{"data", "orders.csv", "examples/notebooks/data/orders.csv"},
+			{"data", "stores.csv", "examples/notebooks/data/stores.csv"},
+			{"data", "java_provinces.geojson", "examples/notebooks/data/java_provinces.geojson"},
 		},
-		runs:      []run{{"sales_report.ipynb", map[string]any{"region": "jakarta", "months": 3}}},
+		runs: []run{
+			{"sales_report.ipynb", map[string]any{"region": "jakarta", "months": 3}},
+			{"sales_dashboard.ipynb", nil},
+			{"sales_map.ipynb", map[string]any{"metric": "revenue"}},
+		},
 		functions: []function{{"sales-report", "sales_report.ipynb"}},
 	},
 	{

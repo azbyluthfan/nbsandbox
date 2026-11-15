@@ -78,6 +78,7 @@ curl -u alice:… -H 'Content-Type: application/json' \
 
 - **What a version is:** publishing copies the notebook, its contract and the listed files and folders (at their paths in the space) into an **immutable version**: 1, then 2, and so on.
 - **What callers see:** saving the notebook, retraining the model or editing data in the space changes nothing for callers until you publish again.
+- **Packages:** with custom packages on, a version also keeps the exact packages of the space's `requirements.txt` when published (versions and hashes), whatever `requirements.txt` says later ([packages.md](packages.md)). Publishing waits for them to be built.
 - **Quota:** versions count toward the space's quota. `DELETE .../functions/{name}` removes a function and all its versions; its past calls and their results stay.
 - **Names:** function names are lowercase letters, digits, `-` and `_`.
 
