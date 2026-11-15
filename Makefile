@@ -411,6 +411,22 @@ test-integration: dev-data ## Integration tests against the dev stack (Docker ne
 	NBSANDBOX_SHUTDOWN_GRACE=5s NBSANDBOX_RUN_TIMEOUT=60s $(COMPOSE) up -d --build
 	NBSANDBOX_SHUTDOWN_GRACE=5s NBSANDBOX_RUN_TIMEOUT=60s $(GO) test -tags integration -count=1 -timeout 30m $(TESTFLAGS) ./tests/integration/
 
+KEYCLOAK_COMPOSE := $(COMPOSE) -f deploy/docker-compose.keycloak.yml
+
+.PHONY: test-keycloak
+test-keycloak: dev-data ## End-to-end auth with a real Keycloak (tokens, scopes, audience, token exchange) beside the dev stack
+	@$(STOP_KIND)
+	-@$(CLUSTER) stop >/dev/null 2>&1
+	NBSANDBOX_SHUTDOWN_GRACE=5s NBSANDBOX_RUN_TIMEOUT=60s $(KEYCLOAK_COMPOSE) up -d --build
+	@for i in $$(seq 120); do curl -sf http://127.0.0.1:8180/realms/nbsandbox/.well-known/openid-configuration >/dev/null && exit 0; sleep 2; done; \
+		echo "Keycloak didn't start" >&2; $(KEYCLOAK_COMPOSE) logs --tail 50 keycloak >&2; exit 1
+	NBSANDBOX_KEYCLOAK_URL=http://127.0.0.1:8180 NBSANDBOX_RUN_TIMEOUT=60s $(GO) test -tags integration -count=1 -timeout 15m \
+		-run '^TestKeycloak' $(TESTFLAGS) ./tests/integration/
+	@# Back to the plain dev stack (Keycloak shares nbsandboxd's network, so it goes first).
+	$(KEYCLOAK_COMPOSE) stop keycloak
+	$(KEYCLOAK_COMPOSE) rm --force keycloak
+	$(COMPOSE) up -d
+
 # The slow tests: they wait on real limits (CPU share, the run timeout,
 # endless output) or scan a whole container (isolation). make report runs
 # them; test-quick skips them, with a shorter run timeout, for everyday

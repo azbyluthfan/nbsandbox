@@ -18,10 +18,11 @@ The first release covers what was planned as v0.1 to v0.4, plus scaling out and 
 ## Since v0.1.0 (not released yet)
 
 - **Check your deployment:** `nbsandbox-report check` produces the isolation report for any running deployment, Docker or Kubernetes ([check-deployment.md](docs/check-deployment.md)). Kubernetes 1.34 to 1.37 are supported, the ends tested weekly.
+- **Keycloak, end to end:** user tokens, scopes, audience and token exchange against a real Keycloak, weekly ([auth.md](docs/auth.md#keycloak)).
 
 ## Next
 
-- **Authentication against real identity providers.** Token checking, scopes and on-behalf-of calls are built and unit-tested against a local issuer; next, end-to-end tests with Entra ID and Keycloak, and a guide for each.
+- **Authentication against Entra ID, end to end.** Keycloak is tested end to end (tokens, scopes, audience, token exchange); Entra ID is unit-tested against a local issuer and documented, and needs the same end-to-end test with a real tenant.
 - **Sandboxes on real clusters.** Run the suite under GKE Sandbox (gVisor) and AKS Pod Sandboxing (Kata), and add a GKE Terraform example beside the AKS one.
 - **Fast starts (≤ 1 s).** Today a run spends about 3–5 s (about a second more under gVisor) before its first cell, almost all of it starting a fresh container and Python kernel. Every run now records where its time goes ([perf.md](docs/perf.md#starting-a-run)): rendering, the kernel and the runner's imports are most of it. Cut it while keeping a fresh container per run:
   - skip work at start (render HTML after the result, lighter imports, run nbclient directly instead of papermill);

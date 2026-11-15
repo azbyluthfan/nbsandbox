@@ -10,6 +10,8 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 
 - **Where a run's time goes:** each run records its phases (queued, preparing files, container start, runner start, kernel start, the cells, rendering, teardown) in its result (`usage.phases_seconds`, REST and gRPC), the `nbsandbox_run_phase_seconds` metric (with a dashboard panel) and its log line; the runner's status file has the matching `timings`. The isolation report's start-latency row shows the breakdown ([docs/perf.md](docs/perf.md#starting-a-run)).
 
+- **Keycloak, end to end:** `make test-keycloak` runs a real Keycloak (26.8) beside the dev stack and checks that a user's token runs a notebook, that scopes and the audience are enforced, and that a backend calls on behalf of its user with token exchange (RFC 8693), the run recording the backend. Also in the weekly CI run. [docs/auth.md](docs/auth.md#keycloak) describes the tested setup; [deploy/keycloak/realm.json](deploy/keycloak/realm.json) is a complete example.
+
 ### Changed
 
 - **Kubernetes 1.34 to 1.37 are supported** ([docs/kubernetes.md](docs/kubernetes.md#supported-versions)). The weekly CI run tests 1.37 with both runtimes and 1.34 with the default one; the local cluster is kind 0.33 with Cilium 1.20 (`K8S_VERSION=1.34` for the oldest, `K8S_RUN_MEMORY` for small Docker hosts).

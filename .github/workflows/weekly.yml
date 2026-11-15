@@ -153,8 +153,32 @@ jobs:
               image --quiet --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$image"
           done
 
+  keycloak:
+    name: Keycloak (end-to-end auth)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      NBSANDBOX_DATA_DIR: ${{ github.workspace }}-data
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Runner image
+        run: make runner-image
+      - name: Data directory owned by uid 1000
+        run: |
+          make dev-data
+          sudo chown -R 1000:1000 "$NBSANDBOX_DATA_DIR"
+          echo "DOCKER_GID=$(getent group docker | cut -d: -f3)" >> "$GITHUB_ENV"
+      - name: Tokens, scopes, audience and token exchange with Keycloak
+        run: make test-keycloak TESTFLAGS=-v
+      - name: Logs on failure
+        if: failure()
+        run: docker compose -f deploy/docker-compose.dev.yml -f deploy/docker-compose.keycloak.yml logs --no-color | tail -300
+
   report-failure:
-    needs: [docker, kubernetes, fuzz, security]
+    needs: [docker, kubernetes, keycloak, fuzz, security]
     if: failure()
     runs-on: ubuntu-24.04
     steps:

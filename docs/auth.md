@@ -114,11 +114,19 @@ Runs record the token's client (`azp`, `appid` or `client_id`) as `client`, show
 
 ### Keycloak
 
-1. **A client for nbsandbox** in your realm (bearer-only / no flows enabled). Its client ID is nbsandbox's audience.
-2. **Client scopes** named `nbsandbox.read`, `nbsandbox.runs`, ... assigned (optional or default) to the client apps that call nbsandbox. They arrive in `scope`.
-3. **Audience:** Keycloak's access tokens don't name nbsandbox by default. Add an *Audience* mapper (included client audience: nbsandbox) to the nbsandbox client scopes, so tokens carrying them get `aud` = nbsandbox.
-4. **On behalf of users:** enable token exchange for your backend's client and exchange users' tokens with `audience=<nbsandbox client id>`.
-5. **Settings:** `issuer: https://<host>/realms/<realm>`, `audience: <nbsandbox client id>`, `id_prefix: kc` (or your realm's name), `id_claims: [sub]`.
+Tested end to end with Keycloak 26.8 (`make test-keycloak`): a user's token runs a notebook, scopes and audience are enforced, and a backend calls on behalf of its user with token exchange. The test realm, [deploy/keycloak/realm.json](../deploy/keycloak/realm.json), is a complete example of the setup below (its passwords and secrets are public test values).
+
+1. **A client for nbsandbox** in your realm, with no flows enabled: it only names the audience. Its client ID is nbsandbox's audience.
+2. **Client scopes** named `nbsandbox.read`, `nbsandbox.runs`, ... (*Include in token scope* on), assigned as optional or default scopes to the client apps that call nbsandbox. They arrive in `scope`.
+3. **Audience:** Keycloak's access tokens don't name nbsandbox by default. Give each nbsandbox client scope an *Audience* mapper (included client audience: nbsandbox), so tokens carrying them get `aud` = nbsandbox.
+4. **The subject:** keep the realm's `basic` client scope (it puts `sub` in access tokens) as a default scope of every client.
+5. **On behalf of users** (Keycloak's standard token exchange, on by default since 26.2):
+   - your backend is a confidential client with *Standard token exchange* enabled (`standard.token.exchange.enabled`);
+   - the user's token must be issued for the backend (its `aud` includes the backend: an audience mapper on a scope the user's app requests);
+   - the nbsandbox scopes are optional scopes of the backend's client, so it may ask for them;
+   - the backend posts `grant_type=urn:ietf:params:oauth:grant-type:token-exchange`, `subject_token=<the user's token>`, `subject_token_type=urn:ietf:params:oauth:token-type:access_token`, `audience=nbsandbox` and the scopes it needs, with its client credentials. The new token's `sub` is the user's, and runs record the backend as `client`.
+6. **A service calling as itself:** a confidential client with service accounts enabled and the nbsandbox scopes it needs as default scopes (client credentials grant). The caller ID is the service account's `sub`.
+7. **Settings:** `issuer: https://<host>/realms/<realm>`, `audience: <nbsandbox client id>`, `id_prefix: kc` (or your realm's name), `id_claims: [sub]`.
 
 ## Troubleshooting
 
