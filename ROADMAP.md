@@ -23,6 +23,10 @@ A patch release with two fixes (Kubernetes runs copied their files slowly; Go 1.
 - **MCP server for AI agents** (`nbsandbox-mcp`): agents write, run and read notebooks as their user ([mcp.md](docs/mcp.md)).
 - **Keycloak, end to end:** user tokens, scopes, audience and token exchange against a real Keycloak, weekly ([auth.md](docs/auth.md#keycloak)).
 
+## Since v0.1.1 (not released yet)
+
+- **The Linux reference report at production sizes, every week:** the weekly CI run's Docker jobs (runc and gVisor, default 2 GiB per run) produce it and open a pull request with it ([gvisor.md](docs/gvisor.md#reproduce)).
+
 ## Next
 
 - **Authentication against Entra ID, end to end.** Keycloak is tested end to end (tokens, scopes, audience, token exchange); Entra ID is unit-tested against a local issuer and documented, and needs the same end-to-end test with a real tenant.
@@ -31,7 +35,6 @@ A patch release with two fixes (Kubernetes runs copied their files slowly; Go 1.
   - skip work at start (render HTML after the result, lighter imports, run nbclient directly instead of papermill);
   - keep a small pool of single-use pre-started containers per published function version (created and kernel started ahead of time, used once, then removed);
   - later, restore a booted kernel from a snapshot (gVisor checkpoint/restore, Firecracker snapshots).
-- **Reference report at production sizes.** The Linux reference report ran with 512 MiB per run on a 2 GB VM; repeat it with the default 2 GiB.
 
 ## Later
 

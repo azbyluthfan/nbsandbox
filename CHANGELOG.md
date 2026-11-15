@@ -4,6 +4,10 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+### Changed
+
+- **The Linux reference report comes from the weekly CI run:** its Docker jobs run the whole suite on Linux with Docker Engine with `runc` and gVisor at the default limits (2 GiB per run, where the last report used 512 MiB), and a new job renders their findings into `docs/isolation-report-linux.md` and opens a pull request with it. `make report-linux` still runs it on your own machine.
+
 ## [0.1.1] - 2026-11-15
 
 ### Added
