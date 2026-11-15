@@ -576,3 +576,11 @@ pre.text code.hl { white-space: pre-wrap; }
   .space-picker select { max-width: 120px; }
   .run-form textarea { flex-basis: 100%; }
 }
+
+/* ---------- packages ---------- */
+.packages-card { display: grid; gap: 10px; }
+.packages-card p { margin: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.packages-card table { max-width: 420px; }
+.packages-card pre.log { max-height: 260px; overflow: auto; white-space: pre-wrap; font-size: 12px; margin: 6px 0 0; }
+.packages-card .error-text { color: var(--bad); }
+.packages-card button { justify-self: start; }

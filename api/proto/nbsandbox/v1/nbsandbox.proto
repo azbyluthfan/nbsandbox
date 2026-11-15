@@ -36,6 +36,11 @@ service SpaceService {
   rpc MoveFile(MoveFileRequest) returns (File);
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
   rpc CreateFolder(CreateFolderRequest) returns (File);
+
+  // The space's own packages (requirements.txt), built into a package set
+  // its runs import. Get never starts a build; Build asks for it now.
+  rpc GetSpacePackages(GetSpacePackagesRequest) returns (SpacePackages);
+  rpc BuildSpacePackages(BuildSpacePackagesRequest) returns (SpacePackages);
 }
 
 message Space {
@@ -178,6 +183,24 @@ message AdminUpdateSpaceRequest {
 }
 message AdminDeleteSpaceRequest { string space_id = 1; }
 message AdminDeleteSpaceResponse {}
+
+message GetSpacePackagesRequest { string space_id = 1; }
+message BuildSpacePackagesRequest { string space_id = 1; }
+message SpacePackages {
+  bool enabled = 1;
+  // disabled, none (no requirements.txt), not_built, pending, building, ready or failed
+  string status = 2;
+  repeated InstalledPackage installed = 3; // what the set adds to the runner image
+  string lock = 4;                         // the same, with hashes
+  int64 size_bytes = 5;
+  google.protobuf.Timestamp built_at = 6;
+  string error = 7;
+  string build_log = 8;
+}
+message InstalledPackage {
+  string name = 1;
+  string version = 2;
+}
 
 message AdminRun {
   Run run = 1; // without result
@@ -392,6 +415,9 @@ message Run {
   google.protobuf.Timestamp started_at = 20;
   google.protobuf.Timestamp finished_at = 21;
   RunRecord result = 22;
+  // While queued: what the run waits for ("packages": its space's package
+  // set is being built), if anything.
+  string waiting_for = 24;
 }
 
 message DependencyWarning {

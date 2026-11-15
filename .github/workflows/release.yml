@@ -70,23 +70,36 @@ jobs:
           tags: ghcr.io/azbyluthfan/nbsandboxd:${{ steps.v.outputs.version }}
       - name: Runner image manifest (for the io.nbsandbox.manifest label)
         run: |
-          docker build -t runner-manifest runner-image
+          docker build --target runner -t runner-manifest runner-image
           echo "MANIFEST=$(docker run --rm --network none --entrypoint python runner-manifest /opt/nbsandbox/export_manifest.py)" >> "$GITHUB_ENV"
       - name: Runner image
         id: runner
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: runner-image
+          target: runner
           platforms: linux/amd64,linux/arm64
           labels: io.nbsandbox.manifest=${{ env.MANIFEST }}
           push: true
           sbom: true
           provenance: mode=max
           tags: ghcr.io/azbyluthfan/nbsandbox-runner:${{ steps.v.outputs.version }}
+      - name: Builder image (builds spaces' package sets; the runner's packages plus pip)
+        id: builder
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: runner-image
+          target: builder
+          platforms: linux/amd64,linux/arm64
+          push: true
+          sbom: true
+          provenance: mode=max
+          tags: ghcr.io/azbyluthfan/nbsandbox-runner-builder:${{ steps.v.outputs.version }}
       - name: Sign images (keyless)
         run: |
           cosign sign --yes ghcr.io/azbyluthfan/nbsandboxd@${{ steps.nbsandboxd.outputs.digest }}
           cosign sign --yes ghcr.io/azbyluthfan/nbsandbox-runner@${{ steps.runner.outputs.digest }}
+          cosign sign --yes ghcr.io/azbyluthfan/nbsandbox-runner-builder@${{ steps.builder.outputs.digest }}
 
   chart:
     needs: images

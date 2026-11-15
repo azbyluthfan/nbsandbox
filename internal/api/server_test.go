@@ -25,8 +25,10 @@ import (
 	"github.com/azbyluthfan/nbsandbox/internal/blob"
 	"github.com/azbyluthfan/nbsandbox/internal/isolation"
 	"github.com/azbyluthfan/nbsandbox/internal/obs"
+	"github.com/azbyluthfan/nbsandbox/internal/packages"
 	"github.com/azbyluthfan/nbsandbox/internal/runs"
 	"github.com/azbyluthfan/nbsandbox/internal/spaces"
+	"github.com/azbyluthfan/nbsandbox/internal/store"
 	"github.com/azbyluthfan/nbsandbox/internal/store/storetest"
 )
 
@@ -56,6 +58,12 @@ func newEnv(t *testing.T) testEnv {
 // newEnvWithIDP also accepts bearer tokens from idp (when not nil).
 func newEnvWithIDP(t *testing.T, idp *authtest.IDP) testEnv {
 	t.Helper()
+	return newEnvFull(t, idp, nil)
+}
+
+// newEnvFull also gives the run manager package sets, when pkgs makes them.
+func newEnvFull(t *testing.T, idp *authtest.IDP, pkgs func(db *store.DB, dataDir string) *packages.Service) testEnv {
+	t.Helper()
 	var users strings.Builder
 	users.WriteString("users:\n")
 	for _, u := range []string{"alice", "bob", "root"} {
@@ -83,10 +91,15 @@ func newEnvWithIDP(t *testing.T, idp *authtest.IDP) testEnv {
 	}
 	m := obs.NewMetrics()
 	backend := &fakeBackend{}
+	var pkgSvc *packages.Service
+	if pkgs != nil {
+		pkgSvc = pkgs(db, data)
+	}
 	mgr := runs.New(runs.Config{Image: "nbsandbox-runner:test", Concurrency: 2, Timeout: 10 * time.Second, LogCap: 1 << 20,
 		Retention: 24 * time.Hour, DependencyCheck: "warn",
 		Limits: isolation.Limits{MemoryBytes: 2 << 30, NanoCPUs: 1e9, PIDs: 256, TmpfsBytes: 256 << 20, StopGrace: 50 * time.Millisecond}},
-		runs.Deps{DB: db, Spaces: svc, Backend: backend, Metrics: m, Log: logger})
+		runs.Deps{DB: db, Spaces: svc, Backend: backend, Metrics: m, Log: logger, Packages: pkgSvc,
+			ImageID: func() string { return "sha256:runner-test" }})
 	if err := mgr.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}

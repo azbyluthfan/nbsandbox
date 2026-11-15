@@ -50,7 +50,7 @@ type Store interface {
 	GetPackageSet(ctx context.Context, key string) (store.PackageSet, error)
 	ClaimPackageBuild(ctx context.Context, worker string, lease time.Duration, now time.Time) (store.PackageSet, error)
 	RenewPackageBuild(ctx context.Context, key, worker string, until time.Time) (bool, error)
-	FinishPackageBuild(ctx context.Context, key, worker string, ok bool, lock string, size int64, log, reason string, now time.Time) (bool, error)
+	FinishPackageBuild(ctx context.Context, key, worker string, o store.BuildOutcome, now time.Time) (bool, error)
 	TouchPackageSet(ctx context.Context, key string, now time.Time) error
 	UnusedPackageSets(ctx context.Context, before time.Time) ([]string, error)
 	DeletePackageSet(ctx context.Context, key string) error
@@ -130,6 +130,19 @@ func (s *Service) ForSpace(ctx context.Context, spaceID string, requirementsTxt 
 		req.PreferLock = lock
 	}
 	return s.request(ctx, req)
+}
+
+// KeyForSpace is the key of the set a space's requirements.txt needs,
+// without asking for it ("" when it has no requirements).
+func (s *Service) KeyForSpace(requirementsTxt []byte, imageID string) (string, error) {
+	rs, err := Parse(requirementsTxt)
+	if err != nil {
+		return "", &InvalidError{Msg: err.Error()}
+	}
+	if len(rs) == 0 {
+		return "", nil
+	}
+	return Key(rs.Canonical(), imageID, s.cfg.Platform), nil
 }
 
 // ForLock asks for the set of a published version's lock (exactly those
@@ -224,15 +237,14 @@ func (s *Service) buildOne(ctx context.Context) bool {
 	}
 	s.log.Info("building a package set", "key", ps.Key, "from_lock", ps.FromLock)
 	started := s.now()
-	lock, size, logText, reason := s.build(ctx, ps)
-	ok := reason == ""
+	o := s.build(ctx, ps)
 	fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cancel()
-	if held, err := s.db.FinishPackageBuild(fctx, ps.Key, s.cfg.WorkerID, ok, lock, size, logText, reason, s.now()); err != nil || !held {
+	if held, err := s.db.FinishPackageBuild(fctx, ps.Key, s.cfg.WorkerID, o, s.now()); err != nil || !held {
 		s.log.Warn("record a package build", "key", ps.Key, "held", held, "error", err)
 		return true
 	}
-	s.log.Info("package set built", "key", ps.Key, "ok", ok, "bytes", size, "seconds", s.now().Sub(started).Seconds(), "reason", reason)
+	s.log.Info("package set built", "key", ps.Key, "ok", o.OK, "bytes", o.Size, "seconds", s.now().Sub(started).Seconds(), "reason", o.Reason)
 	if s.OnFinished != nil {
 		if done, err := s.db.GetPackageSet(fctx, ps.Key); err == nil {
 			s.OnFinished(ps.Key, done)
@@ -253,34 +265,35 @@ type buildRequest struct {
 
 // result.json from build_packages.py.
 type buildResult struct {
-	OK    bool   `json:"ok"`
-	Error string `json:"error"`
-	Lock  string `json:"lock"`
-	Used  string `json:"used"`
+	OK      bool     `json:"ok"`
+	Error   string   `json:"error"`
+	Lock    string   `json:"lock"`
+	Used    string   `json:"used"`
+	Modules []string `json:"modules"`
 }
 
-// build runs the build container and stores the set. It returns the lock
-// and size, the log, and the reason it failed ("" if it didn't).
-func (s *Service) build(ctx context.Context, ps store.PackageSet) (lock string, size int64, logText, reason string) {
+// build runs the build container and stores the set.
+func (s *Service) build(ctx context.Context, ps store.PackageSet) store.BuildOutcome {
+	fail := func(log, reason string) store.BuildOutcome { return store.BuildOutcome{Log: log, Reason: reason} }
 	logs := &tailLog{max: maxLog}
 	dir, err := os.MkdirTemp(filepath.Join(s.cfg.DataDir, "tmp"), "build-")
 	if err != nil {
-		return "", 0, "", "nbsandboxd couldn't prepare the build: " + err.Error()
+		return fail("", "nbsandboxd couldn't prepare the build: "+err.Error())
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 	in, out := filepath.Join(dir, "in"), filepath.Join(dir, "out")
 	for _, d := range []string{in, out} {
 		if err := os.Mkdir(d, 0o755); err != nil { //nolint:gosec // read by the build container's uid 1000, maybe not nbsandboxd's
-			return "", 0, "", "nbsandboxd couldn't prepare the build: " + err.Error()
+			return fail("", "nbsandboxd couldn't prepare the build: "+err.Error())
 		}
 	}
 	// The build container runs as uid 1000, perhaps not nbsandboxd's.
 	if err := os.Chmod(out, 0o777); err != nil { //nolint:gosec // a private temporary folder under data_dir/tmp
-		return "", 0, "", "nbsandboxd couldn't prepare the build: " + err.Error()
+		return fail("", "nbsandboxd couldn't prepare the build: "+err.Error())
 	}
 	b, _ := json.Marshal(buildRequest{IndexURL: s.cfg.IndexURL, Requirements: ps.Requirements, FromLock: ps.FromLock, PreferLock: ps.PreferLock})
 	if err := os.WriteFile(filepath.Join(in, "request.json"), b, 0o644); err != nil { //nolint:gosec // read by the build container
-		return "", 0, "", "nbsandboxd couldn't prepare the build: " + err.Error()
+		return fail("", "nbsandboxd couldn't prepare the build: "+err.Error())
 	}
 
 	// Keep the build's lease while it runs; give up if it was lost.
@@ -304,42 +317,42 @@ func (s *Service) build(ctx context.Context, ps store.PackageSet) (lock string, 
 	id := ps.Key[:16] + "-" + randomHex(4)
 	res, err := s.builder.BuildPackages(bctx, isolation.BuildSpec{ID: id, Worker: s.cfg.WorkerID, InDir: in, OutDir: out,
 		Image: s.cfg.BuilderImage, Runtime: s.cfg.Runtime, Network: s.cfg.Network, Limits: s.cfg.Limits}, logs)
-	logText = logs.String()
+	logText := logs.String()
 	switch {
 	case errors.Is(context.Cause(bctx), errBuildTimeout):
-		return "", 0, logText, fmt.Sprintf("the build took longer than %s", s.cfg.BuildTimeout)
+		return fail(logText, fmt.Sprintf("the build took longer than %s", s.cfg.BuildTimeout))
 	case err != nil:
-		return "", 0, logText, "the build couldn't run: " + err.Error()
+		return fail(logText, "the build couldn't run: "+err.Error())
 	case res.Stopped:
-		return "", 0, logText, "the build was stopped"
+		return fail(logText, "the build was stopped")
 	case res.OOMKilled:
-		return "", 0, logText, "the build ran out of memory"
+		return fail(logText, "the build ran out of memory")
 	}
 	var r buildResult
 	rb, err := os.ReadFile(filepath.Join(out, "result.json")) //nolint:gosec // our own temporary folder
 	if err != nil || json.Unmarshal(rb, &r) != nil {
-		return "", 0, logText, fmt.Sprintf("the build ended without a result (exit code %d)", res.ExitCode)
+		return fail(logText, fmt.Sprintf("the build ended without a result (exit code %d)", res.ExitCode))
 	}
 	if !r.OK {
-		return "", 0, logText, r.Error
+		return fail(logText, r.Error)
 	}
 	locked, err := Parse([]byte(r.Lock))
 	if err != nil {
-		return "", 0, logText, "the build's lock can't be read: " + err.Error()
+		return fail(logText, "the build's lock can't be read: "+err.Error())
 	}
 	if bad := Allowed(locked.Names(), s.cfg.Allowed); len(bad) > 0 {
-		return "", 0, logText, "the requirements pull in packages this nbsandbox doesn't allow: " + strings.Join(bad, ", ")
+		return fail(logText, "the requirements pull in packages this nbsandbox doesn't allow: "+strings.Join(bad, ", "))
 	}
 	site := filepath.Join(out, "site-packages")
-	size, err = treeSize(site)
+	size, err := treeSize(site)
 	if err != nil {
-		return "", 0, logText, "the build's output can't be read: " + err.Error()
+		return fail(logText, "the build's output can't be read: "+err.Error())
 	}
 	if size > s.cfg.MaxSize {
-		return "", 0, logText, fmt.Sprintf("the packages take %d MiB, more than the %d MiB allowed", size>>20, s.cfg.MaxSize>>20)
+		return fail(logText, fmt.Sprintf("the packages take %d MiB, more than the %d MiB allowed", size>>20, s.cfg.MaxSize>>20))
 	}
 	if err := s.store(ctx, ps.Key, site, filepath.Join(dir, "set.tar")); err != nil {
-		return "", 0, logText, "nbsandboxd couldn't store the packages: " + err.Error()
+		return fail(logText, "nbsandboxd couldn't store the packages: "+err.Error())
 	}
 	// Built here: keep it unpacked for this worker's runs.
 	s.cacheMu.Lock()
@@ -347,7 +360,7 @@ func (s *Service) build(ctx context.Context, ps store.PackageSet) (lock string, 
 		s.log.Debug("keep the built set", "key", ps.Key, "error", err)
 	}
 	s.cacheMu.Unlock()
-	return r.Lock, size, logText, ""
+	return store.BuildOutcome{OK: true, Lock: r.Lock, Modules: r.Modules, Size: size, Log: logText}
 }
 
 // store tars the set and puts it in object storage.

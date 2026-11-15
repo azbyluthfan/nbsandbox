@@ -24,6 +24,9 @@ const (
 	OpDeleteFile   Op = "DeleteFile"
 	OpCreateFolder Op = "CreateFolder"
 
+	OpGetSpacePackages   Op = "GetSpacePackages"
+	OpBuildSpacePackages Op = "BuildSpacePackages"
+
 	OpListFunctions       Op = "ListFunctions"
 	OpGetFunction         Op = "GetFunction"
 	OpDeleteFunction      Op = "DeleteFunction"
@@ -93,6 +96,9 @@ var opScopes = map[Op]string{
 	OpMoveFile:     ScopeFilesWrite,
 	OpDeleteFile:   ScopeFilesWrite,
 	OpCreateFolder: ScopeFilesWrite,
+
+	OpGetSpacePackages:   ScopeRead,
+	OpBuildSpacePackages: ScopeRuns,
 
 	OpListFunctions:       ScopeRead,
 	OpGetFunction:         ScopeRead,

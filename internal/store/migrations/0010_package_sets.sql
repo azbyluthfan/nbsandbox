@@ -12,6 +12,7 @@ CREATE TABLE package_sets (
 	prefer_lock  TEXT NOT NULL,     -- a lock to try first (the space's last), '' if none
 	from_lock    BOOLEAN NOT NULL,  -- requirements is a lock: install exactly it
 	lock         TEXT NOT NULL,     -- what was installed: name==version --hash=..., one per line
+	modules      TEXT NOT NULL,     -- the top-level modules it provides, space-separated (for the dependency check)
 	size_bytes   BIGINT NOT NULL,   -- unpacked
 	log          TEXT NOT NULL,     -- the build's output (its end)
 	error        TEXT NOT NULL,     -- why it failed, for the caller

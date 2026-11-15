@@ -38,10 +38,12 @@ tags:
   - name: operations
   - name: spaces
   - name: files
+  - name: packages
+    description: A space's own Python packages (requirements.txt), built into a package set its runs import
   - name: runs
   - name: functions
   - name: admin
-    description: Every owner's spaces, for administrators (scope nbsandbox.admin)
+    description: Every owner's spaces and runs, draining, and the audit log, for administrators (scope nbsandbox.admin)
 
 paths:
   /healthz:
@@ -481,6 +483,41 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
+  /v1/spaces/{id}/packages:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [packages]
+      summary: The space's own packages (its requirements.txt, built into a package set)
+      description: |
+        The package set the space's requirements.txt needs now and how far
+        its build is. Never starts a build. `disabled` when this nbsandbox
+        has package sets off (docs/packages.md).
+      responses:
+        "200": { description: The space's packages, content: { application/json: { schema: { $ref: "#/components/schemas/SpacePackages" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.runs] }]
+      tags: [packages]
+      summary: Build the space's requirements.txt now
+      description: |
+        Runs and publishes that need the set then find it built. 202 while
+        it builds; 200 when it is already built, or failed recently (the
+        build log says why).
+      responses:
+        "202": { description: Building, content: { application/json: { schema: { $ref: "#/components/schemas/SpacePackages" } } } }
+        "200": { description: Built, or failed, content: { application/json: { schema: { $ref: "#/components/schemas/SpacePackages" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /v1/spaces/{id}/functions:
     parameters:
       - $ref: "#/components/parameters/SpaceID"
@@ -576,6 +613,8 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "413": { $ref: "#/components/responses/TooLarge" }
+        "409": { description: "The space's packages are still being built (Retry-After)", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { description: "The space's packages could not be built (packages_failed, with build_log)", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
 
   /v1/spaces/{id}/functions/{name}/versions/{version}:
     parameters:
@@ -653,7 +692,10 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "422":
-          description: Idempotency-Key reused with another body, or dependencies missing with dependency_check=reject
+          description: |
+            Idempotency-Key reused with another body; dependencies missing with
+            dependency_check=reject; or the space's packages could not be built
+            (`packages_failed`, with `build_log`)
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "503": { $ref: "#/components/responses/DockerUnavailable" }
 
@@ -1256,7 +1298,7 @@ components:
         code:
           type: string
           enum: [bad_request, unauthorized, forbidden, not_found, method_not_allowed, conflict, payload_too_large, unprocessable,
-                 invalid_parameters, invalid_contract, version_mismatch, version_required, docker_unavailable, too_many_requests, internal]
+                 invalid_parameters, invalid_contract, version_mismatch, version_required, docker_unavailable, too_many_requests, packages_failed, internal]
         message: { type: string }
         problems:
           type: array
@@ -1358,6 +1400,26 @@ components:
       properties:
         items: { type: array, items: { $ref: "#/components/schemas/AuditEvent" } }
         next_cursor: { type: string, description: Empty on the last page }
+    SpacePackages:
+      type: object
+      required: [enabled, status]
+      properties:
+        enabled: { type: boolean, description: Package sets are on (otherwise requirements.txt is only checked) }
+        status: { type: string, enum: [disabled, none, not_built, pending, building, ready, failed] }
+        installed:
+          type: array
+          description: What the set adds to the runner image
+          items:
+            type: object
+            required: [name, version]
+            properties:
+              name: { type: string }
+              version: { type: string }
+        lock: { type: string, description: "The same, with hashes: a requirements file" }
+        size_bytes: { type: integer, format: int64 }
+        built_at: { type: string, format: date-time }
+        error: { type: string }
+        build_log: { type: string, description: The end of the build's output (pip's) }
     AdminSpaceList:
       type: object
       required: [items, next_cursor]
@@ -1413,7 +1475,7 @@ components:
         read_only_space: { type: boolean, description: The run sees the space (or the function's bundle) read-only }
         parameters: { $ref: "#/components/schemas/Parameters" }
         status: { $ref: "#/components/schemas/RunStatus" }
-        error_kind: { type: string, description: "e.g. execution_error, resource_pids, resource_tmp, missing_package, output_invalid, output_too_large, oom, timeout, docker_lost" }
+        error_kind: { type: string, description: "e.g. execution_error, resource_pids, resource_tmp, missing_package, packages, output_invalid, output_too_large, oom, timeout, docker_lost" }
         fault: { type: string, enum: [notebook, caller, platform] }
         retryable: { type: boolean, description: True only for interrupted and platform_error; the same request may succeed if sent again }
         message: { type: string }
@@ -1421,6 +1483,7 @@ components:
         cancel_reason: { type: string }
         output_bytes: { type: integer, description: Size of the value the notebook returned, once succeeded }
         queue_position: { type: integer, description: 1 = next to start; only while queued }
+        waiting_for: { type: string, enum: [packages], description: "While queued: what the run waits for (packages: its space's package set is being built)" }
         dependency_warnings: { type: array, items: { $ref: "#/components/schemas/DependencyWarning" } }
         created_at: { type: string, format: date-time }
         started_at: { type: string, format: date-time }

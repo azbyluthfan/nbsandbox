@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,7 +23,10 @@ import (
 // fakeBackend writes what the runner would: output notebook, HTML, an
 // artifact and the status file. A run with "slow" in its notebook name waits
 // to be cancelled.
-type fakeBackend struct{}
+type fakeBackend struct {
+	mu           sync.Mutex
+	packagesDirs []string // each run's PackagesDir
+}
 
 func (f *fakeBackend) Name() string { return "fake" }
 func (f *fakeBackend) Orphans(context.Context) ([]isolation.Orphan, error) {
@@ -31,6 +35,9 @@ func (f *fakeBackend) Orphans(context.Context) ([]isolation.Orphan, error) {
 func (f *fakeBackend) Kill(context.Context, string) error { return nil }
 func (f *fakeBackend) Run(ctx context.Context, spec isolation.RunSpec, out isolation.LineSink) (isolation.RunResult, error) {
 	dir := spec.RunDir
+	f.mu.Lock()
+	f.packagesDirs = append(f.packagesDirs, spec.PackagesDir)
+	f.mu.Unlock()
 	out.Line("running " + spec.Notebook)
 	_ = os.WriteFile(filepath.Join(dir, "output.ipynb"), []byte(nbJSON), 0o600)
 	if strings.Contains(spec.Notebook, "lines") { // 30 lines, 20 ms apart

@@ -7,17 +7,19 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 )
 
 // PackageSet is a row of package_sets.
 type PackageSet struct {
 	Key          string
-	Status       string // pending, building, ready, failed
-	Requirements string // what to install: canonical requirements, or a lock
-	PreferLock   string // a lock to try first ('' if none)
-	FromLock     bool   // Requirements is a lock: install exactly it
-	Lock         string // what was installed
+	Status       string   // pending, building, ready, failed
+	Requirements string   // what to install: canonical requirements, or a lock
+	PreferLock   string   // a lock to try first ('' if none)
+	FromLock     bool     // Requirements is a lock: install exactly it
+	Lock         string   // what was installed
+	Modules      []string // the top-level modules it provides
 	SizeBytes    int64
 	Log          string
 	Error        string
@@ -36,13 +38,15 @@ const (
 	PackagesFailed   = "failed"
 )
 
-const packageCols = "key, status, requirements, prefer_lock, from_lock, lock, size_bytes, log, error, builder, build_until, created_at, built_at, last_used"
+const packageCols = "key, status, requirements, prefer_lock, from_lock, lock, modules, size_bytes, log, error, builder, build_until, created_at, built_at, last_used"
 
 func scanPackageSet(s interface{ Scan(...any) error }) (PackageSet, error) {
 	var p PackageSet
 	var until, created, built, used int64
-	err := s.Scan(&p.Key, &p.Status, &p.Requirements, &p.PreferLock, &p.FromLock, &p.Lock, &p.SizeBytes, &p.Log, &p.Error, &p.Builder,
+	var modules string
+	err := s.Scan(&p.Key, &p.Status, &p.Requirements, &p.PreferLock, &p.FromLock, &p.Lock, &modules, &p.SizeBytes, &p.Log, &p.Error, &p.Builder,
 		&until, &created, &built, &used)
+	p.Modules = strings.Fields(modules)
 	if errors.Is(err, sql.ErrNoRows) {
 		return PackageSet{}, ErrNotFound
 	}
@@ -75,8 +79,8 @@ type PackageRequest struct {
 func (db *DB) RequestPackageSet(ctx context.Context, r PackageRequest, retryFailed time.Duration, now time.Time) (PackageSet, error) {
 	ms := now.UnixMilli()
 	_, err := db.w.ExecContext(ctx, `
-		INSERT INTO package_sets(key, status, requirements, prefer_lock, from_lock, lock, size_bytes, log, error, builder, build_until, created_at, built_at, last_used)
-		VALUES (?, 'pending', ?, ?, ?, '', 0, '', '', '', 0, ?, 0, ?)
+		INSERT INTO package_sets(key, status, requirements, prefer_lock, from_lock, lock, modules, size_bytes, log, error, builder, build_until, created_at, built_at, last_used)
+		VALUES (?, 'pending', ?, ?, ?, '', '', 0, '', '', '', 0, ?, 0, ?)
 		ON CONFLICT (key) DO UPDATE SET status = 'pending', error = '', log = '', prefer_lock = EXCLUDED.prefer_lock
 		WHERE package_sets.status = 'failed' AND package_sets.built_at < ?`,
 		r.Key, r.Requirements, r.PreferLock, r.FromLock, ms, ms, now.Add(-retryFailed).UnixMilli())
@@ -110,15 +114,27 @@ func (db *DB) RenewPackageBuild(ctx context.Context, key, worker string, until t
 	return n == 1, err
 }
 
-// FinishPackageBuild records worker's build of key: ready with its lock and
-// size, or failed with the reason. False if worker no longer held the build.
-func (db *DB) FinishPackageBuild(ctx context.Context, key, worker string, ok bool, lock string, size int64, log, reason string, now time.Time) (bool, error) {
+// BuildOutcome is how a build ended.
+type BuildOutcome struct {
+	OK      bool
+	Lock    string
+	Modules []string
+	Size    int64
+	Log     string
+	Reason  string // why it failed
+}
+
+// FinishPackageBuild records worker's build of key: ready with its lock,
+// modules and size, or failed with the reason. False if worker no longer
+// held the build.
+func (db *DB) FinishPackageBuild(ctx context.Context, key, worker string, o BuildOutcome, now time.Time) (bool, error) {
 	status := PackagesFailed
-	if ok {
+	if o.OK {
 		status = PackagesReady
 	}
-	res, err := db.w.ExecContext(ctx, `UPDATE package_sets SET status = ?, lock = ?, size_bytes = ?, log = ?, error = ?, built_at = ?, last_used = ?
-		WHERE key = ? AND builder = ? AND status = 'building'`, status, lock, size, log, reason, now.UnixMilli(), now.UnixMilli(), key, worker)
+	res, err := db.w.ExecContext(ctx, `UPDATE package_sets SET status = ?, lock = ?, modules = ?, size_bytes = ?, log = ?, error = ?, built_at = ?, last_used = ?
+		WHERE key = ? AND builder = ? AND status = 'building'`, status, o.Lock, strings.Join(o.Modules, " "), o.Size, o.Log, o.Reason,
+		now.UnixMilli(), now.UnixMilli(), key, worker)
 	if err != nil {
 		return false, err
 	}

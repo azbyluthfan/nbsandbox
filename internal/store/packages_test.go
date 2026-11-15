@@ -37,17 +37,17 @@ func TestPackageSetBuilds(t *testing.T) {
 	if p, err := db.ClaimPackageBuild(ctx, "w2", time.Minute, later); err != nil || p.Builder != "w2" {
 		t.Fatalf("take over: %+v %v", p, err)
 	}
-	if ok, _ := db.FinishPackageBuild(ctx, "k1", "w1", true, "x", 1, "", "", later); ok {
+	if ok, _ := db.FinishPackageBuild(ctx, "k1", "w1", BuildOutcome{OK: true, Lock: "x", Size: 1}, later); ok {
 		t.Fatal("w1 finished a build it lost")
 	}
 	if ok, _ := db.RenewPackageBuild(ctx, "k1", "w2", later.Add(time.Minute)); !ok {
 		t.Fatal("renew")
 	}
-	if ok, err := db.FinishPackageBuild(ctx, "k1", "w2", true, "requests==2.32.3 --hash=sha256:aa\n", 12345, "Successfully installed", "", later); !ok || err != nil {
+	if ok, err := db.FinishPackageBuild(ctx, "k1", "w2", BuildOutcome{OK: true, Lock: "requests==2.32.3 --hash=sha256:aa\n", Modules: []string{"requests"}, Size: 12345, Log: "Successfully installed"}, later); !ok || err != nil {
 		t.Fatalf("finish: %v %v", ok, err)
 	}
 	p, _ = db.GetPackageSet(ctx, "k1")
-	if p.Status != PackagesReady || p.SizeBytes != 12345 || p.Lock == "" || !p.BuiltAt.Equal(later) {
+	if p.Status != PackagesReady || p.SizeBytes != 12345 || p.Lock == "" || !p.BuiltAt.Equal(later) || len(p.Modules) != 1 {
 		t.Fatalf("ready: %+v", p)
 	}
 	if again, _ := db.RequestPackageSet(ctx, PackageRequest{Key: "k1", Requirements: "requests\n"}, 10*time.Minute, later.Add(time.Hour)); again.Status != PackagesReady {
@@ -57,7 +57,7 @@ func TestPackageSetBuilds(t *testing.T) {
 	// A failure is kept for a while (callers see it), then may be asked for again.
 	_, _ = db.RequestPackageSet(ctx, PackageRequest{Key: "k2", Requirements: "nope\n"}, 10*time.Minute, now)
 	_, _ = db.ClaimPackageBuild(ctx, "w1", time.Minute, now)
-	_, _ = db.FinishPackageBuild(ctx, "k2", "w1", false, "", 0, "ERROR: No matching distribution", "no wheel for nope", now)
+	_, _ = db.FinishPackageBuild(ctx, "k2", "w1", BuildOutcome{Log: "ERROR: No matching distribution", Reason: "no wheel for nope"}, now)
 	if p, _ := db.RequestPackageSet(ctx, PackageRequest{Key: "k2", Requirements: "nope\n"}, 10*time.Minute, now.Add(time.Minute)); p.Status != PackagesFailed || p.Error != "no wheel for nope" {
 		t.Fatalf("recent failure: %+v", p)
 	}
@@ -101,7 +101,7 @@ func TestRunsWaitForTheirPackages(t *testing.T) {
 		t.Fatalf("waiting: %+v %v", waiting, err)
 	}
 	_, _ = db.ClaimPackageBuild(ctx, "w1", time.Minute, now)
-	_, _ = db.FinishPackageBuild(ctx, "k", "w1", true, "requests==2.32.3\n", 1, "", "", now)
+	_, _ = db.FinishPackageBuild(ctx, "k", "w1", BuildOutcome{OK: true, Lock: "requests==2.32.3\n", Size: 1}, now)
 	if r, err := db.ClaimRun(ctx, "w1", time.Minute); err != nil || r.ID != "r1" {
 		t.Fatalf("claim once ready: %+v %v", r, err)
 	}

@@ -8,7 +8,8 @@ nbsandbox's: no space files, no credentials.
 In:  /in/request.json  {"index_url", "requirements", "from_lock", "prefer_lock"}
 Out: /out/site-packages  the packages installed (only those the runner image
                          doesn't have; the runner's own are constraints)
-     /out/result.json    {"ok", "error", "lock", "installed", "used"}
+     /out/result.json    {"ok", "error", "lock", "installed", "used", "modules"}
+                         (modules: the top-level names the set can import)
 
 Wheels only (--only-binary=:all:): installing a wheel runs no package code,
 so pip is the only program that runs here. The output (pip's) is the build
@@ -79,6 +80,22 @@ def attempt(name, text, exact, index_url, constraints):
     return True
 
 
+def modules_in(site):
+    """The top-level modules a site-packages folder provides."""
+    out = set()
+    for name in os.listdir(site):
+        if name.endswith((".dist-info", ".egg-info", ".pth")) or name.startswith((".", "_")) or name == "bin":
+            continue
+        path = os.path.join(site, name)
+        if os.path.isdir(path):
+            out.add(name)
+        elif name.endswith(".py"):
+            out.add(name[:-3])
+        elif name.endswith((".so", ".pyd")):
+            out.add(name.split(".", 1)[0])
+    return sorted(out)
+
+
 def main():
     with open("/in/request.json") as f:
         req = json.load(f)
@@ -96,11 +113,12 @@ def main():
             attempts.append(("the space's last lock", req["prefer_lock"], True))
         attempts.append(("requirements.txt", req["requirements"], False))
 
-    result = {"ok": False, "error": "", "lock": "", "installed": [], "used": ""}
+    result = {"ok": False, "error": "", "lock": "", "installed": [], "used": "", "modules": []}
     for name, text, exact in attempts:
         if attempt(name, text, exact, req["index_url"], constraints):
             result["lock"], result["installed"] = lock_of("/tmp/report.json")
             result["ok"], result["used"] = True, name
+            result["modules"] = modules_in(site_packages(ENV))
             break
         if name == "the space's last lock":
             print("== resolving requirements.txt afresh", flush=True)

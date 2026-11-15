@@ -83,7 +83,7 @@ func newEnv(t *testing.T, mod func(*Config)) env {
 	if mod != nil {
 		mod(&cfg)
 	}
-	b := &fakeBuilder{result: buildResult{OK: true, Lock: testLock, Used: "requirements.txt"},
+	b := &fakeBuilder{result: buildResult{OK: true, Lock: testLock, Used: "requirements.txt", Modules: []string{"humanize"}},
 		files: map[string]string{"humanize/__init__.py": "VERSION = '4.17.0'\n", "humanize-4.17.0.dist-info/METADATA": "Name: humanize\n"}}
 	mem := blob.NewMemory()
 	return env{db: db, blobs: mem, builder: b, svc: New(cfg, db, mem, b, nil), space: space}
@@ -128,7 +128,8 @@ func TestBuildStoreAndUse(t *testing.T) {
 		t.Fatal("nothing to build")
 	}
 	ps, _ := e.svc.Status(ctx, key)
-	if ps.Status != store.PackagesReady || ps.Lock != testLock || ps.SizeBytes == 0 || !strings.Contains(ps.Log, "installing") {
+	if ps.Status != store.PackagesReady || ps.Lock != testLock || ps.SizeBytes == 0 || !strings.Contains(ps.Log, "installing") ||
+		len(ps.Modules) != 1 || ps.Modules[0] != "humanize" {
 		t.Fatalf("ready: %+v", ps)
 	}
 	if len(finished) != 1 || finished[0] != key+":ready" {

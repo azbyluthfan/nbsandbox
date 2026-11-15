@@ -22,6 +22,7 @@ import (
 	"github.com/azbyluthfan/nbsandbox/internal/isolation"
 	"github.com/azbyluthfan/nbsandbox/internal/logs"
 	"github.com/azbyluthfan/nbsandbox/internal/obs"
+	"github.com/azbyluthfan/nbsandbox/internal/packages"
 	"github.com/azbyluthfan/nbsandbox/internal/spaces"
 	"github.com/azbyluthfan/nbsandbox/internal/store"
 )
@@ -69,6 +70,9 @@ type Config struct {
 	// RequireSchemas refuses to publish a function without input and output
 	// schemas (functions.require_schemas).
 	RequireSchemas bool
+	// PackagesWait is how long a publish waits for the space's packages
+	// to be built (default 15m).
+	PackagesWait time.Duration
 }
 
 // Deps are the manager's collaborators.
@@ -78,6 +82,8 @@ type Deps struct {
 	Backend  isolation.Backend
 	Manifest func() *deps.Manifest // nil result: check skipped
 	ImageID  func() string
+	// Packages builds spaces' package sets (nil or disabled: none).
+	Packages *packages.Service
 	Metrics  *obs.Metrics
 	Log      *slog.Logger
 	Now      func() time.Time
@@ -140,6 +146,9 @@ func New(cfg Config, d Deps) *Manager {
 	if d.Manifest == nil {
 		d.Manifest = func() *deps.Manifest { return nil }
 	}
+	if cfg.PackagesWait == 0 {
+		cfg.PackagesWait = 15 * time.Minute
+	}
 	if d.ImageID == nil {
 		d.ImageID = func() string { return "" }
 	}
@@ -155,6 +164,9 @@ func New(cfg Config, d Deps) *Manager {
 	c := &core{cfg: cfg, d: d, wake: newMemWakeups(), logWake: newMemWakeups()}
 	ex := newExecutor(c)
 	m := &Manager{core: c, cancels: ex, ex: ex}
+	if d.Packages != nil {
+		d.Packages.OnFinished = m.packagesFinished
+	}
 	m.root, m.rootCancel = context.WithCancel(context.Background())
 	return m
 }
@@ -268,6 +280,7 @@ type submission struct {
 	outputSchema *contract.Contract
 	function     string
 	version      int
+	packageLock  string // a published version's packages
 }
 
 func (m *Manager) submit(ctx context.Context, owner, spaceID string, req SubmitRequest, sub submission) (View, bool, error) {
@@ -275,10 +288,15 @@ func (m *Manager) submit(ctx context.Context, owner, spaceID string, req SubmitR
 	if err := CheckLanguage(nb); err != nil {
 		return View{}, false, err
 	}
+	pkgs, err := m.packageSet(ctx, spaceID, sub)
+	if err != nil {
+		return View{}, false, err
+	}
 	var warnings []deps.Warning
 	if man := m.d.Manifest(); man != nil {
-		warnings = deps.Check(man, m.d.Spaces, spaceID, req.Notebook, nb)
-		if len(warnings) > 0 && m.cfg.DependencyCheck == "reject" {
+		var unsure bool
+		warnings, unsure = withoutProvided(deps.Check(man, m.d.Spaces, spaceID, req.Notebook, nb), pkgs)
+		if len(warnings) > 0 && m.cfg.DependencyCheck == "reject" && !unsure {
 			return View{}, false, &DependencyError{Warnings: warnings}
 		}
 	}
@@ -321,7 +339,7 @@ func (m *Manager) submit(ctx context.Context, owner, spaceID string, req SubmitR
 		ParametersJSON: params, DependencyWarnings: warnJSON, CreatedAt: m.d.Now(),
 		Function: sub.function, Version: sub.version, NotebookSHA256: hex.EncodeToString(sum[:]), Files: runFiles,
 		OutputSchema: outputSchema, OutputMode: sub.outputSchema.GetMode(), ClientApp: clientApp(ctx),
-		ReadOnlySpace: req.ReadOnlySpace || sub.function != "",
+		ReadOnlySpace: req.ReadOnlySpace || sub.function != "", PackageKey: pkgs.Key,
 	}
 	pos := 1
 	if n, err := m.d.DB.QueueLength(ctx); err == nil {

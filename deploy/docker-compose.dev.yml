@@ -106,6 +106,8 @@ services:
       # all interfaces; the port below is published to 127.0.0.1 on the host
       # only, which is what makes no sign-in acceptable here.
       NBSANDBOX_UI_ENABLED: ${NBSANDBOX_UI_ENABLED:-true}
+      # A space's own packages (make runner-image builds the builder image).
+      NBSANDBOX_PACKAGES_ENABLED: ${NBSANDBOX_PACKAGES_ENABLED:-false}
       NBSANDBOX_UI_LISTEN: 0.0.0.0:8090
       NBSANDBOX_UI_NO_LOGIN_BEYOND_LOOPBACK: "true"
     volumes:
