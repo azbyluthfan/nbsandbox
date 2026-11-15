@@ -10,15 +10,19 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/azbyluthfan/nbsandbox/internal/auth"
 	"github.com/azbyluthfan/nbsandbox/internal/runs"
+	"github.com/azbyluthfan/nbsandbox/internal/store/storetest"
 	"github.com/azbyluthfan/nbsandbox/internal/ui"
+	"github.com/azbyluthfan/nbsandbox/internal/uiauth"
 )
 
 func uiEnv(t *testing.T) (testEnv, http.Handler) {
 	t.Helper()
 	e := newEnv(t)
-	return e, checkSpec(t, NewUIHandler(e.deps, ui.Static()), e.deps.Users.Has)
+	return e, checkSpec(t, NewUIHandler(e.deps, ui.Static(), nil), e.deps.Users.Has)
 }
 
 func uiReq(h http.Handler, method, path string, body io.Reader, contentType string) *httptest.ResponseRecorder {
@@ -166,5 +170,69 @@ func TestUIRunAndStream(t *testing.T) {
 	}
 	if rec := uiReq(h, "GET", base+"/runs/"+v.ID+"/output.html", nil, ""); !strings.Contains(rec.Header().Get("Content-Security-Policy"), "sandbox") {
 		t.Fatalf("rendered notebook must stay sandboxed through the UI: %v", rec.Header())
+	}
+}
+
+// With sign-in, the UI's routes run as the session's user: the picker is
+// gone, changes need the UI's header, and the main API ignores the cookie.
+func TestUISignedIn(t *testing.T) {
+	e := newEnv(t)
+	const origin = "http://127.0.0.1:8090"
+	sessions, err := uiauth.New(uiauth.Config{Mode: uiauth.ModeBasic, PublicURL: origin, Idle: time.Hour, Max: 12 * time.Hour},
+		uiauth.Deps{Store: storetest.Open(t), Basic: &auth.Authenticator{Users: e.deps.Users}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := NewUIHandler(e.deps, ui.Static(), sessions)
+	req := func(method, path, body string, hdr map[string]string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, path, strings.NewReader(body))
+		for k, v := range hdr {
+			r.Header.Set(k, v)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, r)
+		return rec
+	}
+	if rec := req("GET", "/ui/api/v1/spaces", "", nil); rec.Code != 401 || !strings.Contains(rec.Body.String(), `"unauthorized"`) {
+		t.Fatalf("no session: %d %s", rec.Code, rec.Body)
+	}
+	for _, p := range []string{"/ui/api/users", "/ui/api/as/alice/v1/spaces"} {
+		if rec := req("GET", p, "", nil); rec.Code != 404 {
+			t.Errorf("%s with sign-in on: %d (the picker must be gone)", p, rec.Code)
+		}
+	}
+	rec := req("POST", "/ui/login", "username=alice&password=alice-password&return=/",
+		map[string]string{"Content-Type": "application/x-www-form-urlencoded", "Origin": origin})
+	cookie := rec.Result().Cookies()
+	if rec.Code != 303 || len(cookie) != 1 || cookie[0].Name != "nbsandbox-ui" || !cookie[0].HttpOnly || cookie[0].SameSite != http.SameSiteLaxMode {
+		t.Fatalf("sign-in: %d %v", rec.Code, cookie)
+	}
+	c := cookie[0].Name + "=" + cookie[0].Value
+	if rec := req("POST", "/ui/api/v1/spaces", `{"name":"x"}`, map[string]string{"Cookie": c, "Content-Type": "application/json"}); rec.Code != 403 {
+		t.Errorf("a change without the UI's header: %d", rec.Code)
+	}
+	rec = req("POST", "/ui/api/v1/spaces", `{"name":"signed in"}`,
+		map[string]string{"Cookie": c, "Content-Type": "application/json", uiauth.Header: "1", "Origin": origin})
+	if rec.Code != 201 {
+		t.Fatalf("create as alice: %d %s", rec.Code, rec.Body)
+	}
+	if rec := req("GET", "/ui/api/session", "", map[string]string{"Cookie": c}); rec.Code != 200 ||
+		!strings.Contains(rec.Body.String(), `"user":"alice"`) || !strings.Contains(rec.Body.String(), `"mode":"basic"`) {
+		t.Errorf("session: %d %s", rec.Code, rec.Body)
+	}
+	// The main API never accepts the UI's cookie.
+	r := httptest.NewRequest("GET", "/v1/spaces", nil)
+	r.Header.Set("Cookie", c)
+	rec = httptest.NewRecorder()
+	e.handler.ServeHTTP(rec, r)
+	if rec.Code != 401 {
+		t.Errorf("/v1 with the UI's cookie: %d", rec.Code)
+	}
+}
+
+func TestUISessionModeNone(t *testing.T) {
+	_, h := uiEnv(t)
+	if rec := uiReq(h, "GET", "/ui/api/session", nil, ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"mode":"none"`) {
+		t.Errorf("session without sign-in: %d %s", rec.Code, rec.Body)
 	}
 }

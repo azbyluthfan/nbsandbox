@@ -167,6 +167,54 @@ Tested end to end with Keycloak 26.8 (`make test-keycloak`): a user's token runs
 6. **A service calling as itself:** a confidential client with service accounts enabled and the nbsandbox scopes it needs as default scopes (client credentials grant). The caller ID is the service account's `sub`.
 7. **Settings:** `issuer: https://<host>/realms/<realm>`, `audience: <nbsandbox client id>`, `id_prefix: kc` (or your realm's name), `id_claims: [sub]`.
 
+## Signing in to the web UI
+
+The web UI can be served to your users: they sign in with the same identity provider, and in the UI they are the **same caller** as through the API (same caller ID, so the same spaces; same scopes).
+
+```
+browser ──► /ui/login ──► provider's sign-in page (authorization code + PKCE)
+browser ◄── /ui/callback: nbsandboxd exchanges the code with the UI client's secret,
+            checks the access token like any API token, keeps the tokens server-side (encrypted)
+browser ◄── a session cookie (a random ID; HttpOnly, SameSite=Lax). No token reaches the browser.
+```
+
+```yaml
+ui:
+  enabled: true
+  listen: 127.0.0.1:8090       # behind your proxy (Caddy in the Compose stack)
+  auth: oidc                   # or basic: a sign-in form against users.yaml; none: development only
+  public_url: https://nbsandbox.example.com
+  session:
+    idle: 1h                   # signed out after this long without a request
+    max: 12h                   # and after this long in any case
+  oidc:
+    client_id: nbsandbox-ui
+    client_secret: ""          # better: NBSANDBOX_UI_OIDC_CLIENT_SECRET
+    scopes: [openid, profile, nbsandbox.read, nbsandbox.spaces.write, nbsandbox.files.write,
+             nbsandbox.runs, nbsandbox.functions.invoke, nbsandbox.functions.publish]
+```
+
+- **The access token decides who the user is.** It is checked by the same rules as an API token (issuer, audience, caller ID, scopes, and introspection when it is on). A sign-in without `nbsandbox.read` is refused; other missing scopes give `403` on what they cover.
+- **Sessions:** kept in PostgreSQL (any API replica serves them) and ended after `idle` or `max`. The access token is refreshed before it expires; when the provider refuses (the user signed out there, or was disabled), the session ends. With introspection on, a revoked token ends the session within its cache time.
+- **Sign out** ends the session and then the provider's own session (RP-initiated logout), if the provider has an `end_session_endpoint`.
+- **Changes need the UI's own pages:** requests that change something must carry the UI's header and, if they say, the UI's origin. A page on another site can do neither, so the cookie can't be used against the user (CSRF). `/v1` never accepts the cookie: it takes only bearer tokens and basic auth.
+- **The client secret also encrypts the stored tokens:** rotating it signs everyone out.
+- `public_url` must be `https` (plain `http` only on loopback, for a local provider) and is the only origin the UI accepts changes from: open the UI at that address.
+- **`auth: basic`** signs in with a username and password from `users.yaml`, with the same [failed sign-in limit](#failed-sign-ins) as the API. **`auth: none`** is the development mode: pick any user, no password. It listens on loopback only (`no_login_beyond_loopback` is for the dev Compose stack, whose container port is published on the host's loopback).
+- Environment variables: `NBSANDBOX_UI_AUTH`, `NBSANDBOX_UI_PUBLIC_URL`, `NBSANDBOX_UI_SESSION_IDLE`, `NBSANDBOX_UI_SESSION_MAX`, `NBSANDBOX_UI_OIDC_CLIENT_ID`, `NBSANDBOX_UI_OIDC_CLIENT_SECRET`, `NBSANDBOX_UI_OIDC_SCOPES`.
+
+**Serving it.** Put the UI behind the same host name as the API: `/v1/` and `/nbsandbox.v1.*` to the API port, everything else to the UI port. The Compose stack does this when `NBSANDBOX_UI_ENABLED=true` (with `NBSANDBOX_UI_OIDC_CLIENT_ID` and `NBSANDBOX_UI_OIDC_CLIENT_SECRET` in `.env`); the Helm chart with `ui.enabled` and the Ingress ([kubernetes.md](kubernetes.md#install-with-helm)).
+
+**Keycloak** (tested by `make test-keycloak`: sign-in through the real login page, a run as the same caller as a bearer token, sign-out, and a revoked session refused):
+1. A client `nbsandbox-ui`: *Client authentication* on, *Standard flow* only, *Valid redirect URIs* `<public_url>/ui/callback`, *Valid post logout redirect URIs* `<public_url>/ui/signed-out`, and PKCE method `S256` (Advanced).
+2. The nbsandbox client scopes (with their audience mappers, above) and `profile` as optional scopes of that client.
+3. Keep `offline_access` out of the scopes: an offline token outlives the user's Keycloak session, so signing out there wouldn't end the UI session.
+
+**Entra ID:**
+1. A new app registration (*Web* platform) with the redirect URIs `<public_url>/ui/callback` and `<public_url>/ui/signed-out` (Entra ID checks the address it returns to after sign-out against them), and a client secret.
+2. API permissions: nbsandbox's delegated scopes; grant admin consent.
+3. Scopes in `ui.oidc.scopes`: `openid`, `profile`, `offline_access` (Entra ID gives refresh tokens only with it) and nbsandbox's as `api://<nbsandbox client id>/nbsandbox.read`, ... A token request to Entra ID names one API, which is all the UI needs.
+
 ## Troubleshooting
 
 nbsandboxd logs each refused token with the reason (`bearer token refused`); the caller sees only `invalid_token`.
@@ -187,4 +235,3 @@ nbsandboxd logs each refused token with the reason (`bearer token refused`); the
 ## Not yet
 
 - Sharing a space with another caller (grants keyed by caller ID).
-- Signing in to the web UI with the provider (it stays a local, development-only tool).

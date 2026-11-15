@@ -6,7 +6,7 @@ The example is a small sales analysis: [sales_report.ipynb](../examples/notebook
 
 ## Part 1: the web editor
 
-The web UI ships with nbsandboxd for local development (on http://127.0.0.1:8090 with `make up`). It acts as whichever user you pick, without a password, so it never runs in production; everything it does goes through the same API as any client.
+The web UI ships with nbsandboxd. With `make up` it runs on http://127.0.0.1:8090 without sign-in: it acts as whichever user you pick. A deployment serves it with sign-in instead ([auth.md](auth.md#signing-in-to-the-web-ui)), and the user picker becomes the signed-in user's name and **Sign out**. Everything it does goes through the same API as any client.
 
 ### 1. Spaces
 

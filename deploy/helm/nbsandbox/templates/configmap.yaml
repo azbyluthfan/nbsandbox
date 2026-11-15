@@ -35,6 +35,23 @@ data:
       lease: {{ .Values.runs.lease | quote }}
     functions:
       require_schemas: {{ .Values.functions.requireSchemas }}
+    {{- if .Values.ui.enabled }}
+    ui:
+      enabled: true
+      listen: ":8090"
+      auth: {{ .Values.ui.auth | quote }}
+      public_url: {{ required "ui.publicUrl is required with ui.enabled" .Values.ui.publicUrl | quote }}
+      session:
+        idle: {{ .Values.ui.session.idle | quote }}
+        max: {{ .Values.ui.session.max | quote }}
+      {{- if eq .Values.ui.auth "oidc" }}
+      oidc:
+        client_id: {{ required "ui.oidc.clientId is required with ui.auth oidc" .Values.ui.oidc.clientId | quote }}
+        {{- with .Values.ui.oidc.scopes }}
+        scopes: {{ toJson . }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
     storage:
       kind: {{ .Values.storage.kind | quote }}
       {{- if eq .Values.storage.kind "s3" }}

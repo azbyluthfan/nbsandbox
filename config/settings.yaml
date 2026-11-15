@@ -21,7 +21,9 @@
 #             NBSANDBOX_OIDC_INTROSPECTION_CLIENT_ID, NBSANDBOX_OIDC_INTROSPECTION_CLIENT_SECRET,
 #             NBSANDBOX_OIDC_INTROSPECTION_CACHE, NBSANDBOX_LOGIN_LIMIT_FAILURES,
 #             NBSANDBOX_TRUSTED_PROXIES
-#   web UI:   NBSANDBOX_UI_ENABLED, NBSANDBOX_UI_LISTEN
+#   web UI:   NBSANDBOX_UI_ENABLED, NBSANDBOX_UI_LISTEN, NBSANDBOX_UI_AUTH, NBSANDBOX_UI_PUBLIC_URL,
+#             NBSANDBOX_UI_NO_LOGIN_BEYOND_LOOPBACK, NBSANDBOX_UI_SESSION_IDLE, NBSANDBOX_UI_SESSION_MAX,
+#             NBSANDBOX_UI_OIDC_CLIENT_ID, NBSANDBOX_UI_OIDC_CLIENT_SECRET, NBSANDBOX_UI_OIDC_SCOPES
 # Unknown keys are an error, so a typo can't be silently ignored.
 
 listen: ":8080"
@@ -117,6 +119,29 @@ shutdown_grace: 60s                 # wait for active runs on SIGTERM
 ui:
   enabled: false                    # NBSANDBOX_UI_ENABLED
   listen: 127.0.0.1:8090            # NBSANDBOX_UI_LISTEN; must differ from listen
+  auth: none                        # NBSANDBOX_UI_AUTH: how people sign in (docs/auth.md#signing-in-to-the-web-ui):
+                                    #   none:  pick any users.yaml user, no password (development; loopback only)
+                                    #   basic: a sign-in form against users.yaml
+                                    #   oidc:  the identity provider in auth.oidc
+  public_url: ""                    # NBSANDBOX_UI_PUBLIC_URL: the address browsers open (basic, oidc),
+                                    # e.g. https://nbsandbox.example.com
+  no_login_beyond_loopback: false   # NBSANDBOX_UI_NO_LOGIN_BEYOND_LOOPBACK: let auth none listen beyond
+                                    # loopback; only in a container published on the host's loopback
+  session:
+    idle: 1h                        # NBSANDBOX_UI_SESSION_IDLE: signed out after this long without a request
+    max: 12h                        # NBSANDBOX_UI_SESSION_MAX: and after this long in any case
+  oidc:                             # the UI's client at the identity provider (auth: oidc)
+    client_id: ""                   # NBSANDBOX_UI_OIDC_CLIENT_ID
+    client_secret: ""               # better: NBSANDBOX_UI_OIDC_CLIENT_SECRET
+    scopes:                         # NBSANDBOX_UI_OIDC_SCOPES (Entra ID: api://<nbsandbox client id>/nbsandbox.read, ...)
+      - openid
+      - profile
+      - nbsandbox.read
+      - nbsandbox.spaces.write
+      - nbsandbox.files.write
+      - nbsandbox.runs
+      - nbsandbox.functions.invoke
+      - nbsandbox.functions.publish
 
 # Who may call the API (docs/auth.md). Basic auth uses users_file; bearer
 # tokens come from an OpenID Connect provider. Spaces belong to the caller's ID.

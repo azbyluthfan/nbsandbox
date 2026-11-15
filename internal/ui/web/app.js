@@ -1,7 +1,7 @@
 // Copyright 2026 The nbsandbox Authors
 // SPDX-License-Identifier: Apache-2.0
 //
-// The local web UI: pick a user and a space, browse and manage files, open
+// The web UI: sign in (or, without sign-in, pick a user) and a space, browse and manage files, open
 // and edit notebooks and text files, run them and follow the live log,
 // publish notebooks as functions and call them.
 //
@@ -18,7 +18,7 @@
 //   #/<user>/<space>/r/<run>     a run
 //   #/<user>/<space>/fn/<name>   a function
 
-import { Api, listUsers, ApiError } from "./api.js";
+import { Api, listUsers, ApiError, session, signOut } from "./api.js";
 import { el, clear, toast, formatBytes, timeAgo, badge, icon, fileIcon, menuButton } from "./dom.js";
 import { kindOf } from "./viewers.js";
 import { showRun } from "./run.js";
@@ -32,7 +32,7 @@ const ACTIVE = new Set(["queued", "running"]);
 const narrow = () => window.matchMedia("(max-width: 860px)").matches;
 
 const state = {
-  users: [], user: "", api: null, spaces: [], space: "", files: [], runs: [], functions: [],
+  users: [], user: "", name: "", api: null, spaces: [], space: "", files: [], runs: [], functions: [],
   modules: new Set(), page: null, hash: "", ignoreHash: false,
   collapsed: new Set(), // folders folded in the explorer, per space (remembered in this browser)
   drawerTab: "runs",
@@ -140,7 +140,7 @@ async function selectUser(user) {
   state.user = user;
   state.api = new Api(user);
   $("user-select").value = user;
-  $("user-avatar").textContent = user.slice(0, 1);
+  $("user-avatar").textContent = (state.name || user).slice(0, 1);
   try {
     state.spaces = await state.api.spaces();
   } catch (e) {
@@ -818,15 +818,31 @@ function pollRuns() {
 // ---------- start ----------
 
 async function start() {
+  let info;
   try {
-    state.users = await listUsers();
+    info = await session();
+    state.users = info.mode === "none" ? await listUsers() : [info.user];
   } catch (e) {
     toast(e.message);
     return;
   }
   const sel = $("user-select");
-  for (const u of state.users) sel.append(el("option", { value: u }, u));
-  sel.addEventListener("change", () => go(sel.value));
+  if (info.mode === "none") {
+    for (const u of state.users) sel.append(el("option", { value: u }, u));
+    sel.addEventListener("change", () => go(sel.value));
+  } else {
+    // Signed in: the user's name and a way out instead of the picker.
+    state.name = info.name || info.user;
+    sel.hidden = true;
+    $("local-note").hidden = true;
+    const name = $("user-name");
+    name.hidden = false;
+    name.textContent = state.name;
+    $("user-picker").title = `Signed in as ${info.user}`;
+    const out = $("sign-out");
+    out.hidden = false;
+    out.addEventListener("click", () => signOut().catch((e) => toast(e.message)));
+  }
   $("space-select").addEventListener("change", (e) => {
     if (e.target.value === NEW_SPACE) {
       e.target.value = state.space;

@@ -190,6 +190,7 @@ label { color: var(--text-2); }
   background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 12px; text-transform: uppercase;
 }
 .local-note { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.user-name { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status-pill {
   display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; padding: 3px 10px;
   border-radius: 999px; background: var(--warn-soft); color: var(--warn);

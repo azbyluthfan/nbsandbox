@@ -21,6 +21,13 @@ services:
       NBSANDBOX_OIDC_INTROSPECTION_CLIENT_ID: nbsandbox
       NBSANDBOX_OIDC_INTROSPECTION_CLIENT_SECRET: nbsandbox-introspection-test-secret
       NBSANDBOX_OIDC_INTROSPECTION_CACHE: 2s
+      # The web UI signs in with Keycloak (client nbsandbox-ui), at the
+      # address the browser and the tests use.
+      NBSANDBOX_UI_AUTH: oidc
+      NBSANDBOX_UI_PUBLIC_URL: http://127.0.0.1:8090
+      NBSANDBOX_UI_OIDC_CLIENT_ID: nbsandbox-ui
+      NBSANDBOX_UI_OIDC_CLIENT_SECRET: nbsandbox-ui-test-secret
+      NBSANDBOX_UI_OIDC_SCOPES: openid profile nbsandbox.read nbsandbox.spaces.write nbsandbox.files.write nbsandbox.runs nbsandbox.functions.invoke
     ports:
       - "127.0.0.1:8180:8180"
 

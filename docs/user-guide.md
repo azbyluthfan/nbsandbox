@@ -158,7 +158,7 @@ curl -N -u "$NBSANDBOX_USER:$NBSANDBOX_PASSWORD" "$NBSANDBOX_URL/v1/spaces/$ID/r
 
 A notebook's output appears when Python writes it. Use `print(..., flush=True)` for progress lines that should show up immediately.
 
-## Local web UI (development only)
+## Web UI
 
 What it can do:
 - **Browse and manage files:** a folder tree with upload (button, or drag and drop onto a folder), new file, new folder, rename or move, and delete (a folder asks first and says how many files it holds).
@@ -166,4 +166,4 @@ What it can do:
 - **Run and publish:** run a notebook (optionally read-only) and follow the live log; publish it as a function and call it from a form built from its input schema.
 
 
-It's enabled by whoever runs nbsandbox on their own machine, at `http://127.0.0.1:8090`. It has **no login** (you pick a user), so it is never part of a production deployment. [tour.md](tour.md) shows each screen.
+A deployment that turns it on serves it at its own address: you sign in with your organisation's account (or a nbsandbox username and password) and see your own spaces, the same ones the API and your applications use. **Sign out** is at the top right. On a developer's machine (`make up`) it runs without sign-in at `http://127.0.0.1:8090`, where you pick a user. [tour.md](tour.md) shows each screen.

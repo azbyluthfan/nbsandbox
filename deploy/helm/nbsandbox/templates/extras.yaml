@@ -40,4 +40,8 @@ spec:
           # health and metrics stay inside the cluster.
           - { path: /v1/, pathType: Prefix, backend: { service: { name: {{ include "nbsandbox.fullname" . }}, port: { name: http } } } }
           - { path: /nbsandbox.v1., pathType: Prefix, backend: { service: { name: {{ include "nbsandbox.fullname" . }}, port: { name: http } } } }
+          {{- if .Values.ui.enabled }}
+          # The web UI: everything else (the longest prefix wins, so /v1/ stays the API's).
+          - { path: /, pathType: Prefix, backend: { service: { name: {{ include "nbsandbox.fullname" . }}, port: { name: ui } } } }
+          {{- end }}
 {{- end }}

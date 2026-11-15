@@ -99,7 +99,9 @@ func (c *OIDCConfig) Validate() error {
 	return errors.Join(errs...)
 }
 
-// checkURL requires https, except for loopback addresses (tests, local IdPs).
+// CheckURL requires https, except for loopback addresses (tests, local IdPs).
+func CheckURL(raw string) error { return checkURL(raw) }
+
 func checkURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {
@@ -175,8 +177,51 @@ func NewVerifier(cfg OIDCConfig, client *http.Client) (*Verifier, error) {
 
 // Verify checks a token and returns the caller.
 func (v *Verifier) Verify(ctx context.Context, raw string) (Principal, error) {
+	c, exp, err := v.check(ctx, raw, v.cfg.Audience)
+	if err != nil {
+		return Principal{}, err
+	}
 	bad := func(f string, a ...any) (Principal, error) {
 		return Principal{}, fmt.Errorf("%w: %s", ErrInvalidToken, fmt.Sprintf(f, a...))
+	}
+	parts := make([]string, 0, len(v.cfg.IDClaims))
+	for _, name := range v.cfg.IDClaims {
+		s, _ := c[name].(string)
+		if s == "" || len(s) > 255 || strings.ContainsAny(s, ":\x00\r\n") {
+			return bad("claim %s is missing or not a usable ID", name)
+		}
+		parts = append(parts, s)
+	}
+	id := v.cfg.IDPrefix + ":" + strings.Join(parts, ":")
+	// Last, and only for a token that passed every local check: is it still
+	// active at the provider?
+	if v.intro != nil {
+		if err := v.intro.active(ctx, raw, exp); err != nil {
+			return bad("%v", err)
+		}
+	}
+	return newTokenPrincipal(id, firstString(c, "azp", "appid", "client_id"), firstString(c, "name", "preferred_username"), scopesOf(c)), nil
+}
+
+// IDToken checks an OpenID Connect ID token issued to clientID (the web
+// UI's sign-in): signature, issuer, audience, times and nonce. It returns the
+// token's claims.
+func (v *Verifier) IDToken(ctx context.Context, raw, clientID, nonce string) (map[string]any, error) {
+	c, _, err := v.check(ctx, raw, clientID)
+	if err != nil {
+		return nil, err
+	}
+	if n, _ := c["nonce"].(string); nonce == "" || n != nonce {
+		return nil, fmt.Errorf("%w: nonce doesn't match the sign-in", ErrInvalidToken)
+	}
+	return c, nil
+}
+
+// check verifies a JWT's signature with the issuer's keys, its issuer, its
+// audience and its times, and returns its claims and expiry.
+func (v *Verifier) check(ctx context.Context, raw, audience string) (map[string]any, time.Time, error) {
+	bad := func(f string, a ...any) (map[string]any, time.Time, error) {
+		return nil, time.Time{}, fmt.Errorf("%w: %s", ErrInvalidToken, fmt.Sprintf(f, a...))
 	}
 	if len(raw) > maxTokenBytes {
 		return bad("longer than %d bytes", maxTokenBytes)
@@ -211,8 +256,8 @@ func (v *Verifier) Verify(ctx context.Context, raw string) (Principal, error) {
 	if s, _ := c["iss"].(string); s != v.cfg.Issuer {
 		return bad("issuer %q is not %q", s, v.cfg.Issuer)
 	}
-	if !hasAudience(c["aud"], v.cfg.Audience) {
-		return bad("audience is not %q (a token issued for another API)", v.cfg.Audience)
+	if !hasAudience(c["aud"], audience) {
+		return bad("audience is not %q (a token issued for another API)", audience)
 	}
 	now := v.now()
 	exp, ok := numericDate(c["exp"])
@@ -235,25 +280,11 @@ func (v *Verifier) Verify(ctx context.Context, raw string) (Principal, error) {
 	if exp.Sub(start) > v.cfg.MaxLifetime {
 		return bad("valid for %s, longer than the %s allowed", exp.Sub(start).Round(time.Second), v.cfg.MaxLifetime)
 	}
-
-	parts := make([]string, 0, len(v.cfg.IDClaims))
-	for _, name := range v.cfg.IDClaims {
-		s, _ := c[name].(string)
-		if s == "" || len(s) > 255 || strings.ContainsAny(s, ":\x00\r\n") {
-			return bad("claim %s is missing or not a usable ID", name)
-		}
-		parts = append(parts, s)
-	}
-	id := v.cfg.IDPrefix + ":" + strings.Join(parts, ":")
-	// Last, and only for a token that passed every local check: is it still
-	// active at the provider?
-	if v.intro != nil {
-		if err := v.intro.active(ctx, raw, exp); err != nil {
-			return bad("%v", err)
-		}
-	}
-	return newTokenPrincipal(id, firstString(c, "azp", "appid", "client_id"), firstString(c, "name", "preferred_username"), scopesOf(c)), nil
+	return c, exp, nil
 }
+
+// Issuer is the configured issuer.
+func (v *Verifier) Issuer() string { return v.cfg.Issuer }
 
 // Scopes: "scp" (Entra, delegated: space-separated), "scope" (RFC 9068:
 // space-separated), "roles" (Entra app roles: a list).

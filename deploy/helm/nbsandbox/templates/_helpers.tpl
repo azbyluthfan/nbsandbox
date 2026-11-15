@@ -50,15 +50,24 @@ seccompProfile: { type: RuntimeDefault }
 - name: NBSANDBOX_OIDC_INTROSPECTION_CLIENT_SECRET
   valueFrom: { secretKeyRef: { name: {{ required "auth.oidc.introspection.secretName is required with clientId" .Values.auth.oidc.introspection.secretName | quote }}, key: client-secret } }
 {{- end }}
+{{- if and .Values.ui.enabled (eq .Values.ui.auth "oidc") }}
+- name: NBSANDBOX_UI_OIDC_CLIENT_SECRET
+  valueFrom: { secretKeyRef: { name: {{ required "ui.oidc.secretName is required with ui.auth oidc" .Values.ui.oidc.secretName | quote }}, key: client-secret } }
+{{- end }}
 {{- with .Values.extraEnv }}
 {{ toYaml . }}
 {{- end }}
 {{- end }}
 
+{{/* users.yaml: for basic auth on the API, or the UI's sign-in form. */}}
+{{- define "nbsandbox.usesUsers" -}}
+{{- if or .Values.auth.basic (and .Values.ui.enabled (eq .Values.ui.auth "basic")) }}true{{ end }}
+{{- end }}
+
 {{- define "nbsandbox.volumeMounts" -}}
 - { name: settings, mountPath: /etc/nbsandbox/settings.yaml, subPath: settings.yaml, readOnly: true }
 - { name: data, mountPath: /srv/nbsandbox }
-{{- if .Values.auth.basic }}
+{{- if include "nbsandbox.usesUsers" . }}
 - { name: users, mountPath: /etc/nbsandbox/users.yaml, subPath: users.yaml, readOnly: true }
 {{- end }}
 {{- end }}
@@ -66,9 +75,9 @@ seccompProfile: { type: RuntimeDefault }
 {{- define "nbsandbox.volumes" -}}
 - name: settings
   configMap: { name: {{ include "nbsandbox.fullname" . }} }
-{{- if .Values.auth.basic }}
+{{- if include "nbsandbox.usesUsers" . }}
 - name: users
-  secret: { secretName: {{ required "auth.usersSecret is required with auth.basic" .Values.auth.usersSecret | quote }}, defaultMode: 0400 }
+  secret: { secretName: {{ required "auth.usersSecret is required with auth.basic or ui.auth basic" .Values.auth.usersSecret | quote }}, defaultMode: 0400 }
 {{- end }}
 {{- end }}
 

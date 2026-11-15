@@ -105,11 +105,11 @@ All three serve the API on 127.0.0.1:8080, so starting one stops the others. Eac
 
 The runner image must be built with `make runner-image` (not a plain `docker build`): it adds the `io.nbsandbox.manifest` label nbsandboxd needs, and `/readyz` reports `runner_image` as not ready without it.
 
-### Local web UI
+### Web UI
 
 `make up` and `make run-native` also start the web UI at **http://127.0.0.1:8090**: pick a user, then manage spaces and files, edit notebooks with completion from the runner image, run them and follow the live log, and publish and call functions ([docs/tour.md](docs/tour.md) shows each screen). `make ui-preview` runs it without Docker, for work on the UI itself (runs can't start there).
 
-**It has no login: it acts as whichever user you pick.** Keep it on your machine. It is off by default (`ui.enabled` in `settings.yaml`), listens on `127.0.0.1` unless configured otherwise (nbsandboxd warns at startup if not), and must never be exposed through a reverse proxy. The main API on port 8080 still requires a password. The UI's files are plain HTML, CSS and JavaScript in `internal/ui/web/`, embedded in the binary; after changing them, rebuild (`make up`) and check it in a browser, and run `make tour`: it drives the main screens in a headless browser and retakes the screenshots of [docs/tour.md](docs/tour.md), so a broken screen shows up as a failed step or a wrong picture. `make ui-preview` runs a native nbsandboxd with the UI on http://127.0.0.1:18090, its own data folder and no Docker (runs can't start), to work on the UI without touching the dev stack.
+**In the dev stack it has no sign-in: it acts as whichever user you pick.** That mode (`ui.auth: none`) listens on loopback only; the dev Compose stack allows its container port with `NBSANDBOX_UI_NO_LOGIN_BEYOND_LOOPBACK`, published on the host's `127.0.0.1` only. Deployments sign people in (`ui.auth: oidc` or `basic`, [docs/auth.md](docs/auth.md#signing-in-to-the-web-ui)); the sign-in code is in `internal/uiauth`, and `make test-keycloak` signs in to the UI through Keycloak's real login page. The main API on port 8080 always requires credentials. The UI's files are plain HTML, CSS and JavaScript in `internal/ui/web/`, embedded in the binary; after changing them, rebuild (`make up`) and check it in a browser, and run `make tour`: it drives the main screens in a headless browser and retakes the screenshots of [docs/tour.md](docs/tour.md), so a broken screen shows up as a failed step or a wrong picture. `make ui-preview` runs a native nbsandboxd with the UI on http://127.0.0.1:18090, its own data folder and no Docker (runs can't start), to work on the UI without touching the dev stack.
 
 The editor is CodeMirror 6, vendored as one bundle in `internal/ui/web/vendor/` (with its licences and `SHA256SUMS`, which a test checks). To update it, change versions in `internal/ui/vendor-src/package.json`, delete `package-lock.json`, and run `make ui-vendor` (Docker and network needed); commit the new lockfile and bundle together.
 
@@ -156,7 +156,8 @@ Coverage thresholds: at least 80 % for core packages (`runs`, `logs`, `spaces`, 
 | `internal/deps` | the runner image's package manifest and the notebook import check |
 | `internal/store` | PostgreSQL: migrations, spaces, runs, functions, status events, idempotency keys (tests: `make test-db`, one schema per test via `storetest`) |
 | `internal/obs` | logging, metrics, health and readiness |
-| `internal/ui` | the optional local web UI's static files |
+| `internal/ui` | the optional web UI's static files |
+| `internal/uiauth` | signing in to the web UI: sessions, the provider's sign-in, CSRF checks |
 | `runner-image/` | the image notebooks run in, and its wrapper around papermill (cell events, step timings, rendering) |
 
 Packages talk to each other through small interfaces so each one can be unit-tested with fakes; only integration tests need Docker.

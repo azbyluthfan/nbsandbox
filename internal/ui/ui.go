@@ -1,7 +1,7 @@
 // Copyright 2026 The nbsandbox Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// Package ui serves the optional local web UI's static files: plain HTML, CSS and JavaScript embedded in the binary, with no
+// Package ui serves the optional web UI's static files: plain HTML, CSS and JavaScript embedded in the binary, with no
 // build step and no external resources.
 package ui
 

@@ -33,7 +33,11 @@ spec:
         - name: nbsandboxd
           image: {{ include "nbsandbox.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          ports: [{ name: http, containerPort: 8080 }]
+          ports:
+            - { name: http, containerPort: 8080 }
+            {{- if .Values.ui.enabled }}
+            - { name: ui, containerPort: 8090 }
+            {{- end }}
           env:
             - { name: NBSANDBOX_ROLE, value: api }
             {{- include "nbsandbox.env" . | nindent 12 }}
@@ -65,3 +69,8 @@ spec:
       {{- if and (eq .Values.api.service.type "NodePort") .Values.api.service.nodePort }}
       nodePort: {{ .Values.api.service.nodePort }}
       {{- end }}
+    {{- if .Values.ui.enabled }}
+    - name: ui
+      port: 8090
+      targetPort: ui
+    {{- end }}

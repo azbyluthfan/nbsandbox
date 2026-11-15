@@ -16,6 +16,19 @@
       ]
     },
     {
+      "name": "profile",
+      "description": "The user's name, for display in the web UI",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true" },
+      "protocolMappers": [
+        { "name": "full name", "protocol": "openid-connect", "protocolMapper": "oidc-full-name-mapper",
+          "config": { "id.token.claim": "true", "access.token.claim": "false", "userinfo.token.claim": "true" } },
+        { "name": "username", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": { "user.attribute": "username", "claim.name": "preferred_username", "jsonType.label": "String",
+            "id.token.claim": "true", "access.token.claim": "false", "userinfo.token.claim": "true" } }
+      ]
+    },
+    {
       "name": "backend",
       "description": "Tokens for the calling backend (the subject of token exchange)",
       "protocol": "openid-connect",
@@ -52,6 +65,19 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "defaultClientScopes": ["basic"]
+    },
+    {
+      "clientId": "nbsandbox-ui",
+      "description": "nbsandbox's web UI: signs users in with the authorization code flow and PKCE (ui.auth: oidc)",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "nbsandbox-ui-test-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://127.0.0.1:8090/ui/callback"],
+      "attributes": { "pkce.code.challenge.method": "S256", "post.logout.redirect.uris": "http://127.0.0.1:8090/ui/signed-out" },
+      "defaultClientScopes": ["basic"],
+      "optionalClientScopes": ["profile", "nbsandbox.read", "nbsandbox.spaces.write", "nbsandbox.files.write", "nbsandbox.runs", "nbsandbox.functions.invoke"]
     },
     {
       "clientId": "nbsandbox-cli",
