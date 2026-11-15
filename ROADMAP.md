@@ -18,6 +18,7 @@ The first release covers what was planned as v0.1 to v0.4, plus scaling out and 
 ## Since v0.1.0 (not released yet)
 
 - **Check your deployment:** `nbsandbox-report check` produces the isolation report for any running deployment, Docker or Kubernetes ([check-deployment.md](docs/check-deployment.md)). Kubernetes 1.34 to 1.37 are supported, the ends tested weekly.
+- **MCP server for AI agents** (`nbsandbox-mcp`): agents write, run and read notebooks as their user ([mcp.md](docs/mcp.md)).
 - **Keycloak, end to end:** user tokens, scopes, audience and token exchange against a real Keycloak, weekly ([auth.md](docs/auth.md#keycloak)).
 
 ## Next

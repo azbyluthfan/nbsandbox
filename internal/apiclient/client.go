@@ -17,12 +17,13 @@ import (
 	"time"
 )
 
-// Identity is who a request is made as: a password (basic auth) or a
-// bearer token.
+// Identity is who a request is made as: a password (basic auth), a bearer
+// token, or an Authorization header passed through as it came.
 type Identity struct {
 	Name     string
 	Password string
 	Token    string
+	Header   string
 }
 
 // Client calls a deployment's API.
@@ -56,7 +57,9 @@ func (c *Client) Do(ctx context.Context, who *Identity, method, path string, bod
 		return Response{}, err
 	}
 	if who != nil {
-		if who.Token != "" {
+		if who.Header != "" {
+			req.Header.Set("Authorization", who.Header)
+		} else if who.Token != "" {
 			req.Header.Set("Authorization", "Bearer "+who.Token)
 		} else {
 			req.SetBasicAuth(who.Name, who.Password)

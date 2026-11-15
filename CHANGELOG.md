@@ -12,6 +12,8 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 
 - **Keycloak, end to end:** `make test-keycloak` runs a real Keycloak (26.8) beside the dev stack and checks that a user's token runs a notebook, that scopes and the audience are enforced, and that a backend calls on behalf of its user with token exchange (RFC 8693), the run recording the backend. Also in the weekly CI run. [docs/auth.md](docs/auth.md#keycloak) describes the tested setup; [deploy/keycloak/realm.json](deploy/keycloak/realm.json) is a complete example.
 
+- **MCP server for AI agents:** `nbsandbox-mcp` gives agents (Claude Code, Claude Desktop, others) 17 tools over the REST API: spaces, files, running a notebook and waiting for its result, logs, artifacts, functions and the runtime. Over stdio it acts as one user from the environment; over HTTP (`-http`) it holds no credentials and passes each caller's own `Authorization` header to nbsandbox. Released with the other binaries; see [docs/mcp.md](docs/mcp.md).
+
 ### Changed
 
 - **Kubernetes 1.34 to 1.37 are supported** ([docs/kubernetes.md](docs/kubernetes.md#supported-versions)). The weekly CI run tests 1.37 with both runtimes and 1.34 with the default one; the local cluster is kind 0.33 with Cilium 1.20 (`K8S_VERSION=1.34` for the oldest, `K8S_RUN_MEMORY` for small Docker hosts).

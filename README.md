@@ -8,6 +8,7 @@ Run Jupyter notebooks headless, each in its own isolated sandbox, with live logs
 - **Results:** when it finishes you get the status, the failing cell if any, resource usage, the executed notebook, a rendered HTML copy, and the files it wrote.
 - **Functions:** publish a notebook as a versioned function that other services call with JSON and get JSON back, items streamed as they are produced ([docs/functions.md](docs/functions.md)).
 - **Two APIs, one model:** REST with an OpenAPI spec, and gRPC (Connect) for the same operations.
+- **For AI agents:** an MCP server (`nbsandbox-mcp`) lets Claude and other agents write notebooks, run them in the sandbox and read the results, as their user ([docs/mcp.md](docs/mcp.md)).
 - **Web editor** (local, for development): browse spaces, edit notebooks and files with completion from the runner's packages, run, and follow the log.
 
 Every run executes in a **fresh, locked-down container or Pod**. Code in one space can't see another space's files, processes or memory, can't reach the network, and can't use up another run's resources. An automated test suite checks each of these and writes a report: Docker ([report](docs/isolation-report.md)), Linux with Docker Engine with `runc` and gVisor side by side ([report](docs/isolation-report-linux.md)), and Kubernetes ([report](docs/isolation-report-kubernetes.md)).
@@ -98,6 +99,7 @@ Read [docs/security/threat-model.md](docs/security/threat-model.md) before deplo
 | [docs/user-guide.md](docs/user-guide.md) | People running notebooks: spaces, files, parameters, statuses, logs, the editor |
 | [docs/functions.md](docs/functions.md) | Calling a notebook from your service: contracts, publishing, invoking, streamed output |
 | [docs/api.md](docs/api.md) and [api/openapi.yaml](api/openapi.yaml) | The REST and gRPC APIs and their compatibility policy |
+| [docs/mcp.md](docs/mcp.md) | AI agents: the MCP server, its tools and how to connect Claude |
 | [docs/auth.md](docs/auth.md) | Authentication: tokens from your identity provider, scopes, quotas, administration |
 | [examples/](examples/) | Complete clients (Python, Go) that run a notebook and call a function |
 | [docs/deployment.md](docs/deployment.md), [docs/kubernetes.md](docs/kubernetes.md), [docs/scaling.md](docs/scaling.md), [docs/gvisor.md](docs/gvisor.md) | Installing it |
