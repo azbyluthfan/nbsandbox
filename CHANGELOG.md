@@ -4,6 +4,10 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+### Changed
+
+- **Faster results: rendering `output.html` takes about 0.1 s instead of 1 s.** The runner renders with nbconvert's library, warmed up in the background while the kernel starts, instead of starting a new `python -m nbconvert` (same HTML, same 5-minute limit; a failure still leaves `rendered: false`). A small call on Docker: 2.9 s → 2.5 s ([docs/perf.md](docs/perf.md#starting-a-run)).
+
 ## [0.1.1] - 2026-11-15
 
 ### Added

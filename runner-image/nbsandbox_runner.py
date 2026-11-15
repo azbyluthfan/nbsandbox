@@ -46,7 +46,6 @@ import os
 import re
 import resource
 import signal
-import subprocess
 import sys
 import tempfile
 import threading
@@ -390,14 +389,65 @@ def install_kernel_startup():
         dst.write(src.read())
 
 
-def render_html(output_nb, output_html):
-    proc = subprocess.run(
-        [sys.executable, "-m", "nbconvert", "--to", "html",
-         "--output", os.path.basename(output_html), output_nb],
-        capture_output=True, text=True, timeout=300,
-    )
-    if proc.returncode != 0:
-        return False, proc.stderr.strip()[-2000:]
+RENDER_TIMEOUT = 300  # seconds
+
+_renderer = {}  # "exporter": a warmed-up HTMLExporter, or "error"
+_renderer_ready = threading.Event()
+
+
+def _warm_renderer():
+    """Loads nbconvert and its HTML template, so rendering later takes
+    tenths of a second instead of the second a fresh `python -m nbconvert`
+    took. Runs in a thread while the kernel starts and the notebook runs
+    (the wrapper only waits on the kernel then)."""
+    try:
+        import nbformat
+        from nbconvert import HTMLExporter
+        exporter = HTMLExporter()
+        exporter.from_notebook_node(nbformat.v4.new_notebook())  # loads the template
+        _renderer["exporter"] = exporter
+    except Exception as e:  # rendering reports it; the run goes on
+        _renderer["error"] = f"{type(e).__name__}: {e}"
+    finally:
+        _renderer_ready.set()
+
+
+def start_warming_renderer():
+    threading.Thread(target=_warm_renderer, name="warm-renderer", daemon=True).start()
+
+
+def render_html(output_nb, output_html, timeout=RENDER_TIMEOUT):
+    """Renders the executed notebook to HTML, as `jupyter nbconvert --to
+    html` does (the same output), with the exporter warmed up in the
+    background. In a thread with a time limit: a notebook that makes
+    nbconvert hang leaves rendered false, and the run's result stands."""
+    if not _renderer_ready.is_set():
+        start_warming_renderer()
+    deadline = time.monotonic() + timeout
+    if not _renderer_ready.wait(timeout):
+        return False, f"rendering didn't start within {timeout} s"
+    if "exporter" not in _renderer:
+        return False, _renderer.get("error", "nbconvert is not available")[-2000:]
+    out = {}
+
+    def render():
+        try:
+            body, _ = _renderer["exporter"].from_filename(output_nb)
+            tmp = output_html + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(body)
+            os.replace(tmp, output_html)
+            out["ok"] = True
+        except Exception as e:
+            out["error"] = f"{type(e).__name__}: {e}"
+
+    t = threading.Thread(target=render, name="render", daemon=True)
+    t.start()
+    t.join(max(deadline - time.monotonic(), 0))
+    if t.is_alive():
+        return False, f"rendering took longer than {timeout} s"
+    if "ok" not in out:
+        return False, out.get("error", "rendering failed")[-2000:]
     return True, None
 
 
@@ -465,6 +515,10 @@ def main(argv):
 
     common = {"papermill_version": papermill.__version__}
     mark("imports_done")
+    # While the kernel starts and the notebook runs. A run has one CPU, so
+    # this competes a little with the kernel's start (measured: kernel start
+    # +0.3 s, rendering -0.9 s, a small call 2.9 s -> 2.5 s on Docker).
+    start_warming_renderer()
     state, code, extra = "succeeded", EXIT_OK, {}
     try:
         papermill.execute_notebook(
