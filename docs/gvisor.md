@@ -10,7 +10,7 @@ gVisor is an optional runtime for the Docker backend that isolates runs more str
 
 gVisor needs Linux with Docker Engine (x86_64 or arm64). Docker Desktop is not a target. The default platform (systrap) needs no KVM, so a cloud VM works. The tested release is in `deploy/gvisor.version`.
 
-1. Install `runsc` from gVisor's apt repository or release binaries. Follow gVisor's installation guide, and pin the version in `deploy/gvisor.version`.
+1. Install `runsc` from gVisor's release binaries (`https://storage.googleapis.com/gvisor/releases/release/<version>/<arch>/`, with a `.sha512` beside each file) or its apt repository. Follow gVisor's installation guide, and pin the version in `deploy/gvisor.version`. To install a pinned version, use the release binaries: the apt repository only lists the newest release, so a pinned one disappears from it as soon as gVisor publishes the next.
 2. Register it with Docker, and restart Docker:
 
    ```bash

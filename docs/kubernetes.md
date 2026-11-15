@@ -111,7 +111,7 @@ The API is on http://127.0.0.1:8080 (the demo users, as with `make up`).
 
 | | |
 |---|---|
-| `make k8s-up` / `make k8s-down` | start the stack (stopping the other two, which use the same port) / delete the cluster. `K8S_CNI=calico` uses Calico instead of Cilium, in its own cluster; `K8S_VERSION=1.34` the oldest supported Kubernetes (default 1.37), also in its own cluster. `K8S_RUNTIME_CLASS=gvisor` installs gVisor in the node (the release in `deploy/gvisor.version`, from gVisor's apt repository, checked against its SHA-256), adds a `gvisor` RuntimeClass and runs notebooks with it |
+| `make k8s-up` / `make k8s-down` | start the stack (stopping the other two, which use the same port) / delete the cluster. `K8S_CNI=calico` uses Calico instead of Cilium, in its own cluster; `K8S_VERSION=1.34` the oldest supported Kubernetes (default 1.37), also in its own cluster. `K8S_RUNTIME_CLASS=gvisor` installs gVisor in the node (the release in `deploy/gvisor.version`, from gVisor's release bucket, checked against its SHA-512), adds a `gvisor` RuntimeClass and runs notebooks with it |
 | `make test-k8s-cni-refuses` | on kind's own plugin (kindnet), which doesn't enforce NetworkPolicy: checks that the workers refuse to run notebooks |
 | `make k8s-logs` | follow the API processes' and workers' logs |
 | `make test-k8s-conformance` | the backend conformance suite (lifecycle, live output, cancel, OOM, orphans) against real Pods |
