@@ -28,7 +28,7 @@ A patch release with two fixes (Kubernetes runs copied their files slowly; Go 1.
 - **Authentication against Entra ID, end to end.** Keycloak is tested end to end (tokens, scopes, audience, token exchange); Entra ID is unit-tested against a local issuer and documented, and needs the same end-to-end test with a real tenant.
 - **Sandboxes on real clusters.** Run the suite under GKE Sandbox (gVisor) and AKS Pod Sandboxing (Kata), and add a GKE Terraform example beside the AKS one.
 - **Fast starts (≤ 1 s).** Today a run spends about 3–5 s (about a second more under gVisor) before its first cell, almost all of it starting a fresh container and Python kernel. Every run now records where its time goes ([perf.md](docs/perf.md#starting-a-run)): rendering, the kernel and the runner's imports are most of it. Cut it while keeping a fresh container per run:
-  - skip work at start (render HTML after the result, lighter imports, run nbclient directly instead of papermill);
+  - skip work at start: rendering is done (0.1 s instead of 1 s; a small call 2.9 s → 2.5 s); next, run nbclient directly instead of papermill, so the kernel starts while the runner imports, and lighter imports;
   - keep a small pool of single-use pre-started containers per published function version (created and kernel started ahead of time, used once, then removed);
   - later, restore a booted kernel from a snapshot (gVisor checkpoint/restore, Firecracker snapshots).
 - **Reference report at production sizes.** The Linux reference report ran with 512 MiB per run on a 2 GB VM; repeat it with the default 2 GiB.
