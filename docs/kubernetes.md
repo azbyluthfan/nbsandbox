@@ -90,7 +90,7 @@ What it creates:
 - **The runs namespace:** the `restricted` Pod Security Standard and the deny-all NetworkPolicy.
 - **PodDisruptionBudgets**, and an optional Ingress (only `/v1/` and the gRPC services; health and metrics stay internal).
 
-The values file documents every option: images, replicas, worker concurrency, run limits, storage (S3 or Azure with Workload Identity), and auth (OIDC). gRPC clients need HTTP/2 through your ingress: terminate TLS there and forward h2c.
+The values file documents every option: images, replicas, worker concurrency, run limits, storage (S3 or Azure with Workload Identity), and auth (OIDC, token introspection, the failed sign-in limit). Set `auth.trustedProxies` to your ingress controller's Pod CIDR, so the sign-in limit sees the real client address ([auth.md](auth.md#failed-sign-ins)). gRPC clients need HTTP/2 through your ingress: terminate TLS there and forward h2c.
 
 ## Terraform examples
 

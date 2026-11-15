@@ -14,6 +14,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"connectrpc.com/connect"
@@ -103,13 +104,19 @@ func opOf(procedure string) auth.Op {
 // and checks the operation's scope, as the REST middleware does.
 type authInterceptor struct{ a *auth.Authenticator }
 
-func (i *authInterceptor) check(ctx context.Context, procedure string, h http.Header) (context.Context, error) {
+func (i *authInterceptor) check(ctx context.Context, procedure string, h http.Header, peer string) (context.Context, error) {
 	op := opOf(procedure)
 	scope := op.Scope()
 	if scope == "" {
 		return ctx, connect.NewError(connect.CodeUnimplemented, errors.New("unknown operation"))
 	}
+	ctx = auth.WithClientAddr(ctx, auth.ClientIP(ctx, peer, h, i.a.TrustedProxies))
 	p, err := i.a.Authenticate(ctx, h.Get("Authorization"))
+	if wait, limited := auth.IsTooManyAttempts(err); limited {
+		cerr := connect.NewError(connect.CodeResourceExhausted, errors.New(auth.FailureMessage(err)))
+		cerr.Meta().Set("Retry-After", strconv.Itoa(int(wait.Seconds())))
+		return ctx, cerr
+	}
 	if err != nil {
 		cerr := connect.NewError(connect.CodeUnauthenticated, errors.New(auth.FailureMessage(err)))
 		for _, c := range i.a.Challenges(err) {
@@ -127,7 +134,7 @@ func (i *authInterceptor) check(ctx context.Context, procedure string, h http.He
 
 func (i *authInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		ctx, err := i.check(ctx, req.Spec().Procedure, req.Header())
+		ctx, err := i.check(ctx, req.Spec().Procedure, req.Header(), req.Peer().Addr)
 		if err != nil {
 			return nil, err
 		}
@@ -141,7 +148,7 @@ func (i *authInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) 
 
 func (i *authInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		ctx, err := i.check(ctx, conn.Spec().Procedure, conn.RequestHeader())
+		ctx, err := i.check(ctx, conn.Spec().Procedure, conn.RequestHeader(), conn.Peer().Addr)
 		if err != nil {
 			return err
 		}

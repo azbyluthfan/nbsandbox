@@ -17,7 +17,10 @@
 #             NBSANDBOX_AZURE_CONNECTION_STRING, NBSANDBOX_AZURE_CONTAINER,
 #             NBSANDBOX_AZURE_PREFIX, NBSANDBOX_AZURE_CREATE_CONTAINER
 #   auth:     NBSANDBOX_AUTH_BASIC, NBSANDBOX_OIDC_ISSUER (turns tokens on), NBSANDBOX_OIDC_AUDIENCE,
-#             NBSANDBOX_OIDC_JWKS_URL, NBSANDBOX_OIDC_ID_PREFIX, NBSANDBOX_OIDC_ID_CLAIMS
+#             NBSANDBOX_OIDC_JWKS_URL, NBSANDBOX_OIDC_ID_PREFIX, NBSANDBOX_OIDC_ID_CLAIMS,
+#             NBSANDBOX_OIDC_INTROSPECTION_CLIENT_ID, NBSANDBOX_OIDC_INTROSPECTION_CLIENT_SECRET,
+#             NBSANDBOX_OIDC_INTROSPECTION_CACHE, NBSANDBOX_LOGIN_LIMIT_FAILURES,
+#             NBSANDBOX_TRUSTED_PROXIES
 #   web UI:   NBSANDBOX_UI_ENABLED, NBSANDBOX_UI_LISTEN
 # Unknown keys are an error, so a typo can't be silently ignored.
 
@@ -119,6 +122,12 @@ ui:
 # tokens come from an OpenID Connect provider. Spaces belong to the caller's ID.
 auth:
   basic: true                       # set false in production once tokens work
+  login_limit:                      # slows down password guessing (basic auth)
+    failures: 5                     # NBSANDBOX_LOGIN_LIMIT_FAILURES; then 429 until one refills; 0: off
+    refill: 1m                      # one more failure allowed per refill
+    # per_address: (default: on when trusted_proxies is set) also limit per client address
+  trusted_proxies: []               # NBSANDBOX_TRUSTED_PROXIES; proxies whose X-Forwarded-For names
+                                    # the client: addresses, CIDRs or host names (Compose: caddy)
   # oidc:
   #   issuer: https://login.microsoftonline.com/<tenant id>/v2.0
   #   audience: <nbsandbox's client id>
@@ -128,3 +137,8 @@ auth:
   #   leeway: 60s
   #   max_lifetime: 24h
   #   keys_refresh: 1h
+  #   introspection:                  # token revocation (RFC 7662): not supported by Entra ID
+  #     client_id: nbsandbox          # NBSANDBOX_OIDC_INTROSPECTION_CLIENT_ID
+  #     client_secret: ""             # NBSANDBOX_OIDC_INTROSPECTION_CLIENT_SECRET (prefer the variable)
+  #     url: ""                       # default: from the issuer's discovery document
+  #     cache: 30s                    # NBSANDBOX_OIDC_INTROSPECTION_CACHE; at most 5m

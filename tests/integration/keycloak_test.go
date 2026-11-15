@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -114,7 +115,9 @@ func TestKeycloakUserRunsANotebook(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = client.DeleteSpace(context.Background(), &apiclient.Identity{Token: userToken(t, "kc-alice", allScopes)}, spaceID) })
+	t.Cleanup(func() {
+		_ = client.DeleteSpace(context.Background(), &apiclient.Identity{Token: userToken(t, "kc-alice", allScopes)}, spaceID)
+	})
 	nb, err := os.ReadFile(repoRoot() + "/tests/workloads/smoke.ipynb")
 	if err != nil {
 		t.Fatal(err)
@@ -223,4 +226,58 @@ func TestKeycloakTokenExchange(t *testing.T) {
 	}
 	finding(t, "keycloak-token-exchange", "a backend exchanges its user's token for an nbsandbox token (RFC 8693) and starts a run",
 		"the backend's own token is refused; the exchanged one acts as the user; the run records the backend", "client "+view.Client, view.Client == "nbsandbox-backend")
+}
+
+// A token stops working soon after the user signs out at Keycloak: with
+// introspection on (deploy/docker-compose.keycloak.yml, 2 s cache),
+// nbsandbox asks Keycloak whether each token is still active.
+func TestKeycloakRevokedTokenIsRefused(t *testing.T) {
+	needKeycloak(t)
+	form := url.Values{"grant_type": {"password"}, "client_id": {"nbsandbox-cli"}, "username": {"kc-alice"},
+		"password": {"kc-alice-test-password"}, "scope": {"nbsandbox.read"}}
+	req, _ := http.NewRequest("POST", keycloakURL+"/realms/nbsandbox/protocol/openid-connect/token", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var toks struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&toks)
+	_ = resp.Body.Close()
+	if toks.AccessToken == "" || toks.RefreshToken == "" {
+		t.Fatalf("sign-in: %d", resp.StatusCode)
+	}
+	if r := asToken(t, toks.AccessToken, "GET", "/v1/spaces", nil); r.Code != http.StatusOK {
+		t.Fatalf("before sign-out: %d %s", r.Code, r.Body)
+	}
+
+	// Sign out: Keycloak ends the session, and its tokens become inactive.
+	out := url.Values{"client_id": {"nbsandbox-cli"}, "refresh_token": {toks.RefreshToken}}
+	req, _ = http.NewRequest("POST", keycloakURL+"/realms/nbsandbox/protocol/openid-connect/logout", strings.NewReader(out.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if resp, err = httpClient.Do(req); err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		t.Fatalf("sign-out: %d", resp.StatusCode)
+	}
+
+	deadline := time.Now().Add(15 * time.Second)
+	var code int
+	for time.Now().Before(deadline) {
+		r := asToken(t, toks.AccessToken, "GET", "/v1/spaces", nil)
+		if code = r.Code; code == http.StatusUnauthorized {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	finding(t, "keycloak-revocation", "sign out at Keycloak, then call nbsandbox with the access token issued before",
+		"refused (401) within the introspection cache (2 s here), long before the token expires", fmt.Sprintf("HTTP %d", code), code == http.StatusUnauthorized)
+	if code != http.StatusUnauthorized {
+		t.Fatalf("token still accepted 15 s after sign-out: %d", code)
+	}
 }

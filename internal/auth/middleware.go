@@ -9,6 +9,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -18,11 +19,22 @@ type Authenticator struct {
 	Users *Users    // nil: basic auth is off
 	OIDC  *Verifier // nil: bearer tokens are off
 	Log   *slog.Logger
+	// Limiter slows down password guessing (basic auth), per username and,
+	// with LimitByAddress, per client address; nil: no limit.
+	Limiter *LoginLimiter
+	// LimitByAddress also limits failures per client address (password
+	// spraying). Only meaningful when the address is the client's: a direct
+	// connection, or TrustedProxies naming the proxy in front.
+	LimitByAddress bool
+	// TrustedProxies are the proxies whose X-Forwarded-For is believed when
+	// finding the client's address (Caddy, an ingress); nil: the
+	// connection's peer is the client.
+	TrustedProxies *TrustedProxies
 }
 
 // Failure describes a refused request, for the API's error writer.
 type Failure struct {
-	Status  int    // 401 or 403
+	Status  int    // 401, 403, or 429 (too many failed sign-ins)
 	Message string // safe to show the caller
 }
 
@@ -31,15 +43,21 @@ type Failure struct {
 // onFail, which writes the response in the API's error format.
 func (a *Authenticator) Middleware(onFail func(http.ResponseWriter, *http.Request, Failure), next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		p, err := a.Authenticate(r.Context(), r.Header.Get("Authorization"))
+		ctx := WithClientAddr(r.Context(), ClientIP(r.Context(), r.RemoteAddr, r.Header, a.TrustedProxies))
+		p, err := a.Authenticate(ctx, r.Header.Get("Authorization"))
 		if err != nil {
+			if wait, limited := IsTooManyAttempts(err); limited {
+				w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())))
+				onFail(w, r, Failure{Status: http.StatusTooManyRequests, Message: FailureMessage(err)})
+				return
+			}
 			for _, c := range a.Challenges(err) {
 				w.Header().Add("WWW-Authenticate", c)
 			}
 			onFail(w, r, Failure{Status: http.StatusUnauthorized, Message: FailureMessage(err)})
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(WithPrincipal(r.Context(), p)))
+		next.ServeHTTP(w, r.WithContext(WithPrincipal(ctx, p)))
 	})
 }
 
@@ -76,9 +94,18 @@ func (a *Authenticator) Authenticate(ctx context.Context, authorization string) 
 			return Principal{}, errWrongScheme
 		}
 		user, pass, ok := parseBasic(rest)
+		keys := a.limitKeys(ctx, user)
+		if err := a.Limiter.Check(keys...); err != nil {
+			if a.Log != nil {
+				a.Log.Warn("sign-in refused: too many failures", "user", user, "client", ClientAddr(ctx))
+			}
+			return Principal{}, err
+		}
 		if !ok || !a.Users.Verify(user, pass) {
+			a.Limiter.Fail(keys...)
 			return Principal{}, errBadBasic
 		}
+		a.Limiter.Reset("user:" + user)
 		if a.Users.Admin(user) {
 			return BasicAdmin(user), nil
 		}
@@ -86,6 +113,16 @@ func (a *Authenticator) Authenticate(ctx context.Context, authorization string) 
 	default:
 		return Principal{}, errWrongScheme
 	}
+}
+
+// limitKeys are the login limiter's keys for a sign-in: the username, and
+// the client's address when limiting by address and it is known.
+func (a *Authenticator) limitKeys(ctx context.Context, user string) []string {
+	keys := []string{"user:" + user}
+	if addr := ClientAddr(ctx); a.LimitByAddress && addr != "" {
+		keys = append(keys, "addr:"+addr)
+	}
+	return keys
 }
 
 // parseBasic decodes the credentials of a Basic Authorization value.
@@ -119,6 +156,8 @@ func FailureMessage(err error) string {
 	switch {
 	case errors.Is(err, ErrInvalidToken):
 		return "the access token is invalid or expired"
+	case errors.Is(err, errTooMany):
+		return "too many failed sign-ins: try again later (Retry-After)"
 	case errors.Is(err, errWrongScheme):
 		return "use a supported authentication scheme (see WWW-Authenticate)"
 	default:

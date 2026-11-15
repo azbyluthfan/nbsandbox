@@ -45,6 +45,8 @@ users:
 
 nbsandboxd refuses a users file that other accounts can read. The provisioning script already set it to `600`, owned by uid 1000.
 
+After 5 wrong passwords, a username (and the address they came from, as Caddy reports it) gets `429 Too Many Requests` for a while; one more attempt is allowed each minute ([auth.md](auth.md#failed-sign-ins)).
+
 ## 4. Configure
 
 ```bash

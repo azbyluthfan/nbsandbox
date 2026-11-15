@@ -26,6 +26,7 @@ const (
 	CodeVersionMismatch   = "version_mismatch"   // the file changed since the version given (412)
 	CodeVersionRequired   = "version_required"   // replacing a file needs If-Match (428)
 	CodeDockerUnavailable = "docker_unavailable"
+	CodeTooManyRequests   = "too_many_requests" // too many failed sign-ins (429, Retry-After)
 	CodeInternal          = "internal"
 )
 

@@ -77,6 +77,49 @@ type Auth struct {
 	Basic *bool `yaml:"basic"`
 	// OIDC enables bearer tokens; absent = off.
 	OIDC *auth.OIDCConfig `yaml:"oidc"`
+	// LoginLimit slows down password guessing against basic auth.
+	LoginLimit LoginLimit `yaml:"login_limit"`
+	// TrustedProxies are the proxies (addresses, CIDRs, or host names such
+	// as the Compose service "caddy") whose X-Forwarded-For names the client:
+	// Caddy, an ingress. Without them, the
+	// connection's peer is the client, and behind a proxy the per-address
+	// login limit sees only the proxy.
+	TrustedProxies []string `yaml:"trusted_proxies"`
+}
+
+// LoginLimit: each username and each client address may fail to sign in
+// Failures times; then one more failure is allowed per Refill, and attempts
+// beyond get 429 without the password being checked. A successful sign-in
+// restores the username's allowance. Failures 0 turns the limit off.
+type LoginLimit struct {
+	Failures *int          `yaml:"failures"`
+	Refill   time.Duration `yaml:"refill"`
+	// PerAddress also limits failures per client address (password
+	// spraying). Default: on when trusted_proxies is set (then the address
+	// is the client's), off otherwise, since behind an unnamed proxy every
+	// client would share the proxy's address and one guesser would lock
+	// everyone out. Set true for a server that clients reach directly.
+	PerAddress *bool `yaml:"per_address"`
+}
+
+// ByAddress reports whether failures are also limited per client address.
+func (a Auth) ByAddress() bool {
+	if a.LoginLimit.PerAddress != nil {
+		return *a.LoginLimit.PerAddress
+	}
+	return len(a.TrustedProxies) > 0
+}
+
+// Allowance is the configured failures (default 5) and refill (default 1m).
+func (l LoginLimit) Allowance() (int, time.Duration) {
+	f, r := 5, l.Refill
+	if l.Failures != nil {
+		f = *l.Failures
+	}
+	if r <= 0 {
+		r = time.Minute
+	}
+	return f, r
 }
 
 // BasicEnabled reports whether basic auth is on (the default).
@@ -240,8 +283,11 @@ func Default() Settings {
 		},
 		ShutdownGrace: 60 * time.Second,
 		UI:            UI{Enabled: false, Listen: "127.0.0.1:8090"},
+		Auth:          Auth{LoginLimit: LoginLimit{Failures: new5(), Refill: time.Minute}, TrustedProxies: []string{}},
 	}
 }
+
+func new5() *int { n := 5; return &n }
 
 // Load reads the YAML file at path (if path is not empty) over the defaults,
 // applies environment overrides, and validates the result. All validation
@@ -277,9 +323,11 @@ func Load(path string, getenv func(string) string) (Settings, error) {
 	return s, s.Validate()
 }
 
-// Authentication overrides: NBSANDBOX_AUTH_BASIC (true/false) and
-// NBSANDBOX_OIDC_ISSUER, _AUDIENCE, _JWKS_URL, _ID_PREFIX, _ID_CLAIMS (comma
-// separated). Setting the issuer turns OIDC on.
+// Authentication overrides: NBSANDBOX_AUTH_BASIC (true/false),
+// NBSANDBOX_TRUSTED_PROXIES (comma separated), NBSANDBOX_LOGIN_LIMIT_FAILURES,
+// and NBSANDBOX_OIDC_ISSUER, _AUDIENCE, _JWKS_URL, _ID_PREFIX, _ID_CLAIMS
+// (comma separated), _INTROSPECTION_CLIENT_ID, _INTROSPECTION_CLIENT_SECRET,
+// _INTROSPECTION_CACHE. Setting the issuer turns OIDC on.
 func applyAuthEnv(s *Settings, getenv func(string) string) error {
 	if v := getenv("NBSANDBOX_AUTH_BASIC"); v != "" {
 		b, err := strconv.ParseBool(v)
@@ -291,9 +339,38 @@ func applyAuthEnv(s *Settings, getenv func(string) string) error {
 	if v := getenv("NBSANDBOX_OIDC_ISSUER"); v != "" && s.Auth.OIDC == nil {
 		s.Auth.OIDC = &auth.OIDCConfig{}
 	}
+	if v := getenv("NBSANDBOX_TRUSTED_PROXIES"); v != "" {
+		s.Auth.TrustedProxies = strings.Split(v, ",")
+	}
+	if v := getenv("NBSANDBOX_LOGIN_LIMIT_FAILURES"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("NBSANDBOX_LOGIN_LIMIT_FAILURES: %w", err)
+		}
+		s.Auth.LoginLimit.Failures = &n
+	}
 	o := s.Auth.OIDC
 	if o == nil {
 		return nil
+	}
+	if v := getenv("NBSANDBOX_OIDC_INTROSPECTION_CLIENT_SECRET"); v != "" {
+		if o.Introspection == nil {
+			o.Introspection = &auth.IntrospectionConfig{}
+		}
+		o.Introspection.ClientSecret = v
+	}
+	if v := getenv("NBSANDBOX_OIDC_INTROSPECTION_CLIENT_ID"); v != "" {
+		if o.Introspection == nil {
+			o.Introspection = &auth.IntrospectionConfig{}
+		}
+		o.Introspection.ClientID = v
+	}
+	if v := getenv("NBSANDBOX_OIDC_INTROSPECTION_CACHE"); v != "" && o.Introspection != nil {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return fmt.Errorf("NBSANDBOX_OIDC_INTROSPECTION_CACHE: %w", err)
+		}
+		o.Introspection.Cache = d
 	}
 	for name, p := range map[string]*string{
 		"NBSANDBOX_OIDC_ISSUER": &o.Issuer, "NBSANDBOX_OIDC_AUDIENCE": &o.Audience,
@@ -452,6 +529,12 @@ func (s Settings) Validate() error {
 	}
 	if s.UsersFile == "" && (s.Auth.BasicEnabled() || s.UI.Enabled) {
 		add("users_file: must not be empty while basic auth or the web UI is on")
+	}
+	if _, err := auth.NewTrustedProxies(s.Auth.TrustedProxies); err != nil {
+		add("auth.trusted_proxies: %v", err)
+	}
+	if f, _ := s.Auth.LoginLimit.Allowance(); f < 0 {
+		add("auth.login_limit.failures: must not be negative (0 turns the limit off)")
 	}
 	if !s.Auth.BasicEnabled() && s.Auth.OIDC == nil {
 		add("auth: basic auth is off and no OIDC provider is set: nobody could sign in")

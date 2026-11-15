@@ -4,6 +4,12 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+### Added
+
+- **Token revocation:** with `auth.oidc.introspection`, nbsandboxd asks the identity provider (RFC 7662) whether a token is still active, so a token revoked there stops working within 30 s instead of at its expiry. Fails closed; only tokens that pass the local checks are sent. Tested against Keycloak; Entra ID has no introspection endpoint ([auth.md](docs/auth.md#revoked-tokens)).
+- **Failed sign-in limit:** basic auth allows 5 failed sign-ins per username, then one a minute (`429` with `Retry-After`; gRPC `RESOURCE_EXHAUSTED`), and per client address when the proxies in front are named in `auth.trusted_proxies`. The Compose stack names Caddy; the Helm chart has `auth.loginLimit` and `auth.trustedProxies` ([auth.md](docs/auth.md#failed-sign-ins)).
+- The API's error codes gain `too_many_requests`, and every authenticated operation documents its `429` response.
+
 ## [0.1.2] - 2026-11-15
 
 ### Security

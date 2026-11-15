@@ -53,6 +53,9 @@ type OIDCConfig struct {
 	// shortest gap between fetches for an unknown key ID (default 1h; the
 	// gap is at most 1m).
 	KeysRefresh time.Duration `yaml:"keys_refresh"`
+	// Introspection, if set, also asks the provider whether each token is
+	// still active (RFC 7662), so revoked tokens stop working early.
+	Introspection *IntrospectionConfig `yaml:"introspection"`
 }
 
 var idPrefixRE = regexp.MustCompile(`^[a-z][a-z0-9-]{0,19}$`)
@@ -89,6 +92,9 @@ func (c *OIDCConfig) Validate() error {
 	}
 	if c.MaxLifetime < 0 {
 		add("auth.oidc.max_lifetime: must not be negative")
+	}
+	if c.Introspection != nil {
+		c.Introspection.validate(add)
 	}
 	return errors.Join(errs...)
 }
@@ -131,6 +137,8 @@ type Verifier struct {
 	keys      map[string]jose.JSONWebKey // by kid ("" = a key without one)
 	fetchedAt time.Time
 	lastTry   time.Time
+
+	intro *introspector // nil: no introspection
 }
 
 // NewVerifier checks the settings and returns a verifier. Keys are fetched
@@ -146,13 +154,23 @@ func NewVerifier(cfg OIDCConfig, client *http.Client) (*Verifier, error) {
 	if cfg.KeysRefresh == 0 {
 		cfg.KeysRefresh = time.Hour
 	}
+	if cfg.Introspection != nil && cfg.Introspection.Cache == 0 {
+		c := *cfg.Introspection
+		c.Cache = 30 * time.Second
+		cfg.Introspection = &c
+	}
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 	if client == nil {
 		client = &http.Client{Timeout: 10 * time.Second}
 	}
-	return &Verifier{cfg: cfg, client: client, now: time.Now, jwksURL: cfg.JWKSURL}, nil
+	v := &Verifier{cfg: cfg, client: client, now: time.Now, jwksURL: cfg.JWKSURL}
+	if cfg.Introspection != nil {
+		v.intro = &introspector{cfg: *cfg.Introspection, issuer: cfg.Issuer, client: client, url: cfg.Introspection.URL,
+			now: func() time.Time { return v.now() }, cache: map[[32]byte]introAnswer{}}
+	}
+	return v, nil
 }
 
 // Verify checks a token and returns the caller.
@@ -227,6 +245,13 @@ func (v *Verifier) Verify(ctx context.Context, raw string) (Principal, error) {
 		parts = append(parts, s)
 	}
 	id := v.cfg.IDPrefix + ":" + strings.Join(parts, ":")
+	// Last, and only for a token that passed every local check: is it still
+	// active at the provider?
+	if v.intro != nil {
+		if err := v.intro.active(ctx, raw, exp); err != nil {
+			return bad("%v", err)
+		}
+	}
 	return newTokenPrincipal(id, firstString(c, "azp", "appid", "client_id"), firstString(c, "name", "preferred_username"), scopesOf(c)), nil
 }
 

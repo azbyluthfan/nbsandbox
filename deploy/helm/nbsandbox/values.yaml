@@ -85,11 +85,27 @@ storage:
 auth:
   basic: false
   usersSecret: ""           # a Secret with users.yaml, when basic is true
+  # Failed basic-auth sign-ins allowed per username (and per address, see
+  # trustedProxies) before 429; one more per refill.
+  loginLimit:
+    failures: 5
+    refill: 1m
+  # Your ingress controller's addresses or CIDRs, so the client's address
+  # comes from X-Forwarded-For and failed sign-ins are also limited per
+  # address. Empty: per username only.
+  trustedProxies: []
   oidc:
     issuer: ""
     audience: ""
     idPrefix: ""
     idClaims: []
+    # Token revocation (RFC 7662; Keycloak, Okta, Auth0; not Entra ID): ask
+    # the provider whether each token is still active, at most every cache.
+    introspection:
+      clientId: ""            # set to turn it on
+      secretName: ""          # a Secret with key client-secret
+      url: ""                 # default: from the provider's discovery document
+      cache: 30s
 
 functions:
   requireSchemas: false
