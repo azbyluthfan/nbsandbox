@@ -274,6 +274,8 @@ Without SSE, poll with `GET …/runs/{run_id}/result?wait=30s`: one request per 
 | `412` / `428` | `version_mismatch` / `version_required` | A file save with a stale or missing version. | See [3](#3-edit-a-file-without-overwriting-someone-elses-changes). |
 | `413` | `payload_too_large` | A file, the request, or the space's quota is too large. Nothing was stored. | Make it smaller or free space. |
 | `422` | `unprocessable` | `Idempotency-Key` reused with another body, or missing packages with `dependency_check: reject`. | Use a new key, or fix the imports. |
+| `422` | `packages_failed` | The space's `requirements.txt` couldn't be built ([packages.md](packages.md)); `build_log` says why. | Fix `requirements.txt`; a failed build is retried after a few minutes. |
+| `429` | `too_many_requests` | Too many failed sign-ins for the username or address ([auth.md](auth.md#failed-sign-ins)). | Wait for `Retry-After`. |
 | `503` | `docker_unavailable` | Docker isn't reachable. | Retry after `Retry-After`. |
 | `500` | `internal` | A bug. | Report it with the time and request. |
 
@@ -291,15 +293,18 @@ Without SSE, poll with `GET …/runs/{run_id}/result?wait=30s`: one request per 
 | Run outputs | `…/output.ipynb`, `…/output.html`, `…/artifacts`, `…/artifacts/{path}`, `POST …/promote`, `…/log`, `…/log/stream` (SSE) |
 | Status streams (SSE) | `GET …/runs/{run_id}/events`, `GET /v1/spaces/{id}/events` |
 | Functions | `GET …/functions`, `GET/DELETE …/functions/{name}`, `POST …/functions/{name}/versions` (publish), `GET …/versions/{version}`, `GET …/contract`, `POST …/invoke`, `POST …/versions/{version}/invoke` |
+| Packages | `GET/POST /v1/spaces/{id}/packages`: the space's package set, and building it now ([packages.md](packages.md)) |
+| Administration (`nbsandbox.admin`) | `GET /v1/admin/spaces`, `PATCH/DELETE /v1/admin/spaces/{id}`, `GET /v1/admin/runs`, `POST /v1/admin/runs/{run_id}/cancel`, `GET/PUT /v1/admin/drain`, `GET /v1/admin/audit` ([auth.md](auth.md#administration)) |
 
 ## gRPC
 
-The same API is served over gRPC, gRPC-Web and the Connect protocol, on the same port as REST: [api/proto/nbsandbox/v1/nbsandbox.proto](../api/proto/nbsandbox/v1/nbsandbox.proto). Three services, one RPC per REST operation, with the same names as the scopes table uses:
+The same API is served over gRPC, gRPC-Web and the Connect protocol, on the same port as REST: [api/proto/nbsandbox/v1/nbsandbox.proto](../api/proto/nbsandbox/v1/nbsandbox.proto). Four services, one RPC per REST operation, with the same names as the scopes table uses:
 
 | Service | RPCs |
 |---|---|
-| `SpaceService` | `CreateSpace`, `ListSpaces`, `GetSpace`, `UpdateSpace`, `DeleteSpace`, `UploadFiles` (client stream), `ListFiles`, `GetFile` (server stream), `PutFile` (client stream), `MoveFile`, `DeleteFile`, `CreateFolder` |
+| `SpaceService` | `CreateSpace`, `ListSpaces`, `GetSpace`, `UpdateSpace`, `DeleteSpace`, `UploadFiles` (client stream), `ListFiles`, `GetFile` (server stream), `PutFile` (client stream), `MoveFile`, `DeleteFile`, `CreateFolder`, `GetSpacePackages`, `BuildSpacePackages` |
 | `FunctionService` | `ListFunctions`, `GetFunction`, `DeleteFunction`, `PublishFunction`, `GetFunctionVersion`, `GetFunctionContract`, `InvokeFunction` (with `wait_seconds`), `InvokeFunctionStream` (server stream) |
+| `AdminService` | `AdminListSpaces`, `AdminUpdateSpace`, `AdminDeleteSpace`, `AdminListRuns`, `AdminCancelRun`, `AdminGetDrain`, `AdminSetDrain`, `AdminListAudit` |
 | `RunService` | `GetRuntime`, `CreateRun`, `ListRuns`, `GetRun`, `CancelRun`, `GetRunResult` (with `wait_seconds`), `FollowRunResult` (server stream: items, then the result), `DeleteRun`, `GetRunNotebook`, `GetRunHTML`, `GetRunLog`, `GetArtifact` (server streams), `ListArtifacts`, `PromoteArtifact`, `FollowRunLog`, `FollowRunEvents`, `FollowSpaceEvents` (server streams) |
 
 - **Same data.** Every message has the fields of its REST JSON twin, with the same names. Parameters and outputs are `google.protobuf.Value`, times are `Timestamp`.
@@ -313,8 +318,8 @@ The same API is served over gRPC, gRPC-Web and the Connect protocol, on the same
   | `INVALID_ARGUMENT` | 400 |
   | `NOT_FOUND` | 404 |
   | `ALREADY_EXISTS` | 409, the path exists |
-  | `FAILED_PRECONDITION` | other 409s, 412, 428, 422 |
-  | `RESOURCE_EXHAUSTED` | 413 |
+  | `FAILED_PRECONDITION` | other 409s, 412, 428, 422 (`packages_failed` included) |
+  | `RESOURCE_EXHAUSTED` | 413; 429, with `retry-after` in the metadata |
   | `UNAVAILABLE` | 503, or the server is shutting down |
 - **Waiting.** `GetRunResult` and `InvokeFunction` answer `RunOrResult`: the `result` once the run has finished, otherwise the `run` as it is now. `wait_seconds` (at most 60) waits for the result first.
 - **Streams resume** like their SSE twins: `after` takes the last line number or event `seq` you received.

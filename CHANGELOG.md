@@ -4,6 +4,16 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-15
+
+### Upgrading from 0.1.2
+
+- **Database migrations 8 to 10** run at startup: web UI sessions, the audit log, the drain flag and package sets.
+- **The web UI without sign-in now listens on loopback only** (see Changed). Deployments that served it to a network must set `ui.auth` to `oidc` or `basic`.
+- **A new image,** `ghcr.io/azbyluthfan/nbsandbox-runner-builder`, is needed only with `packages.enabled`.
+- **The Compose stack's socket proxy** now also allows bind mounts from `<data_dir>/packages`. Take the new `deploy/docker-compose.yml`.
+- **New settings,** all off or unchanged by default: `auth.login_limit`, `auth.trusted_proxies`, `auth.oidc.introspection`, `ui.auth` and its sign-in settings, `audit.*` (on), `packages.*`.
+
 ### Added
 
 - **Token revocation:** with `auth.oidc.introspection`, nbsandboxd asks the identity provider (RFC 7662) whether a token is still active, so a token revoked there stops working within 30 s instead of at its expiry. Fails closed; only tokens that pass the local checks are sent. Tested against Keycloak; Entra ID has no introspection endpoint ([auth.md](docs/auth.md#revoked-tokens)).
@@ -16,8 +26,12 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 - Metric `nbsandbox_audit_failures_total`.
 - **Custom packages per space (Docker):** with `packages.enabled`, a space's `requirements.txt` is installed into a package set its runs import: built once per requirements and runner image by a build container (the new `nbsandbox-runner-builder` image: the runner's packages plus pip; wheels only; network, but no space files), shared between spaces, mounted read-only. A run waits, queued, for its set (`waiting_for: packages`); a failed build fails it (`error_kind: packages`), and later runs get `422 packages_failed` with the build log. Published versions keep their exact packages. `GET`/`POST /v1/spaces/{id}/packages` (gRPC `GetSpacePackages`, `BuildSpacePackages`) and the web UI's Packages section show and build them. Off by default ([packages.md](docs/packages.md)).
 
+- **Two richer example notebooks:** `sales_dashboard.ipynb` (charts: weekly trends with rolling averages, stacked categories, store growth, small multiples) and `sales_map.ipynb` (a map of Java with matplotlib alone: provinces shaded by a metric, stores as bubbles, labels, scale bar; a GeoJSON artifact), on synthetic data from `examples/notebooks/data/make_orders.py` and Natural Earth's public-domain province shapes ([examples/README.md](examples/README.md)).
+- **`make seed`** fills a dev stack with example spaces, notebooks (the two above included), data, runs and a function (as the demo users; safe to run again).
+
 ### Changed
 
+- **The Compose stack's Docker socket proxy** allows bind mounts from `<data_dir>/packages` (package sets and their builds) besides the spaces.
 - **The web UI without sign-in (`ui.auth: none`, the default) refuses to listen beyond loopback**; it used to start with a warning. To serve the UI to a network, set `ui.auth` to `oidc` or `basic`. A container whose port is published only on the host's loopback can set `ui.no_login_beyond_loopback: true` (the dev Compose stack does).
 
 ## [0.1.2] - 2026-11-15

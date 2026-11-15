@@ -4,8 +4,8 @@ apiVersion: v2
 name: nbsandbox
 description: Run Jupyter notebooks in isolated sandboxes, as an API (API processes and workers that start each run as a Pod)
 type: application
-version: 0.1.2
-appVersion: "0.1.2"
+version: 0.2.0
+appVersion: "0.2.0"
 home: https://github.com/azbyluthfan/nbsandbox
 sources:
   - https://github.com/azbyluthfan/nbsandbox

@@ -19,6 +19,8 @@ Set it with `role` in `settings.yaml` or `NBSANDBOX_ROLE`.
 - **Cancel.** The API records the request, notifies, and finishes a still-queued run itself; the worker running a run stops it (on the notification, or at its next check).
 - **Live logs.** A worker writes log lines to the database in small batches (every 200 ms or 64 KiB). Any API node streams them, and a client resuming with `Last-Event-ID` can reconnect to any API node. After the run, `log.txt` in object storage is the source and the batches are deleted.
 - **What workers run.** Each worker publishes its runner image, packages and limits in the database. API nodes use the freshest one for `GET /v1/runtime` and the dependency check, and answer `503` to new runs while no worker can take them.
+- **Package sets** ([packages.md](packages.md)): any node asks for a set, one worker builds it (a lease in the database, taken over if it dies), and each worker unpacks it once into its own cache. A run waits for its set without holding a worker slot.
+- **Web UI sessions and the audit log** are in PostgreSQL: any API node serves a signed-in browser, and records what it does.
 - **Periodic cleanup** (retention, unreferenced contents) runs on one node at a time.
 
 ## Tested failures
