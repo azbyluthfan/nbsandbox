@@ -4,6 +4,8 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-15
+
 ### Added
 
 - **Check your deployment:** `nbsandbox-report check` runs the isolation, resource and failure checks against a running deployment (Docker or any Kubernetes cluster) through its API, as two users, and writes the isolation report for that deployment. With a kubeconfig it also checks that run Pods are gone, probes the API server, a worker and the kubelet, and records the cluster version and the runs' NetworkPolicies. It never restarts or stops anything; see [docs/check-deployment.md](docs/check-deployment.md). The integration suite runs the same checks, from one copy of the code.

@@ -91,7 +91,7 @@ services:
     restart: unless-stopped
 
   nbsandboxd:
-    image: ${NBSANDBOX_IMAGE:-ghcr.io/azbyluthfan/nbsandboxd:0.1.0}
+    image: ${NBSANDBOX_IMAGE:-ghcr.io/azbyluthfan/nbsandboxd:0.1.1}
     build:
       context: ..
       dockerfile: deploy/nbsandboxd.Dockerfile
@@ -108,7 +108,7 @@ services:
       NBSANDBOX_S3_CREATE_BUCKET: "true"
       NBSANDBOX_USERS_FILE: /etc/nbsandbox/users.yaml
       NBSANDBOX_DOCKER_HOST: tcp://socket-proxy:2375
-      NBSANDBOX_RUNNER_IMAGE: ${NBSANDBOX_RUNNER_IMAGE:-ghcr.io/azbyluthfan/nbsandbox-runner:0.1.0}
+      NBSANDBOX_RUNNER_IMAGE: ${NBSANDBOX_RUNNER_IMAGE:-ghcr.io/azbyluthfan/nbsandbox-runner:0.1.1}
       NBSANDBOX_LOG_LEVEL: ${NBSANDBOX_LOG_LEVEL:-info}
       NBSANDBOX_UI_ENABLED: "false" # never in production
     volumes:

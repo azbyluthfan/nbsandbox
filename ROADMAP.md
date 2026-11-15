@@ -15,7 +15,9 @@ The first release covers what was planned as v0.1 to v0.4, plus scaling out and 
 - **Local web editor:** completion and documentation from the runner image's packages.
 - **Isolation reports** for Docker, Linux with `runc` and gVisor, and Kubernetes with both runtimes.
 
-## Since v0.1.0 (not released yet)
+## Released in v0.1.1
+
+A patch release with two fixes (Kubernetes runs copied their files slowly; Go 1.27.4 for a `net/http` vulnerability) and these additions:
 
 - **Check your deployment:** `nbsandbox-report check` produces the isolation report for any running deployment, Docker or Kubernetes ([check-deployment.md](docs/check-deployment.md)). Kubernetes 1.34 to 1.37 are supported, the ends tested weekly.
 - **MCP server for AI agents** (`nbsandbox-mcp`): agents write, run and read notebooks as their user ([mcp.md](docs/mcp.md)).
