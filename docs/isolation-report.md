@@ -1,6 +1,6 @@
 # nbsandbox Isolation Report
 
-Generated 2026-11-08 07:34 UTC by `make report` from the integration tests' findings. Each row is a test that **ran**; the observed column is what the test saw, not what it assumed.
+Generated 2026-11-15 07:10 UTC by `make report` from the integration tests' findings. Each row is a test that **ran**; the observed column is what the test saw, not what it assumed.
 
 ## Summary
 
@@ -12,19 +12,19 @@ Generated 2026-11-08 07:34 UTC by `make report` from the integration tests' find
 
 **runc**
 
-- Docker: 29.9.2 (Docker Desktop); `docker info`: "29.9.2" "Docker Desktop" "7.0.14-linuxkit" "2" 4 4094517248 "aarch64"
-- Runner image: `nbsandbox-runner:dev` `sha256:3939222422831b155d3fca0dfc2f353911ef811c4b17ab1a68d6c44ef26802e2`, Python 3.13.18
+- Docker: 29.9.2 (Docker Desktop); `docker info`: "29.9.2" "Docker Desktop" "7.0.14-linuxkit" "2" 4 3043840000 "aarch64"
+- Runner image: `nbsandbox-runner:dev` `sha256:036c514466558c81d5c4b665ed2035891a5c5bb4d6a1b8b93938b42b55b50d67`, Python 3.13.18
 - Limits per run: `{"concurrency":2,"cpus":1,"log_bytes":10485760,"max_file_bytes":52428800,"max_space_bytes":524288000,"memory_bytes":2147483648,"pids":256,"timeout_seconds":60,"tmp_bytes":268435456}`
-- Facts recorded: 2026-11-08T07:26:42Z
+- Facts recorded: 2026-11-14T16:56:20Z
 
 ## Isolation
 
 | Check | Attempted | Expected | Observed (runc) | runc |
 |---|---|---|---|---|
-| space-paths | read space B by absolute host path, by ../, and by listing / and /space/..; reach this space's other runs and published versions; list /run | none of those paths exist; /run holds only this run's folder | paths exist map[~/.local/share/nbsandbox/spaces:false ~/.local/share/nbsandbox/spaces/749655a1-baa8-4620-98f5-57f794bb6afc/files:false ~/.local/share/nbsandbox/spaces/d0281830-5154-4d3e-85d3-ad680a56829d/functions:false ~/.local/share/nbsandbox/spaces/d0281830-5154-4d3e-85d3-ad680a56829d/runs:false /run/../749655a1-baa8-4620-98f5-57f794bb6afc:false /run/../runs:false /space/../749655a1-baa8-4620-98f5-57f794bb6afc:false /space/../749655a1-baa8-4620-98f5-57f794bb6afc/canary.txt:false /space/../functions:false /space/../runs:false /spaces:false /srv/nbsandbox:false]; / has 20 entries, none is space B | ✅ pass |
+| space-paths | read space B by absolute host path, by ../, and by listing / and /space/..; reach this space's other runs and published versions; list /run | none of those paths exist; /run holds only this run's folder | paths exist map[~/.local/share/nbsandbox/spaces:false ~/.local/share/nbsandbox/spaces/a6e63331-3725-4816-b110-5442bf5010df/files:false ~/.local/share/nbsandbox/spaces/d8f27a09-4f80-4535-9811-cbdbb7063cd9/functions:false ~/.local/share/nbsandbox/spaces/d8f27a09-4f80-4535-9811-cbdbb7063cd9/runs:false /run/../a6e63331-3725-4816-b110-5442bf5010df:false /run/../runs:false /space/../a6e63331-3725-4816-b110-5442bf5010df:false /space/../a6e63331-3725-4816-b110-5442bf5010df/canary.txt:false /space/../functions:false /space/../runs:false /spaces:false /srv/nbsandbox:false]; / has 20 entries, none is space B | ✅ pass |
 | canary-search | search the container filesystem for bob's canary | not found | found in []; 577 files scanned in 0.1s | ✅ pass |
 | proc-list | list /proc | only alice's own processes | 3 processes visible, foreign [] | ✅ pass |
-| memory-secret | search readable /proc/*/environ, cmdline and mem for the holder's in-memory secret | not found | hits []; readable map[cmdline:3 environ:3 mem:3]; 2.91262464e+08 bytes of memory searched | ✅ pass |
+| memory-secret | search readable /proc/*/environ, cmdline and mem for the holder's in-memory secret | not found | hits []; readable map[cmdline:3 environ:3 mem:3]; 2.91393536e+08 bytes of memory searched | ✅ pass |
 | shared-memory | read /dev/shm | holder's shared-memory secret absent | /dev/shm entries [] | ✅ pass |
 | socket-env-network | look for the Docker socket; list environment variables; try the network | no socket; only allowlisted variables; no network (on Kubernetes: nothing reachable, the API server, worker, kubelet and metadata service included) | sockets []; forbidden env []; up interfaces besides lo []; connections map[1.1.1.1:443:OSError: [Errno 101] Network is unreachable 169.254.169.254:80:OSError: [Errno 101] Network is unreachable 8.8.8.8:53:OSError: [Errno 101] Network is unreachable host.docker.internal:8080:gaierror: [Errno -3] Temporary failure in name resolution nbsandboxd:8080:gaierror: [Errno -3] Temporary failure in name resolution socket-proxy:2375:gaierror: [Errno -3] Temporary failure in name resolution] | ✅ pass |
 | privileges | id, CapEff, write to /usr, chmod u+s | uid 1000; CapEff 0; NoNewPrivs; writes fail; setuid ineffective (nosuid /tmp, or no-new-privileges on Kubernetes) | uid 1000, CapEff 0000000000000000, NoNewPrivs 1, Seccomp 2, write /usr: OSError, chmod u+s: set on /tmp (rw,nosuid,nodev,noexec,relatime,size=262144k), AppArmor: [Errno 22] Invalid argument | ✅ pass |
@@ -36,22 +36,22 @@ Generated 2026-11-08 07:34 UTC by `make report` from the integration tests' find
 | Check | Attempted | Expected | Observed (runc) | runc |
 |---|---|---|---|---|
 | memory-limit | alice allocates beyond the memory limit while bob runs a normal notebook | alice oom (not kernel_died/failed) with peak memory reported (not on Kubernetes, which kills the whole container); bob succeeded | alice oom (the notebook ran out of memory: peak 2.0 GiB of the 2.0 GiB limit (files in /tmp count toward it)), peak 2048 MiB; bob succeeded | ✅ pass |
-| cpu-fairness | alice spins all cores while bob runs a fixed CPU workload | bob within 1.5× of his solo baseline | bob alone 3.37s, with the hog 4.12s: 1.22× (runs alone [3.265 3.45 3.372], contended [3.959 4.124 4.374]; report-only on this platform) | ✅ pass |
-| process-limit | alice spawns processes until failure | failed/resource_pids (on Kubernetes: failed on the refused fork); bob unaffected; service responsive | alice failed/resource_pids; bob succeeded; slowest /readyz 3ms | ✅ pass |
+| cpu-fairness | alice spins all cores while bob runs a fixed CPU workload | bob within 1.5× of his solo baseline | bob alone 5.19s, with the hog 5.62s: 1.08× (runs alone [5.066 5.189 5.377], contended [6.038 5.621 5.284]; report-only on this platform) | ✅ pass |
+| process-limit | alice spawns processes until failure | failed/resource_pids (on Kubernetes: failed on the refused fork); bob unaffected; service responsive | alice failed/resource_pids; bob succeeded; slowest /readyz 3ms (0 not ready) | ✅ pass |
 | time-limit | alice runs an infinite loop | timeout; container removed; partial output kept | timeout after 60s; partial true; containers left [] | ✅ pass |
 | tmp-limit | alice fills /tmp | failed/resource_tmp; others unaffected | alice failed/resource_tmp; bob succeeded | ✅ pass |
-| endless-output | alice prints endlessly (200-byte lines for 25 s) | log stops at the cap with a notice; Docker's own log within its cap; host disk unaffected | succeeded; log.txt 10485672 bytes (cap 10485760), last line "[nbsandbox] log truncated at 10485580 by"; Docker's log 2564559 bytes; output.ipynb 5203209 bytes (stored output capped at 5 MiB) | ✅ pass |
+| endless-output | alice prints endlessly (200-byte lines for 25 s) | log stops at the cap with a notice; Docker's own log within its cap; host disk unaffected | succeeded; log.txt 10485673 bytes (cap 10485760), last line "[nbsandbox] log truncated at 10485581 by"; Docker's log 2564559 bytes; output.ipynb 4494378 bytes (stored output capped at 5 MiB) | ✅ pass |
 
 ## Cancellation and errors
 
 | Check | Attempted | Expected | Observed (runc) | runc |
 |---|---|---|---|---|
-| cancel-running | cancel during a long cell | container gone within grace + 5s; cancelled; partial output | cancelled in 0.3s, partial true, container gone true | ✅ pass |
+| cancel-running | cancel during a long cell | container gone within grace + 5s; cancelled; partial output | cancelled in 0.5s, partial true, container gone true | ✅ pass |
 | cancel-queued | cancel a queued run | never starts; cancelled | was queued true; cancelled; started false | ✅ pass |
 | cancel-at-completion | cancel right as the last cell finishes (5 rounds; 200 in the unit test) | exactly one terminal status, the same in API, result.json and log | map[cancelled:5], consistent true | ✅ pass |
 | caller-disconnect | caller disconnects right after submitting | run completes normally | succeeded | ✅ pass |
 | kernel-crash | crash in a C extension (ctypes) | kernel_died | kernel_died | ✅ pass |
-| cell-exception | exception raised in cell 3 | failed, cell 3, ValueError | failed &{CellIndex:0x56fc257176e8 ExceptionType:ValueError Message:boom in cell 3} | ✅ pass |
+| cell-exception | exception raised in cell 3 | failed, cell 3, ValueError | failed, cell 3, ValueError: boom in cell 3 | ✅ pass |
 | docker-lost-mid-run | Docker proxy stopped mid-run | platform_error or interrupted, never a notebook fault; container cleaned up | interrupted (docker_lost, fault platform); readyz down true; submit while down 503 | ✅ pass |
 | render-failure | HTML rendering fails on a successful run | succeeded, rendered false | succeeded, rendered false | ✅ pass |
 
@@ -63,25 +63,25 @@ Generated 2026-11-08 07:34 UTC by `make report` from the integration tests' find
 | runtime-info | GET /v1/runtime | image id and package list match the image | id match true, 69 packages, 0 mismatches | ✅ pass |
 | queue-concurrency | three spaces start runs at once, limit 2 | two run, one queued at position 1, all complete | 2 running, 1 queued (position 1), 3 succeeded | ✅ pass |
 | restart-mid-run | kill and restart nbsandboxd while a run is active | orphan container removed; run interrupted | interrupted (orphaned) | ✅ pass |
-| graceful-shutdown | SIGTERM to nbsandboxd during a run | run stopped as interrupted (shutdown); no containers left | interrupted/shutdown after 5.4s; containers left [] | ✅ pass |
+| graceful-shutdown | SIGTERM to nbsandboxd during a run | run stopped as interrupted (shutdown); no containers left | interrupted/shutdown after 5.5s; containers left [] | ✅ pass |
 | delete-space | delete a space with a finished run | space, run and artifacts return 404 | delete 204, then [404 404 404] | ✅ pass |
 
 ## Log and event streaming
 
 | Check | Attempted | Expected | Observed (runc) | runc |
 |---|---|---|---|---|
-| live-lines | notebook prints one line a second for 10 s | first line long before the run ends; order preserved | first line 11.3s before done; lines [0 1 2 3 4 5 6 7 8 9]; {"last_event_id":17,"status":"succeeded"} | ✅ pass |
+| live-lines | notebook prints one line a second for 10 s | first line long before the run ends; order preserved | first line 12.0s before done; lines [0 1 2 3 4 5 6 7 8 9]; {"last_event_id":17,"status":"succeeded"} | ✅ pass |
 | resume | disconnect after 5 lines, reconnect with Last-Event-ID | remaining lines, no gaps or duplicates | 17 lines total; sequence true; matches log.txt true | ✅ pass |
 | join-mid-run | connect mid-run (after line 4) | earlier lines replayed, then live lines, no gaps | 17 lines; sequence true; matches log.txt true | ✅ pass |
 | replay-after-finish | connect after the run finished | full log replayed, then done with the final status | 15 lines in 0.01s; done failed; matches log.txt true | ✅ pass |
-| slow-viewer | five viewers on a 20,000-line run, one stops reading | run duration unaffected; fast viewers complete; the slow viewer isn't dropped and gets every line once it reads again | run 3.1s (alone 3.1s); fast viewers complete true ([20007 20007 20007 20007]); slow dropped false, complete true | ✅ pass |
-| streamed-output | a notebook emits three items a second apart; follow the result stream, then read the result as JSON | items arrive live (ids 1, 2, 3), then the result with the same list; JSON gives the same list; the status stream has only status | events [item progress item progress item progress result]; first item 4.4s before the end, last 2.3s after the first; JSON output [{"step":0},{"step":1},{"step":2}]; 3 status events | ✅ pass |
+| slow-viewer | five viewers on a 20,000-line run, one stops reading | run duration unaffected; fast viewers complete; the slow viewer isn't dropped and gets every line once it reads again | run 4.6s (alone 4.3s); fast viewers complete true ([20007 20007 20007 20007]); slow dropped false, complete true | ✅ pass |
+| streamed-output | a notebook emits five items a second apart; follow the result stream, then read the result as JSON | items arrive live (ids 1 to 5, the last at least 2 s after the first), then the result with the same list; JSON gives the same list; the status stream has only status | events [item progress item progress item progress item progress item progress result]; first item 6.7s before the end, last 4.0s after the first; JSON output [{"step":0},{"step":1},{"step":2},{"step":3},{"step":4}]; 3 status events | ✅ pass |
 
 ## Web UI
 
 | Check | Attempted | Expected | Observed (runc) | runc |
 |---|---|---|---|---|
-| web-ui | run a notebook and follow its log through the local web UI port | live lines, then done; other users still get 404 | 17 lines, first line 11.3s before done, {"last_event_id":17,"status":"succeeded"} | ✅ pass |
+| web-ui | run a notebook and follow its log through the local web UI port | live lines, then done; other users still get 404 | 17 lines, first line 11.9s before done, {"last_event_id":17,"status":"succeeded"} | ✅ pass |
 
 ## Notebook functions
 
@@ -89,11 +89,11 @@ Generated 2026-11-08 07:34 UTC by `make report` from the integration tests' find
 |---|---|---|---|---|
 | function-invoke | invoke a published notebook with nested JSON and wait | succeeded; output computed from the input and the bundle | 200 succeeded; model "m1", forecast [1.5 3 4.5 6], echo {"big":123456789012345678901234567890,"cfg":{"include":["sales",null],"months":4},"region":"bandung"} | ✅ pass |
 | function-immutable | edit the model file, publish v2, call latest and v1 | latest sees m2; v1 still sees m1 | latest v2 "m2"; v1 "m1" | ✅ pass |
-| function-errors | invalid input; a notebook that raises; an output that breaks the contract | 400 invalid_parameters, no run; failed with cell and exception; failed output_invalid | input 400 invalid_parameters (2 problems, 0 runs); raise failed/&{execution_error notebook false cell 1 raised ValueError: asked to fail 0x56fc24893688 ValueError}; output failed/&{output_invalid notebook false the output doesn't match the notebook's output contract: (the whole value): missing properties 'region', 'forecast' <nil> } | ✅ pass |
-| read-only-invocation | a function writes into /space; the same notebook as a normal run | invocation fails on the read-only file system; the normal run writes the file | invocation failed (&{execution_error notebook false cell 0 raised OSError: [Errno 30] Read-only file system: 'written.txt' 0x56fc24893cf0 OSError}); run succeeded; file listed true | ✅ pass |
-| parallel-invocations | two invocations of one space at once | both succeed, and their runs overlap in time | succeeded, succeeded in 3.5s; overlap true | ✅ pass |
+| function-errors | invalid input; a notebook that raises; an output that breaks the contract | 400 invalid_parameters, no run; failed with cell and exception; failed output_invalid | input 400 invalid_parameters (2 problems, 0 runs); raise failed/&{execution_error notebook false cell 1 raised ValueError: asked to fail 0x44652720e548 ValueError}; output failed/&{output_invalid notebook false the output doesn't match the notebook's output contract: (the whole value): missing properties 'region', 'forecast' <nil> } | ✅ pass |
+| read-only-invocation | a function writes into /space; the same notebook as a normal run | invocation fails on the read-only file system; the normal run writes the file | invocation failed (&{execution_error notebook false cell 0 raised OSError: [Errno 30] Read-only file system: 'written.txt' 0x4465272e8980 OSError}); run succeeded; file listed true | ✅ pass |
+| parallel-invocations | two invocations of one space at once | both succeed, and their runs overlap in time | succeeded, succeeded in 7.8s; overlap true | ✅ pass |
 | status-stream | follow the space's status stream, drop the connection after one event, resume | queued, running, succeeded: each once, none lost | queued,running,succeeded | ✅ pass |
-| start-latency | three small invocations, request to result | recorded (target: under 1 s of start-up; see the roadmap) | [3.183242709s 3.178558792s 3.177044666s] | ✅ pass |
+| start-latency | three small invocations, request to result | recorded (target: under 1 s of start-up; see the roadmap) | [4.3566795s 4.354829584s 4.36822375s] | ✅ pass |
 
 ## Notes
 

@@ -516,8 +516,7 @@ def main(argv):
     common = {"papermill_version": papermill.__version__}
     mark("imports_done")
     # While the kernel starts and the notebook runs. A run has one CPU, so
-    # this competes a little with the kernel's start (measured: kernel start
-    # +0.3 s, rendering -0.9 s, a small call 2.9 s -> 2.5 s on Docker).
+    # this delays the kernel's start a little, and saves more at rendering.
     start_warming_renderer()
     state, code, extra = "succeeded", EXIT_OK, {}
     try:

@@ -4,14 +4,14 @@ Measured numbers behind the capacity guidance in [operations.md](operations.md#c
 
 ## Starting a run
 
-A small function call, timed from the request to the result (`start-latency` in the reports, 2026-11-08):
+A small function call, timed from the request to the result (`start-latency` in the reports, 2026-11-15, with 0.1.2's in-process rendering):
 
 | Platform | Request → result |
 |---|---|
-| Docker Desktop (macOS, Apple silicon) | 3.2 s |
-| Linux with Docker Engine, `runc` (2-CPU VM) | 3.6–3.8 s |
-| Linux with Docker Engine, gVisor | 4.2–4.3 s |
-| Kubernetes in kind, one node | 8–32 s: the Pod is scheduled and the files are copied in through the Kubernetes API; not representative of a real cluster |
+| Docker Desktop (macOS, Apple silicon) | 2.5 s |
+| Linux with Docker Engine, `runc` (GitHub's 4-CPU runner, weekly) | 3.4 s |
+| Linux with Docker Engine, gVisor (same runner) | 3.4 s |
+| Kubernetes in kind, one node (Cilium) | 5–6 s: the Pod is scheduled and the files are copied in through the Kubernetes API; not representative of a real cluster |
 
 Almost all of it is starting a fresh container and Python kernel; the notebook itself takes milliseconds. The "Fast starts" item on the [roadmap](../ROADMAP.md) works against this (target: under 1 s).
 
@@ -27,7 +27,7 @@ Almost all of it is starting a fresh container and Python kernel; the notebook i
 | Teardown (outputs copied out, container removed) | 0.04 s | 0.04 s | 2.0 s |
 | Request → result | 2.9 s | 2.5 s | 5.1–5.8 s |
 
-The renderer now warms up in the background while the kernel starts; a run has one CPU, so the kernel's start takes a little longer, and the call is 0.4 s faster overall. What remains is mostly the kernel and the runner's imports (the next steps on the [roadmap](../ROADMAP.md): run nbclient directly and start the kernel sooner, then pre-started containers); on Kubernetes, copying files through the API adds about 4 s.
+The renderer now warms up in the background while the kernel starts; a run has one CPU, so the kernel's start takes a little longer, and the call is 0.4 s faster overall. What remains is mostly CPU work on the run's one CPU: the Jupyter client libraries (about 0.6 s) and the kernel's own imports (about 0.6 s). Starting the kernel earlier doesn't help on one CPU (measured: it made calls slower), and dropping papermill would save at most 0.13 s; going well below this takes pre-started containers (the [roadmap](../ROADMAP.md)'s "fast starts" item). On Kubernetes, copying files through the API adds about 4 s.
 
 ## Several runs at once
 
