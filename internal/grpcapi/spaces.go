@@ -17,6 +17,7 @@ import (
 	pb "github.com/azbyluthfan/nbsandbox/gen/nbsandbox/v1"
 	"github.com/azbyluthfan/nbsandbox/internal/api"
 	"github.com/azbyluthfan/nbsandbox/internal/audit"
+	"github.com/azbyluthfan/nbsandbox/internal/runs"
 	"github.com/azbyluthfan/nbsandbox/internal/spaces"
 )
 
@@ -314,4 +315,38 @@ func (s *server) CreateFolder(ctx context.Context, req *connect.Request[pb.Creat
 		return nil, s.toErr(err)
 	}
 	return connect.NewResponse(toFile(f)), nil
+}
+
+func (s *server) packages(v runs.PackagesView) (*pb.SpacePackages, error) {
+	return conv(v, &pb.SpacePackages{})
+}
+
+func (s *server) GetSpacePackages(ctx context.Context, req *connect.Request[pb.GetSpacePackagesRequest]) (*connect.Response[pb.SpacePackages], error) {
+	if err := validIDs(req.Msg.SpaceId); err != nil {
+		return nil, err
+	}
+	v, err := s.d.Runs.SpacePackages(ctx, owner(ctx), req.Msg.SpaceId)
+	if err != nil {
+		return nil, s.toErr(err)
+	}
+	out, err := s.packages(v)
+	if err != nil {
+		return nil, s.toErr(err)
+	}
+	return connect.NewResponse(out), nil
+}
+
+func (s *server) BuildSpacePackages(ctx context.Context, req *connect.Request[pb.BuildSpacePackagesRequest]) (*connect.Response[pb.SpacePackages], error) {
+	if err := validIDs(req.Msg.SpaceId); err != nil {
+		return nil, err
+	}
+	v, err := s.d.Runs.BuildSpacePackages(ctx, owner(ctx), req.Msg.SpaceId)
+	if err != nil {
+		return nil, s.toErr(err)
+	}
+	out, err := s.packages(v)
+	if err != nil {
+		return nil, s.toErr(err)
+	}
+	return connect.NewResponse(out), nil
 }

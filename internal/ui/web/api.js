@@ -184,6 +184,16 @@ export class Api {
     return data;
   }
 
+  /** The space's own packages (its requirements.txt, built into a package set). */
+  packages(space) {
+    return this.request("GET", `/spaces/${enc(space)}/packages`);
+  }
+
+  /** Builds the space's requirements.txt now. */
+  buildPackages(space) {
+    return this.request("POST", `/spaces/${enc(space)}/packages`);
+  }
+
   runtime() {
     return this.request("GET", "/runtime");
   }

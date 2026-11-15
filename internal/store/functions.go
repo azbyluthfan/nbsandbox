@@ -30,6 +30,9 @@ type FunctionVersion struct {
 	BundleBytes                   int64
 	CreatedBy                     string
 	CreatedAt                     time.Time
+	// PackageLock is the exact packages the version was published with
+	// (a package set's lock), "" if none.
+	PackageLock string
 	// Files is what the version holds (the notebook included): index rows,
 	// recorded with the version; the contents are in object storage.
 	Files []ContentRef
@@ -72,10 +75,10 @@ func (db *DB) AddFunctionVersion(ctx context.Context, fv FunctionVersion) error 
 	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO function_versions(space_id, function, version, notebook, files_json, contract_input, contract_output,
-		                              contract_mode, contract_mode_declared, notebook_sha256, bundle_bytes, created_by, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		                              contract_mode, contract_mode_declared, notebook_sha256, bundle_bytes, created_by, created_at, package_lock)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		fv.SpaceID, fv.Function, fv.Version, fv.Notebook, fv.FilesJSON, fv.ContractInput, fv.ContractOutput,
-		modeOrSingle(fv.ContractMode), fv.ContractModeDeclared, fv.NotebookSHA256, fv.BundleBytes, fv.CreatedBy, at); err != nil {
+		modeOrSingle(fv.ContractMode), fv.ContractModeDeclared, fv.NotebookSHA256, fv.BundleBytes, fv.CreatedBy, at, fv.PackageLock); err != nil {
 		return err
 	}
 	for _, f := range fv.Files {
@@ -127,7 +130,7 @@ func (db *DB) GetFunction(ctx context.Context, spaceID, name string) (Function, 
 }
 
 const fvCols = "space_id, function, version, notebook, files_json, contract_input, contract_output, contract_mode, contract_mode_declared, " +
-	"notebook_sha256, bundle_bytes, created_by, created_at"
+	"notebook_sha256, bundle_bytes, created_by, created_at, package_lock"
 
 func modeOrSingle(m string) string {
 	if m == "" {
@@ -140,7 +143,7 @@ func scanFV(s interface{ Scan(...any) error }) (FunctionVersion, error) {
 	var fv FunctionVersion
 	var at int64
 	err := s.Scan(&fv.SpaceID, &fv.Function, &fv.Version, &fv.Notebook, &fv.FilesJSON, &fv.ContractInput, &fv.ContractOutput,
-		&fv.ContractMode, &fv.ContractModeDeclared, &fv.NotebookSHA256, &fv.BundleBytes, &fv.CreatedBy, &at)
+		&fv.ContractMode, &fv.ContractModeDeclared, &fv.NotebookSHA256, &fv.BundleBytes, &fv.CreatedBy, &at, &fv.PackageLock)
 	fv.CreatedAt = time.UnixMilli(at)
 	return fv, err
 }

@@ -112,6 +112,12 @@ services:
       NBSANDBOX_USERS_FILE: /etc/nbsandbox/users.yaml
       NBSANDBOX_DOCKER_HOST: tcp://socket-proxy:2375
       NBSANDBOX_RUNNER_IMAGE: ${NBSANDBOX_RUNNER_IMAGE:-ghcr.io/azbyluthfan/nbsandbox-runner:0.1.2}
+      # A space's own packages (docs/packages.md): off unless set to true.
+      # Builds run in the builder image, on Docker's bridge network.
+      NBSANDBOX_PACKAGES_ENABLED: ${NBSANDBOX_PACKAGES_ENABLED:-false}
+      NBSANDBOX_PACKAGES_BUILDER_IMAGE: ${NBSANDBOX_PACKAGES_BUILDER_IMAGE:-ghcr.io/azbyluthfan/nbsandbox-runner-builder:0.1.2}
+      NBSANDBOX_PACKAGES_INDEX_URL: ${NBSANDBOX_PACKAGES_INDEX_URL:-https://pypi.org/simple}
+      NBSANDBOX_PACKAGES_ALLOWED: ${NBSANDBOX_PACKAGES_ALLOWED:-}
       NBSANDBOX_LOG_LEVEL: ${NBSANDBOX_LOG_LEVEL:-info}
       # The web UI (off by default). It needs sign-in here: oidc (the
       # identity provider in settings.yaml, with the UI's own client) or
@@ -161,7 +167,7 @@ services:
       - -allowGET=(/v[0-9.]+)?/(_ping|version|info|containers/json|containers/[a-zA-Z0-9_.-]+/(json|logs|stats)|images/.+/json)
       - -allowPOST=(/v[0-9.]+)?/containers/(create|[a-zA-Z0-9_.-]+/(start|stop|kill|wait))
       - -allowDELETE=(/v[0-9.]+)?/containers/[a-zA-Z0-9_.-]+
-      - -allowbindmountfrom=${NBSANDBOX_DATA_DIR:-/srv/nbsandbox}/spaces
+      - -allowbindmountfrom=${NBSANDBOX_DATA_DIR:-/srv/nbsandbox}/spaces,${NBSANDBOX_DATA_DIR:-/srv/nbsandbox}/packages
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks: [docker-api]

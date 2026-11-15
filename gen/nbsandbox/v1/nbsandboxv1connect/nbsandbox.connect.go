@@ -77,6 +77,12 @@ const (
 	// SpaceServiceCreateFolderProcedure is the fully-qualified name of the SpaceService's CreateFolder
 	// RPC.
 	SpaceServiceCreateFolderProcedure = "/nbsandbox.v1.SpaceService/CreateFolder"
+	// SpaceServiceGetSpacePackagesProcedure is the fully-qualified name of the SpaceService's
+	// GetSpacePackages RPC.
+	SpaceServiceGetSpacePackagesProcedure = "/nbsandbox.v1.SpaceService/GetSpacePackages"
+	// SpaceServiceBuildSpacePackagesProcedure is the fully-qualified name of the SpaceService's
+	// BuildSpacePackages RPC.
+	SpaceServiceBuildSpacePackagesProcedure = "/nbsandbox.v1.SpaceService/BuildSpacePackages"
 	// AdminServiceAdminListSpacesProcedure is the fully-qualified name of the AdminService's
 	// AdminListSpaces RPC.
 	AdminServiceAdminListSpacesProcedure = "/nbsandbox.v1.AdminService/AdminListSpaces"
@@ -189,6 +195,10 @@ type SpaceServiceClient interface {
 	MoveFile(context.Context, *connect.Request[v1.MoveFileRequest]) (*connect.Response[v1.File], error)
 	DeleteFile(context.Context, *connect.Request[v1.DeleteFileRequest]) (*connect.Response[v1.DeleteFileResponse], error)
 	CreateFolder(context.Context, *connect.Request[v1.CreateFolderRequest]) (*connect.Response[v1.File], error)
+	// The space's own packages (requirements.txt), built into a package set
+	// its runs import. Get never starts a build; Build asks for it now.
+	GetSpacePackages(context.Context, *connect.Request[v1.GetSpacePackagesRequest]) (*connect.Response[v1.SpacePackages], error)
+	BuildSpacePackages(context.Context, *connect.Request[v1.BuildSpacePackagesRequest]) (*connect.Response[v1.SpacePackages], error)
 }
 
 // NewSpaceServiceClient constructs a client for the nbsandbox.v1.SpaceService service. By default,
@@ -274,23 +284,37 @@ func NewSpaceServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(spaceServiceMethods.ByName("CreateFolder")),
 			connect.WithClientOptions(opts...),
 		),
+		getSpacePackages: connect.NewClient[v1.GetSpacePackagesRequest, v1.SpacePackages](
+			httpClient,
+			baseURL+SpaceServiceGetSpacePackagesProcedure,
+			connect.WithSchema(spaceServiceMethods.ByName("GetSpacePackages")),
+			connect.WithClientOptions(opts...),
+		),
+		buildSpacePackages: connect.NewClient[v1.BuildSpacePackagesRequest, v1.SpacePackages](
+			httpClient,
+			baseURL+SpaceServiceBuildSpacePackagesProcedure,
+			connect.WithSchema(spaceServiceMethods.ByName("BuildSpacePackages")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // spaceServiceClient implements SpaceServiceClient.
 type spaceServiceClient struct {
-	createSpace  *connect.Client[v1.CreateSpaceRequest, v1.Space]
-	listSpaces   *connect.Client[v1.ListSpacesRequest, v1.ListSpacesResponse]
-	getSpace     *connect.Client[v1.GetSpaceRequest, v1.Space]
-	updateSpace  *connect.Client[v1.UpdateSpaceRequest, v1.Space]
-	deleteSpace  *connect.Client[v1.DeleteSpaceRequest, v1.DeleteSpaceResponse]
-	uploadFiles  *connect.Client[v1.UploadFilesRequest, v1.UploadFilesResponse]
-	listFiles    *connect.Client[v1.ListFilesRequest, v1.ListFilesResponse]
-	getFile      *connect.Client[v1.GetFileRequest, v1.FileChunk]
-	putFile      *connect.Client[v1.PutFileRequest, v1.PutFileResponse]
-	moveFile     *connect.Client[v1.MoveFileRequest, v1.File]
-	deleteFile   *connect.Client[v1.DeleteFileRequest, v1.DeleteFileResponse]
-	createFolder *connect.Client[v1.CreateFolderRequest, v1.File]
+	createSpace        *connect.Client[v1.CreateSpaceRequest, v1.Space]
+	listSpaces         *connect.Client[v1.ListSpacesRequest, v1.ListSpacesResponse]
+	getSpace           *connect.Client[v1.GetSpaceRequest, v1.Space]
+	updateSpace        *connect.Client[v1.UpdateSpaceRequest, v1.Space]
+	deleteSpace        *connect.Client[v1.DeleteSpaceRequest, v1.DeleteSpaceResponse]
+	uploadFiles        *connect.Client[v1.UploadFilesRequest, v1.UploadFilesResponse]
+	listFiles          *connect.Client[v1.ListFilesRequest, v1.ListFilesResponse]
+	getFile            *connect.Client[v1.GetFileRequest, v1.FileChunk]
+	putFile            *connect.Client[v1.PutFileRequest, v1.PutFileResponse]
+	moveFile           *connect.Client[v1.MoveFileRequest, v1.File]
+	deleteFile         *connect.Client[v1.DeleteFileRequest, v1.DeleteFileResponse]
+	createFolder       *connect.Client[v1.CreateFolderRequest, v1.File]
+	getSpacePackages   *connect.Client[v1.GetSpacePackagesRequest, v1.SpacePackages]
+	buildSpacePackages *connect.Client[v1.BuildSpacePackagesRequest, v1.SpacePackages]
 }
 
 // CreateSpace calls nbsandbox.v1.SpaceService.CreateSpace.
@@ -353,6 +377,16 @@ func (c *spaceServiceClient) CreateFolder(ctx context.Context, req *connect.Requ
 	return c.createFolder.CallUnary(ctx, req)
 }
 
+// GetSpacePackages calls nbsandbox.v1.SpaceService.GetSpacePackages.
+func (c *spaceServiceClient) GetSpacePackages(ctx context.Context, req *connect.Request[v1.GetSpacePackagesRequest]) (*connect.Response[v1.SpacePackages], error) {
+	return c.getSpacePackages.CallUnary(ctx, req)
+}
+
+// BuildSpacePackages calls nbsandbox.v1.SpaceService.BuildSpacePackages.
+func (c *spaceServiceClient) BuildSpacePackages(ctx context.Context, req *connect.Request[v1.BuildSpacePackagesRequest]) (*connect.Response[v1.SpacePackages], error) {
+	return c.buildSpacePackages.CallUnary(ctx, req)
+}
+
 // SpaceServiceHandler is an implementation of the nbsandbox.v1.SpaceService service.
 type SpaceServiceHandler interface {
 	CreateSpace(context.Context, *connect.Request[v1.CreateSpaceRequest]) (*connect.Response[v1.Space], error)
@@ -372,6 +406,10 @@ type SpaceServiceHandler interface {
 	MoveFile(context.Context, *connect.Request[v1.MoveFileRequest]) (*connect.Response[v1.File], error)
 	DeleteFile(context.Context, *connect.Request[v1.DeleteFileRequest]) (*connect.Response[v1.DeleteFileResponse], error)
 	CreateFolder(context.Context, *connect.Request[v1.CreateFolderRequest]) (*connect.Response[v1.File], error)
+	// The space's own packages (requirements.txt), built into a package set
+	// its runs import. Get never starts a build; Build asks for it now.
+	GetSpacePackages(context.Context, *connect.Request[v1.GetSpacePackagesRequest]) (*connect.Response[v1.SpacePackages], error)
+	BuildSpacePackages(context.Context, *connect.Request[v1.BuildSpacePackagesRequest]) (*connect.Response[v1.SpacePackages], error)
 }
 
 // NewSpaceServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -453,6 +491,18 @@ func NewSpaceServiceHandler(svc SpaceServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(spaceServiceMethods.ByName("CreateFolder")),
 		connect.WithHandlerOptions(opts...),
 	)
+	spaceServiceGetSpacePackagesHandler := connect.NewUnaryHandler(
+		SpaceServiceGetSpacePackagesProcedure,
+		svc.GetSpacePackages,
+		connect.WithSchema(spaceServiceMethods.ByName("GetSpacePackages")),
+		connect.WithHandlerOptions(opts...),
+	)
+	spaceServiceBuildSpacePackagesHandler := connect.NewUnaryHandler(
+		SpaceServiceBuildSpacePackagesProcedure,
+		svc.BuildSpacePackages,
+		connect.WithSchema(spaceServiceMethods.ByName("BuildSpacePackages")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/nbsandbox.v1.SpaceService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case SpaceServiceCreateSpaceProcedure:
@@ -479,6 +529,10 @@ func NewSpaceServiceHandler(svc SpaceServiceHandler, opts ...connect.HandlerOpti
 			spaceServiceDeleteFileHandler.ServeHTTP(w, r)
 		case SpaceServiceCreateFolderProcedure:
 			spaceServiceCreateFolderHandler.ServeHTTP(w, r)
+		case SpaceServiceGetSpacePackagesProcedure:
+			spaceServiceGetSpacePackagesHandler.ServeHTTP(w, r)
+		case SpaceServiceBuildSpacePackagesProcedure:
+			spaceServiceBuildSpacePackagesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -534,6 +588,14 @@ func (UnimplementedSpaceServiceHandler) DeleteFile(context.Context, *connect.Req
 
 func (UnimplementedSpaceServiceHandler) CreateFolder(context.Context, *connect.Request[v1.CreateFolderRequest]) (*connect.Response[v1.File], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.SpaceService.CreateFolder is not implemented"))
+}
+
+func (UnimplementedSpaceServiceHandler) GetSpacePackages(context.Context, *connect.Request[v1.GetSpacePackagesRequest]) (*connect.Response[v1.SpacePackages], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.SpaceService.GetSpacePackages is not implemented"))
+}
+
+func (UnimplementedSpaceServiceHandler) BuildSpacePackages(context.Context, *connect.Request[v1.BuildSpacePackagesRequest]) (*connect.Response[v1.SpacePackages], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.SpaceService.BuildSpacePackages is not implemented"))
 }
 
 // AdminServiceClient is a client for the nbsandbox.v1.AdminService service.

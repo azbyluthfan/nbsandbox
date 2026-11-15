@@ -52,6 +52,10 @@ func (a *API) routes() []Route {
 		{Method: "DELETE", Pattern: "/v1/spaces/{id}/files/{path...}", Handler: a.deleteFile, Auth: true, Op: auth.OpDeleteFile, SpaceScoped: true},
 		{Method: "POST", Pattern: "/v1/spaces/{id}/folders", Handler: a.createFolder, Auth: true, Op: auth.OpCreateFolder, SpaceScoped: true},
 
+		// The space's own packages (requirements.txt), built into a package set.
+		{Method: "GET", Pattern: "/v1/spaces/{id}/packages", Handler: a.getPackages, Auth: true, Op: auth.OpGetSpacePackages, SpaceScoped: true},
+		{Method: "POST", Pattern: "/v1/spaces/{id}/packages", Handler: a.buildPackages, Auth: true, Op: auth.OpBuildSpacePackages, SpaceScoped: true},
+
 		// Functions: published, immutable notebook versions that other
 		// services invoke.
 		{Method: "GET", Pattern: "/v1/spaces/{id}/functions", Handler: a.listFunctions, Auth: true, Op: auth.OpListFunctions, SpaceScoped: true},

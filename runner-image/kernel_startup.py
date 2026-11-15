@@ -66,3 +66,19 @@ def _nbsandbox_bound_output():
 
 _nbsandbox_bound_output()
 del _nbsandbox_bound_output
+
+
+def _nbsandbox_packages():
+    """A space's own packages (its package set), if nbsandboxd mounted one.
+    Added after the image's packages, so they can't replace the runner's;
+    addsitedir also reads the set's .pth files, as a site-packages would."""
+    import os
+    import site
+
+    path = "/opt/nbsandbox/packages"
+    if os.path.isdir(path):
+        site.addsitedir(path)
+
+
+_nbsandbox_packages()
+del _nbsandbox_packages

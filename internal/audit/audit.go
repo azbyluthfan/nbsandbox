@@ -59,6 +59,7 @@ var (
 		auth.OpUploadFiles: true, auth.OpPutFile: true, auth.OpMoveFile: true, auth.OpDeleteFile: true, auth.OpCreateFolder: true,
 		auth.OpPublishFunction: true, auth.OpDeleteFunction: true, auth.OpInvokeFunction: true, auth.OpInvokeFunctionStream: true,
 		auth.OpCreateRun: true, auth.OpCancelRun: true, auth.OpDeleteRun: true, auth.OpPromoteArtifact: true,
+		auth.OpBuildSpacePackages: true,
 	}
 	downloads = map[auth.Op]bool{
 		auth.OpGetFile: true, auth.OpGetRunNotebook: true, auth.OpGetRunHTML: true, auth.OpGetArtifact: true, auth.OpGetRunLog: true,

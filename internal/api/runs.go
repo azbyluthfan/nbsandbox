@@ -43,6 +43,7 @@ func requireValidRunID(next http.Handler) http.Handler {
 func writeRunError(w http.ResponseWriter, r *http.Request, err error) {
 	var (
 		de *runs.DependencyError
+		pf *runs.PackagesFailedError
 		ce *contract.Error
 		sa *runs.ErrStillActive
 	)
@@ -63,6 +64,14 @@ func writeRunError(w http.ResponseWriter, r *http.Request, err error) {
 		WriteError(w, http.StatusServiceUnavailable, CodeDockerUnavailable, err.Error())
 	case errors.Is(err, runs.ErrSpaceBusy), errors.Is(err, runs.ErrNotFinished), errors.Is(err, runs.ErrAlreadyFinished),
 		errors.Is(err, runs.ErrFunctionBusy):
+		WriteError(w, http.StatusConflict, CodeConflict, err.Error())
+	case errors.As(err, &pf):
+		WriteJSON(w, http.StatusUnprocessableEntity, map[string]any{
+			"error":     ErrorDetail{Code: CodePackagesFailed, Message: pf.Error()},
+			"build_log": pf.Log,
+		})
+	case errors.Is(err, runs.ErrPackagesBuilding):
+		w.Header().Set("Retry-After", "30")
 		WriteError(w, http.StatusConflict, CodeConflict, err.Error())
 	case errors.Is(err, runs.ErrIdempotencyMismatch):
 		WriteError(w, http.StatusUnprocessableEntity, CodeUnprocessable, err.Error())
@@ -330,4 +339,29 @@ func (a *API) getRuntime(w http.ResponseWriter, r *http.Request) {
 		info.Modules = []string{}
 	}
 	WriteJSON(w, http.StatusOK, info)
+}
+
+// getPackages is GET /v1/spaces/{id}/packages: the space's package set.
+func (a *API) getPackages(w http.ResponseWriter, r *http.Request) {
+	v, err := a.d.Runs.SpacePackages(r.Context(), user(r), r.PathValue("id"))
+	if err != nil {
+		writeRunError(w, r, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, v)
+}
+
+// buildPackages is POST /v1/spaces/{id}/packages: build the space's
+// requirements.txt now. 202 while it builds; 200 if it is already built.
+func (a *API) buildPackages(w http.ResponseWriter, r *http.Request) {
+	v, err := a.d.Runs.BuildSpacePackages(r.Context(), user(r), r.PathValue("id"))
+	if err != nil {
+		writeRunError(w, r, err)
+		return
+	}
+	code := http.StatusAccepted
+	if v.Status == "ready" || v.Status == "failed" {
+		code = http.StatusOK
+	}
+	WriteJSON(w, code, v)
 }

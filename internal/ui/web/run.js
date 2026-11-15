@@ -58,13 +58,15 @@ export function showRun(main, api, space, runId, onChange) {
   function renderHeader(run) {
     // Redraw only when something shown changes: replacing the Cancel button
     // every poll could swallow a click that lands mid-redraw.
-    const key = [run.status, run.queue_position, run.message, run.started_at].join("|");
+    const key = [run.status, run.queue_position, run.waiting_for, run.message, run.started_at].join("|");
     if (key === lastHeader) return;
     lastHeader = key;
     // Native append() would print null as text: only pass real nodes.
     const title = run.function ? `${run.function} v${run.version}` : run.notebook;
     const parts = [el("h1", {}, title), badge(run.status)];
-    if (run.status === "queued" && run.queue_position) {
+    if (run.status === "queued" && run.waiting_for === "packages") {
+      parts.push(el("span", { class: "muted" }, "waiting for the space's packages to be built"));
+    } else if (run.status === "queued" && run.queue_position) {
       parts.push(el("span", { class: "muted" }, `position ${run.queue_position} in the queue`));
     }
     if (ACTIVE.has(run.status)) {

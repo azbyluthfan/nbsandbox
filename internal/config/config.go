@@ -21,6 +21,7 @@ import (
 	"github.com/azbyluthfan/nbsandbox/internal/auth"
 	"github.com/azbyluthfan/nbsandbox/internal/blob/azstore"
 	"github.com/azbyluthfan/nbsandbox/internal/blob/s3store"
+	"github.com/azbyluthfan/nbsandbox/internal/packages"
 	"github.com/azbyluthfan/nbsandbox/internal/uiauth"
 )
 
@@ -59,6 +60,9 @@ type Settings struct {
 	UI UI `yaml:"ui"`
 	// Audit records who did what (docs/operations.md#audit-log).
 	Audit Audit `yaml:"audit"`
+	// Packages builds a space's requirements.txt into a package set its
+	// runs import (docs/packages.md).
+	Packages Packages `yaml:"packages"`
 
 	Auth Auth `yaml:"auth"`
 
@@ -146,6 +150,29 @@ type UI struct {
 	NoLoginBeyondLoopback bool      `yaml:"no_login_beyond_loopback"`
 	Session               UISession `yaml:"session"`
 	OIDC                  UIOIDC    `yaml:"oidc"`
+}
+
+// Packages configures custom packages per space.
+type Packages struct {
+	Enabled bool `yaml:"enabled"`
+	// IndexURL is the package index builds use (pip's --index-url).
+	IndexURL string `yaml:"index_url"`
+	// Allowed lists the distributions spaces may install (dependencies
+	// included); empty allows any.
+	Allowed []string `yaml:"allowed"`
+	// MaxSize bounds a set, unpacked.
+	MaxSize Size `yaml:"max_size"`
+	// BuildTimeout bounds one build.
+	BuildTimeout time.Duration `yaml:"build_timeout"`
+	// Retention removes sets nobody used for this long.
+	Retention time.Duration `yaml:"retention"`
+	// CacheSize bounds the sets a worker keeps unpacked on its disk.
+	CacheSize Size `yaml:"cache_size"`
+	// BuilderImage has the runner's packages and pip (make runner-image).
+	BuilderImage string `yaml:"builder_image"`
+	// Network is the Docker network of build containers: the only
+	// containers with network access.
+	Network string `yaml:"network"`
 }
 
 // Audit configures the audit log.
@@ -338,6 +365,9 @@ func Default() Settings {
 		},
 		ShutdownGrace: 60 * time.Second,
 		Audit:         Audit{Enabled: true, Retention: 90 * 24 * time.Hour, Downloads: true},
+		Packages: Packages{Enabled: false, IndexURL: "https://pypi.org/simple", Allowed: []string{}, MaxSize: GiB,
+			BuildTimeout: 10 * time.Minute, Retention: 30 * 24 * time.Hour, CacheSize: 20 * GiB,
+			BuilderImage: "nbsandbox-runner-builder:dev", Network: "bridge"},
 		UI: UI{Enabled: false, Listen: "127.0.0.1:8090", Auth: "none",
 			Session: UISession{Idle: time.Hour, Max: 12 * time.Hour},
 			OIDC: UIOIDC{Scopes: []string{"openid", "profile", auth.ScopeRead, auth.ScopeSpacesWrite, auth.ScopeFilesWrite,
@@ -480,6 +510,9 @@ func applyEnv(s *Settings, getenv func(string) string) error {
 		"NBSANDBOX_RUNNER_IMAGE":            &s.Docker.Image,
 		"NBSANDBOX_UI_LISTEN":               &s.UI.Listen,
 		"NBSANDBOX_UI_AUTH":                 &s.UI.Auth,
+		"NBSANDBOX_PACKAGES_INDEX_URL":      &s.Packages.IndexURL,
+		"NBSANDBOX_PACKAGES_BUILDER_IMAGE":  &s.Packages.BuilderImage,
+		"NBSANDBOX_PACKAGES_NETWORK":        &s.Packages.Network,
 		"NBSANDBOX_UI_PUBLIC_URL":           &s.UI.PublicURL,
 		"NBSANDBOX_UI_OIDC_CLIENT_ID":       &s.UI.OIDC.ClientID,
 		"NBSANDBOX_UI_OIDC_CLIENT_SECRET":   &s.UI.OIDC.ClientSecret,
@@ -506,6 +539,9 @@ func applyEnv(s *Settings, getenv func(string) string) error {
 		}
 		s.UI.NoLoginBeyondLoopback = b
 	}
+	if v := getenv("NBSANDBOX_PACKAGES_ALLOWED"); v != "" {
+		s.Packages.Allowed = strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' })
+	}
 	if v := getenv("NBSANDBOX_UI_OIDC_SCOPES"); v != "" {
 		s.UI.OIDC.Scopes = strings.Fields(strings.ReplaceAll(v, ",", " "))
 	}
@@ -513,6 +549,7 @@ func applyEnv(s *Settings, getenv func(string) string) error {
 		"NBSANDBOX_RUN_TIMEOUT":        &s.Limits.Timeout,
 		"NBSANDBOX_UI_SESSION_IDLE":    &s.UI.Session.Idle,
 		"NBSANDBOX_AUDIT_RETENTION":    &s.Audit.Retention,
+		"NBSANDBOX_PACKAGES_TIMEOUT":   &s.Packages.BuildTimeout,
 		"NBSANDBOX_UI_SESSION_MAX":     &s.UI.Session.Max,
 		"NBSANDBOX_SHUTDOWN_GRACE":     &s.ShutdownGrace,
 		"NBSANDBOX_RUN_RETENTION":      &s.Runs.Retention,
@@ -536,6 +573,7 @@ func applyEnv(s *Settings, getenv func(string) string) error {
 		"NBSANDBOX_AZURE_CREATE_CONTAINER": &s.Storage.Azure.CreateContainer,
 		"NBSANDBOX_REQUIRE_SCHEMAS":        &s.Functions.RequireSchemas,
 		"NBSANDBOX_AUDIT_ENABLED":          &s.Audit.Enabled,
+		"NBSANDBOX_PACKAGES_ENABLED":       &s.Packages.Enabled,
 		"NBSANDBOX_AUDIT_DOWNLOADS":        &s.Audit.Downloads,
 	} {
 		if v := getenv(name); v != "" {
@@ -708,6 +746,28 @@ func (s Settings) Validate() error {
 	case "warn", "reject":
 	default:
 		add("runs.dependency_check: must be warn or reject, got %q", s.Runs.DependencyCheck)
+	}
+	if p := s.Packages; p.Enabled {
+		if s.Backend == "kubernetes" {
+			add("packages.enabled: custom packages run on the docker backend only, for now")
+		}
+		if u, err := url.Parse(p.IndexURL); err != nil || u.Scheme != "https" || u.Host == "" {
+			add("packages.index_url: must be an https URL, got %q", p.IndexURL)
+		}
+		if strings.TrimSpace(p.BuilderImage) == "" || strings.TrimSpace(p.Network) == "" {
+			add("packages: builder_image and network must be set")
+		}
+	}
+	if p := s.Packages; p.MaxSize < MiB || p.MaxSize > 50*GiB || p.CacheSize < p.MaxSize {
+		add("packages: max_size must be between 1MiB and 50GiB, and cache_size at least max_size (got %s, %s)", p.MaxSize, p.CacheSize)
+	}
+	if p := s.Packages; p.BuildTimeout < time.Minute || p.BuildTimeout > 2*time.Hour || p.Retention < 24*time.Hour {
+		add("packages: build_timeout must be between 1m and 2h, and retention at least 24h (got %s, %s)", p.BuildTimeout, p.Retention)
+	}
+	for _, a := range s.Packages.Allowed {
+		if _, err := packages.Parse([]byte(a)); err != nil || strings.ContainsAny(a, "=<>!~;[ ") {
+			add("packages.allowed: %q is not a distribution name", a)
+		}
 	}
 	if s.Audit.Retention < 24*time.Hour || s.Audit.Retention > 10*365*24*time.Hour {
 		add("audit.retention: must be between 24h and 87600h (10 years), got %s", s.Audit.Retention)

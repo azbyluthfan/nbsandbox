@@ -364,7 +364,8 @@ function renderRuns() {
   if (!state.space) return;
   if (state.runs.length === 0) return list.append(el("li", { class: "empty-note" }, "No runs yet. Open a notebook and press Run."));
   for (const r of state.runs) {
-    const detail = r.status === "queued" && r.queue_position ? `position ${r.queue_position} in the queue` : duration(r);
+    const detail = r.status === "queued" && r.waiting_for === "packages" ? "waiting for packages"
+      : r.status === "queued" && r.queue_position ? `position ${r.queue_position} in the queue` : duration(r);
     list.append(el("li", {}, el("button", { type: "button", onclick: () => go(state.user, state.space, "r", r.id), title: r.id },
       badge(r.status), el("span", { class: "nb" }, runTitle(r)), el("span", { class: "when" }, timeAgo(r.created_at)),
       el("span", { class: "sub" }, [r.id.slice(0, 8), detail, r.read_only_space ? "read-only" : ""].filter(Boolean).join(" · ")))));
@@ -660,6 +661,70 @@ function createActions(dir) {
 }
 
 // The space's home: notebooks first, then recent runs, functions and files.
+/**
+ * The space's own packages: its requirements.txt, built into a package set
+ * its runs import. Hidden when this nbsandbox has package sets off. Polls
+ * while a build is under way, until the page changes.
+ */
+function packagesSection(space) {
+  const section = el("section", { class: "section packages", hidden: true });
+  const api = state.api;
+  const render = (p) => {
+    if (!section.isConnected && section.dataset.shown) return; // the page changed
+    section.dataset.shown = "1";
+    if (!p.enabled) {
+      section.hidden = true;
+      return;
+    }
+    section.hidden = false;
+    const build = (label) => el("button", { type: "button", onclick: async (e) => {
+      e.target.disabled = true;
+      try {
+        render(await api.buildPackages(space));
+      } catch (err) {
+        toast(err.message);
+        e.target.disabled = false;
+      }
+    } }, icon("box"), label);
+    const head = el("div", { class: "section-head" }, el("h2", {}, "Packages"),
+      el("span", { class: "muted" }, "from requirements.txt, added to the runner image's"));
+    const body = el("div", { class: "card packages-card" });
+    const log = p.build_log ? el("details", {}, el("summary", {}, "Build log"), el("pre", { class: "log" }, p.build_log)) : null;
+    switch (p.status) {
+      case "none":
+        body.append(el("p", { class: "muted" },
+          "Add a requirements.txt to give this space's runs more Python packages (wheels from the package index; built once, then cached)."));
+        break;
+      case "not_built":
+        body.append(el("p", {}, "requirements.txt hasn't been built yet. The next run builds it first, or build it now."), build("Build now"));
+        break;
+      case "pending":
+      case "building":
+        body.append(el("p", {}, el("span", { class: "badge running" }, "building"), " Building the packages… runs that need them wait."));
+        setTimeout(() => api.packages(space).then(render).catch(() => {}), 2000);
+        break;
+      case "ready": {
+        const n = (p.installed || []).length;
+        body.append(
+          el("p", {}, el("span", { class: "badge succeeded" }, "ready"), ` ${n} package${n === 1 ? "" : "s"} · ${formatBytes(p.size_bytes || 0)}`,
+            p.built_at ? el("span", { class: "muted" }, ` · built ${timeAgo(p.built_at)}`) : null),
+          n ? el("table", { class: "list" }, el("tbody", {}, p.installed.map((i) => el("tr", {}, el("td", {}, i.name), el("td", { class: "muted" }, i.version))))) : null,
+          log);
+        break;
+      }
+      case "failed":
+        body.append(el("p", { class: "error-text" }, badge("failed"), " ", p.error || "The packages could not be built."), log,
+          el("p", { class: "muted" }, "Fix requirements.txt and run again; a failed build is retried after a few minutes."), build("Try again"));
+        break;
+      default:
+        body.append(el("p", { class: "muted" }, p.status));
+    }
+    clear(section).append(head, body);
+  };
+  api.packages(space).then(render).catch(() => {});
+  return section;
+}
+
 function showOverview() {
   const sp = state.spaces.find((s) => s.id === state.space);
   const page = newPage();
@@ -689,6 +754,7 @@ function showOverview() {
         el("button", { type: "button", onclick: () => newNotebook("") }, icon("plus"), "New notebook"), uploadButton(() => ""))));
   }
   page.append(nbSection);
+  page.append(packagesSection(state.space));
 
   if (state.runs.length) {
     const recent = state.runs.slice(0, 6);

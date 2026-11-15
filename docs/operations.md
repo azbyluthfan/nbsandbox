@@ -111,10 +111,10 @@ The runner image is the only environment notebooks run in. It is rebuilt monthly
 - **minor:** packages added;
 - **major:** status format or Python major version.
 
-To add packages for your own deployment:
+To add packages for every space of your deployment (for one space's own, see [packages.md](packages.md)):
 1. Edit `runner-image/requirements.in`.
 2. Lock it with `make runner-lock`, which pins exact versions with hashes.
-3. Build with `make runner-image RUNNER_IMAGE=nbsandbox-runner:custom`; this also writes the package manifest label nbsandboxd needs.
+3. Build with `make runner-image RUNNER_IMAGE=nbsandbox-runner:custom BUILDER_IMAGE=nbsandbox-runner-builder:custom`. This also writes the package manifest label nbsandboxd needs, and builds the matching builder image. With custom packages on, set `packages.builder_image` to it: package sets must be built against the runner's exact packages.
 4. Check with `make runner-test RUNNER_IMAGE=nbsandbox-runner:custom`.
 
 ## Capacity
@@ -144,7 +144,7 @@ Retention (`runs.retention`, 30 days) deletes old runs automatically. Raise `run
 
 ### Disk full
 - **Symptom:** `/readyz` says `data_dir: only N MiB free`; uploads or runs fail.
-- **Check:** `df -h /srv/nbsandbox` (working copies of active runs) and `sudo docker system df -v | grep -E 'nbsandbox_(objects|pgdata)'` (the object store and the database). `GET /v1/admin/spaces` lists every owner's spaces; `GET /v1/spaces/{id}` shows a space's usage to its owner.
+- **Check:** `df -h /srv/nbsandbox` (working copies of active runs, and the package sets in `packages/`, bounded by `packages.cache_size`) and `sudo docker system df -v | grep -E 'nbsandbox_(objects|pgdata)'` (the object store and the database). `GET /v1/admin/spaces` lists every owner's spaces; `GET /v1/spaces/{id}` shows a space's usage to its owner.
 - **Fix:** lower `runs.retention` (old runs and their outputs go, and contents nothing refers to any more are removed an hour later), ask users to delete old runs or spaces, or grow the disk. Docker images can be pruned with `docker image prune` (not the runner image in use).
 
 ### A runaway run

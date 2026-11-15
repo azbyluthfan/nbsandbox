@@ -312,6 +312,7 @@ func (s *server) toErr(err error) error {
 		cte  *runs.ContractError
 		sa   *runs.ErrStillActive
 		de   *runs.DependencyError
+		pf   *runs.PackagesFailedError
 		code connect.Code
 	)
 	switch {
@@ -325,7 +326,8 @@ func (s *server) toErr(err error) error {
 		code = connect.CodeAlreadyExists
 	case errors.Is(err, spaces.ErrActiveRun), errors.Is(err, spaces.ErrNotEmpty), errors.As(err, &ve), errors.As(err, &sa),
 		errors.Is(err, runs.ErrSpaceBusy), errors.Is(err, runs.ErrNotFinished), errors.Is(err, runs.ErrAlreadyFinished),
-		errors.Is(err, runs.ErrFunctionBusy), errors.Is(err, runs.ErrIdempotencyMismatch), errors.As(err, &de):
+		errors.Is(err, runs.ErrFunctionBusy), errors.Is(err, runs.ErrIdempotencyMismatch), errors.As(err, &de),
+		errors.As(err, &pf), errors.Is(err, runs.ErrPackagesBuilding):
 		code = connect.CodeFailedPrecondition
 	case errors.As(err, &pe), errors.As(err, &ie), errors.As(err, &cte):
 		code = connect.CodeInvalidArgument

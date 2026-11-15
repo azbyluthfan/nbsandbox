@@ -125,18 +125,21 @@ tools: ## Show which developer tools are installed
 		else printf "  %-14s MISSING\n" $$t; fi; \
 	done
 
-RUNNER_IMAGE ?= nbsandbox-runner:dev
+RUNNER_IMAGE  ?= nbsandbox-runner:dev
+BUILDER_IMAGE ?= nbsandbox-runner-builder:dev
 NODE_IMAGE   ?= node:22.11.0-alpine3.20
 PY_BASE      := python:3.13-slim@sha256:09a17cad02668ae61ece136b4fd36ac3849e14f670ebedb637ea3e15580525bc
 
 .PHONY: runner-image
-runner-image: ## Build the runner image with its manifest label (Docker needed)
-	docker build -q -t $(RUNNER_IMAGE)-unlabelled runner-image >/dev/null
+runner-image: ## Build the runner image with its manifest label, and the builder image for package sets (Docker needed)
+	docker build -q --target runner -t $(RUNNER_IMAGE)-unlabelled runner-image >/dev/null
 	@mkdir -p bin
 	docker run --rm --network none --entrypoint python $(RUNNER_IMAGE)-unlabelled /opt/nbsandbox/export_manifest.py > bin/runner-manifest.json
 	@# Second build is fully cached; it only adds the manifest label.
-	docker build -q --label "io.nbsandbox.manifest=$$(cat bin/runner-manifest.json)" -t $(RUNNER_IMAGE) runner-image >/dev/null
+	docker build -q --target runner --label "io.nbsandbox.manifest=$$(cat bin/runner-manifest.json)" -t $(RUNNER_IMAGE) runner-image >/dev/null
 	@echo "built $(RUNNER_IMAGE) ($$(wc -c < bin/runner-manifest.json) byte manifest)"
+	docker build -q --target builder -t $(BUILDER_IMAGE) runner-image >/dev/null
+	@echo "built $(BUILDER_IMAGE) (builds spaces' package sets)"
 
 .PHONY: runner-test
 runner-test: ## Runner image tests and wrapper unit tests (Docker needed)
@@ -425,6 +428,15 @@ test-keycloak: dev-data ## End-to-end auth with a real Keycloak (tokens, scopes,
 	@# Back to the plain dev stack (Keycloak shares nbsandboxd's network, so it goes first).
 	$(KEYCLOAK_COMPOSE) stop keycloak
 	$(KEYCLOAK_COMPOSE) rm --force keycloak
+	$(COMPOSE) up -d
+
+.PHONY: test-packages
+test-packages: dev-data runner-image ## A space's own packages, end to end (the dev stack with packages on; builds reach PyPI)
+	@$(STOP_KIND)
+	-@$(CLUSTER) stop >/dev/null 2>&1
+	NBSANDBOX_PACKAGES_ENABLED=true NBSANDBOX_RUN_TIMEOUT=60s $(COMPOSE) up -d --build
+	NBSANDBOX_TEST_PACKAGES=1 $(GO) test -tags integration -count=1 -timeout 15m -run '^TestPackages' $(TESTFLAGS) ./tests/integration/
+	@# Back to the plain dev stack.
 	$(COMPOSE) up -d
 
 # The slow tests: they wait on real limits (CPU share, the run timeout,

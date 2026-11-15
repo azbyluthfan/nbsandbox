@@ -54,7 +54,7 @@ func buildContainerConfig(spec isolation.RunSpec) (*container.Config, *container
 		// Files: only this space's files (or a published bundle) at /space,
 		// and only this run's output folder at /run. Other spaces, other
 		// runs and published versions don't exist inside.
-		Binds: []string{spec.SpaceDir + ":/space:" + spaceMode, spec.RunDir + ":/run:rw"},
+		Binds: runBinds(spec, spaceMode),
 		// Network: none at all, only loopback. (Not also NetworkDisabled:
 		// under gVisor that removes loopback too, and Jupyter's ZeroMQ then
 		// aborts the kernel at start; under runc it adds nothing.)
@@ -113,4 +113,68 @@ func outputMode(m string) string {
 		return "single"
 	}
 	return m
+}
+
+// LabelBuild marks package set build containers (not runs: the run
+// reconciler never sees them).
+const (
+	LabelBuild       = "nbsandbox.build"
+	LabelBuildWorker = "nbsandbox.build.worker"
+)
+
+// BuildContainerName is a build container's name.
+func BuildContainerName(id string) string { return "nbsandbox-build-" + id }
+
+// buildBuilderConfig turns a BuildSpec into Docker settings: a run's
+// hardening (non-root, no capabilities, no new privileges, read-only root,
+// limits, the configured runtime), but with network, to reach the package
+// index, and no space files: only the request (read-only) and the output
+// folder.
+func buildBuilderConfig(spec isolation.BuildSpec) (*container.Config, *container.HostConfig) {
+	init := true
+	pids := spec.Limits.PIDs
+	cfg := &container.Config{
+		Image:  spec.Image,
+		User:   "1000:1000",
+		Env:    []string{"HOME=/tmp", "PYTHONUNBUFFERED=1", "PIP_NO_CACHE_DIR=1"},
+		Labels: map[string]string{LabelBuild: spec.ID, LabelBuildWorker: spec.Worker},
+	}
+	host := &container.HostConfig{
+		Binds:          []string{spec.InDir + ":/in:ro", spec.OutDir + ":/out:rw"},
+		NetworkMode:    container.NetworkMode(spec.Network),
+		IpcMode:        "private",
+		Init:           &init,
+		Privileged:     false,
+		CapDrop:        []string{"ALL"},
+		SecurityOpt:    []string{"no-new-privileges"},
+		ReadonlyRootfs: true,
+		// pip unpacks into /tmp before copying to /out: exec is needed for
+		// the build environment's python.
+		Tmpfs: map[string]string{"/tmp": "rw,nosuid,nodev,exec,size=" + strconv.FormatInt(spec.Limits.TmpfsBytes, 10)},
+		LogConfig: container.LogConfig{Type: "local", Config: map[string]string{
+			"max-size": strconv.FormatInt(spec.Limits.LogBytes, 10), "max-file": "1", "compress": "false",
+		}},
+		Runtime:    spec.Runtime,
+		AutoRemove: false,
+		Resources: container.Resources{
+			Memory:     spec.Limits.MemoryBytes,
+			MemorySwap: spec.Limits.MemoryBytes,
+			NanoCPUs:   spec.Limits.NanoCPUs,
+			PidsLimit:  &pids,
+		},
+	}
+	if spec.Runtime == "runsc" {
+		gvisorPIDs(host, spec.Limits.PIDs)
+	}
+	return cfg, host
+}
+
+// runBinds are a run's mounts: its space (or bundle), its output folder, and
+// its space's package set, read-only, if it has one.
+func runBinds(spec isolation.RunSpec, spaceMode string) []string {
+	b := []string{spec.SpaceDir + ":/space:" + spaceMode, spec.RunDir + ":/run:rw"}
+	if spec.PackagesDir != "" {
+		b = append(b, spec.PackagesDir+":"+isolation.PackagesPath+":ro")
+	}
+	return b
 }

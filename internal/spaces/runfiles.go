@@ -406,7 +406,11 @@ func (s *Service) ReadNotebook(ctx context.Context, spaceID, p string) ([]byte, 
 
 // ReadSpaceFile reads a small user file, if it exists (e.g. requirements.txt).
 func (s *Service) ReadSpaceFile(spaceID, p string, max int64) ([]byte, bool) {
-	ctx := context.Background()
+	return s.ReadSpaceFileContext(context.Background(), spaceID, p, max)
+}
+
+// ReadSpaceFileContext is ReadSpaceFile with the caller's context.
+func (s *Service) ReadSpaceFileContext(ctx context.Context, spaceID, p string, max int64) ([]byte, bool) {
 	row, err := s.db.GetFile(ctx, spaceID, p)
 	if err != nil || row.Kind != "file" || row.Size > max {
 		return nil, false

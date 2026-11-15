@@ -167,29 +167,32 @@ func runtimeName(r string) string {
 
 // View is a run as the API shows it.
 type View struct {
-	ID                 string          `json:"id"`
-	SpaceID            string          `json:"space_id"`
-	Notebook           string          `json:"notebook"`
-	NotebookSHA256     string          `json:"notebook_sha256,omitempty"`
-	Function           string          `json:"function,omitempty"`
-	Version            int             `json:"version,omitempty"`
-	ReadOnlySpace      bool            `json:"read_only_space"`
-	Client             string          `json:"client,omitempty"` // the application that started it on its user's behalf
-	Parameters         json.RawMessage `json:"parameters"`
-	Status             string          `json:"status"`
-	ErrorKind          string          `json:"error_kind,omitempty"`
-	Fault              string          `json:"fault,omitempty"`
-	Retryable          bool            `json:"retryable"`
-	Message            string          `json:"message,omitempty"`
-	CancelledBy        string          `json:"cancelled_by,omitempty"`
-	CancelReason       string          `json:"cancel_reason,omitempty"`
-	OutputBytes        int64           `json:"output_bytes,omitempty"`
-	QueuePosition      int             `json:"queue_position,omitempty"` // 1 = next to start
-	DependencyWarnings []deps.Warning  `json:"dependency_warnings,omitempty"`
-	CreatedAt          time.Time       `json:"created_at"`
-	StartedAt          *time.Time      `json:"started_at,omitempty"`
-	FinishedAt         *time.Time      `json:"finished_at,omitempty"`
-	Result             *Result         `json:"result,omitempty"`
+	ID             string          `json:"id"`
+	SpaceID        string          `json:"space_id"`
+	Notebook       string          `json:"notebook"`
+	NotebookSHA256 string          `json:"notebook_sha256,omitempty"`
+	Function       string          `json:"function,omitempty"`
+	Version        int             `json:"version,omitempty"`
+	ReadOnlySpace  bool            `json:"read_only_space"`
+	Client         string          `json:"client,omitempty"` // the application that started it on its user's behalf
+	Parameters     json.RawMessage `json:"parameters"`
+	Status         string          `json:"status"`
+	ErrorKind      string          `json:"error_kind,omitempty"`
+	Fault          string          `json:"fault,omitempty"`
+	Retryable      bool            `json:"retryable"`
+	Message        string          `json:"message,omitempty"`
+	CancelledBy    string          `json:"cancelled_by,omitempty"`
+	CancelReason   string          `json:"cancel_reason,omitempty"`
+	OutputBytes    int64           `json:"output_bytes,omitempty"`
+	QueuePosition  int             `json:"queue_position,omitempty"` // 1 = next to start
+	// WaitingFor, while queued, says what the run waits for: "packages"
+	// (its space's package set is being built).
+	WaitingFor         string         `json:"waiting_for,omitempty"`
+	DependencyWarnings []deps.Warning `json:"dependency_warnings,omitempty"`
+	CreatedAt          time.Time      `json:"created_at"`
+	StartedAt          *time.Time     `json:"started_at,omitempty"`
+	FinishedAt         *time.Time     `json:"finished_at,omitempty"`
+	Result             *Result        `json:"result,omitempty"`
 }
 
 func (m *Manager) view(ctx context.Context, r store.Run, withResult bool) View {
@@ -207,6 +210,11 @@ func (m *Manager) view(ctx context.Context, r store.Run, withResult bool) View {
 	if r.Status == StatusQueued {
 		if pos, err := m.d.DB.QueuePosition(ctx, r.ID); err == nil {
 			v.QueuePosition = pos
+		}
+		if r.PackageKey != "" && m.d.Packages != nil {
+			if ps, err := m.d.Packages.Status(ctx, r.PackageKey); err == nil && ps.Status != store.PackagesReady {
+				v.WaitingFor = "packages"
+			}
 		}
 	}
 	if withResult && r.Terminal() {

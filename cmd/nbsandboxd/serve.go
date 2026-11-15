@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	goruntime "runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -32,6 +33,7 @@ import (
 	"github.com/azbyluthfan/nbsandbox/internal/grpcapi"
 	"github.com/azbyluthfan/nbsandbox/internal/isolation"
 	"github.com/azbyluthfan/nbsandbox/internal/obs"
+	"github.com/azbyluthfan/nbsandbox/internal/packages"
 	"github.com/azbyluthfan/nbsandbox/internal/runs"
 	"github.com/azbyluthfan/nbsandbox/internal/spaces"
 	"github.com/azbyluthfan/nbsandbox/internal/store"
@@ -190,6 +192,24 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 	} else {
 		workers := &workerView{db: db, within: cfg.Runs.Lease}
 		runDeps.Manifest, runDeps.Available, runtime = workers.Manifest, workers.Available, workers.Runtime
+		runDeps.ImageID = workers.ImageID
+	}
+	// Package sets: every node computes their keys; workers on Docker build
+	// them.
+	var builder isolation.PackageBuilder
+	if pb, ok := backend.(isolation.PackageBuilder); ok && cfg.Executes() {
+		builder = pb
+	}
+	pkgs := packages.New(packages.Config{
+		Enabled: cfg.Packages.Enabled, IndexURL: cfg.Packages.IndexURL, Allowed: cfg.Packages.Allowed,
+		MaxSize: int64(cfg.Packages.MaxSize), BuildTimeout: cfg.Packages.BuildTimeout, Retention: cfg.Packages.Retention,
+		CacheSize: int64(cfg.Packages.CacheSize), BuilderImage: cfg.Packages.BuilderImage, Network: cfg.Packages.Network,
+		Runtime: cfg.Docker.Runtime, Limits: limits, DataDir: cfg.DataDir, WorkerID: id, Platform: "linux/" + goruntime.GOARCH,
+	}, db, blobs, builder, logger)
+	runDeps.Packages = pkgs
+	if cfg.Packages.Enabled {
+		logger.Info("custom packages per space", "index", cfg.Packages.IndexURL, "allowed", len(cfg.Packages.Allowed),
+			"builds_here", builder != nil, "builder_image", cfg.Packages.BuilderImage, "network", cfg.Packages.Network)
 	}
 	mgr := runs.New(runs.Config{
 		Image: cfg.Docker.Image, Runtime: runtimeLabel(cfg), Limits: limits, Timeout: cfg.Limits.Timeout,
@@ -206,6 +226,7 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 	if err := mgr.Start(ctx); err != nil {
 		return err
 	}
+	go pkgs.Run(ctx) // builds only on a worker with package sets on
 	// The background work outlives the signal: it stops only after the
 	// graceful shutdown below, so it doesn't inherit ctx's cancellation.
 	bg := context.WithoutCancel(ctx)

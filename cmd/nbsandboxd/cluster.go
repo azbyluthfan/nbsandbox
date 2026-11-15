@@ -129,6 +129,15 @@ func (v *workerView) Manifest() *deps.Manifest {
 	return v.manifest
 }
 
+// ImageID is the runner image's ID, as a live worker reported it ("" if
+// none): part of a package set's key.
+func (v *workerView) ImageID() string {
+	v.refresh()
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.runtime.Image.ID
+}
+
 // Runtime is GET /v1/runtime, as a live worker reported it.
 func (v *workerView) Runtime() (api.RuntimeInfo, error) {
 	v.refresh()

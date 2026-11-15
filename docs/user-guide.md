@@ -109,7 +109,9 @@ The runner image has a fixed set of packages. `GET /v1/runtime` lists them with 
 curl -s -u "$NBSANDBOX_USER:$NBSANDBOX_PASSWORD" "$NBSANDBOX_URL/v1/runtime"
 ```
 
-When you start a run, nbsandbox reads the notebook's imports and the space's `requirements.txt`, if there is one, and reports packages the image doesn't have in `dependency_warnings`. The run still starts, and probably fails with `ModuleNotFoundError` (`error_kind: missing_package`). An operator can set `runs.dependency_check: reject` to refuse such runs with `422` instead. To get a package added, ask the operator ([operations.md](operations.md#runner-image)).
+When you start a run, nbsandbox reads the notebook's imports and the space's `requirements.txt`, if there is one, and reports packages the image doesn't have in `dependency_warnings`. The run still starts, and probably fails with `ModuleNotFoundError` (`error_kind: missing_package`). An operator can set `runs.dependency_check: reject` to refuse such runs with `422` instead.
+
+If the operator has turned on custom packages, `requirements.txt` does more: its packages are installed once into a package set, and the space's runs import them ([packages.md](packages.md)). The first run after it changes waits while they are built. Otherwise, ask the operator to add the package to the runner image ([operations.md](operations.md#runner-image)).
 
 ## Results
 

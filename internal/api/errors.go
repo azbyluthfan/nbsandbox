@@ -27,6 +27,7 @@ const (
 	CodeVersionRequired   = "version_required"   // replacing a file needs If-Match (428)
 	CodeDockerUnavailable = "docker_unavailable"
 	CodeTooManyRequests   = "too_many_requests" // too many failed sign-ins (429, Retry-After)
+	CodePackagesFailed    = "packages_failed"   // the space's requirements.txt could not be built (422)
 	CodeInternal          = "internal"
 )
 

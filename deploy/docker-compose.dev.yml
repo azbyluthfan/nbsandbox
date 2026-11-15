@@ -27,8 +27,9 @@ services:
       - -allowGET=(/v[0-9.]+)?/(_ping|version|info|containers/json|containers/[a-zA-Z0-9_.-]+/(json|logs|stats)|images/.+/json)
       - -allowPOST=(/v[0-9.]+)?/containers/(create|[a-zA-Z0-9_.-]+/(start|stop|kill|wait))
       - -allowDELETE=(/v[0-9.]+)?/containers/[a-zA-Z0-9_.-]+
-      # Run containers may only bind-mount folders under the spaces directory.
-      - -allowbindmountfrom=${NBSANDBOX_DATA_DIR:?set NBSANDBOX_DATA_DIR}/spaces
+      # Containers may only bind-mount folders under the spaces directory, and
+      # under packages (package sets, read-only in runs, and their builds).
+      - -allowbindmountfrom=${NBSANDBOX_DATA_DIR:?set NBSANDBOX_DATA_DIR}/spaces,${NBSANDBOX_DATA_DIR:?set NBSANDBOX_DATA_DIR}/packages
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks: [docker-api]
@@ -106,6 +107,8 @@ services:
       # all interfaces; the port below is published to 127.0.0.1 on the host
       # only, which is what makes no sign-in acceptable here.
       NBSANDBOX_UI_ENABLED: ${NBSANDBOX_UI_ENABLED:-true}
+      # A space's own packages (make runner-image builds the builder image).
+      NBSANDBOX_PACKAGES_ENABLED: ${NBSANDBOX_PACKAGES_ENABLED:-false}
       NBSANDBOX_UI_LISTEN: 0.0.0.0:8090
       NBSANDBOX_UI_NO_LOGIN_BEYOND_LOOPBACK: "true"
     volumes:

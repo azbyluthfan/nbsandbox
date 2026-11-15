@@ -126,6 +126,12 @@ func (m *Manager) Publish(ctx context.Context, owner, spaceID, name string, req 
 		return VersionView{}, &contract.Error{Msg: "this server requires every function to declare input and output schemas " +
 			"(functions.require_schemas); add a contract to the notebook's metadata or the publish request"}
 	}
+	// The version keeps the exact packages the space has now: wait for
+	// them to be built (before taking the publish lock).
+	lock, err := m.publishLock(ctx, spaceID)
+	if err != nil {
+		return VersionView{}, err
+	}
 	m.publishMu.Lock()
 	defer m.publishMu.Unlock()
 	version, err := m.d.DB.NextFunctionVersion(ctx, spaceID, name)
@@ -150,7 +156,7 @@ func (m *Manager) Publish(ctx context.Context, owner, spaceID, name string, req 
 	fj, _ := json.Marshal(files)
 	fv := store.FunctionVersion{SpaceID: spaceID, Function: name, Version: version, Notebook: req.Notebook,
 		FilesJSON: string(fj), NotebookSHA256: nbSHA, BundleBytes: size, CreatedBy: owner,
-		CreatedAt: m.d.Now(), Files: refs}
+		CreatedAt: m.d.Now(), Files: refs, PackageLock: lock}
 	if c.HasInput() {
 		fv.ContractInput = string(c.InputJSON)
 	}
@@ -206,7 +212,7 @@ func (m *Manager) Invoke(ctx context.Context, owner, spaceID, name string, req I
 		return View{}, false, err
 	}
 	return m.submit(ctx, owner, spaceID, SubmitRequest{Notebook: fv.Notebook, IdempotencyKey: req.IdempotencyKey},
-		submission{notebook: nb, params: params, outputSchema: c, function: name, version: fv.Version})
+		submission{notebook: nb, params: params, outputSchema: c, function: name, version: fv.Version, packageLock: fv.PackageLock})
 }
 
 // Functions lists a space's functions.
