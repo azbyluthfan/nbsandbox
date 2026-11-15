@@ -376,10 +376,13 @@ func (b *Backend) copyOut(ctx context.Context, name string, spec isolation.RunSp
 	for _, d := range dirs {
 		remotes = append(remotes, d.remote)
 	}
-	if err := b.exec(cctx, name, filesContainer, remotes, nil, &sizes); err == nil && duKiB(sizes.String())*1024 > b.MaxCopyOut {
+	// The bound follows the run's own allowance (an owner's quota may be
+	// above the server's default), never below the configured one.
+	maxOut := max(b.MaxCopyOut, 2*podDisk(b.cfg, spec))
+	if err := b.exec(cctx, name, filesContainer, remotes, nil, &sizes); err == nil && duKiB(sizes.String())*1024 > maxOut {
 		return ErrTooLarge
 	}
-	budget := b.MaxCopyOut
+	budget := maxOut
 	for _, d := range dirs {
 		if d.replace {
 			if err := clearDir(d.local); err != nil {
@@ -485,21 +488,25 @@ const diskPoll = 5 * time.Second
 // after the stream broke (the API server restarted, say).
 const eventsRetry = time.Second
 
-// followEvents prints what is appended to the events file from byte $1 on,
-// checking its size four times a second. Not `tail -f`: it waits for inotify,
+// followEvents (bash) prints what is appended to the events file from byte
+// $1 on, looking four times a second. Not `tail -f`: it waits for inotify,
 // which doesn't fire for another container's writes in a gVisor sandbox, so
-// events arrived only when the run ended. Only a regular file is read, never
-// a link the notebook planted.
-const followEvents = `f=/run/` + isolation.RunEventsFile + `; off=$1
+// events arrived only when the run ended. And it starts no process while it
+// waits: the files container's CPU is small, and a loop running `stat` and
+// `sleep` four times a second used all of it (at the 10 millicores of
+// 0.1.0), so copying the run's files in and out crawled. It reads the file it opened (a link the notebook puts in its
+// place later isn't followed) with bash's own read, and waits with read -t
+// on a pipe nobody writes. A line still being written is printed in parts;
+// the bytes are the same.
+const followEvents = `export LC_ALL=C; f=/run/` + isolation.RunEventsFile + `
+exec 9<> <(:)
+until [ -f "$f" ] && [ ! -L "$f" ]; do read -r -t 0.25 -u 9 _; done
+exec 3<"$f"
+if [ "$1" -gt 0 ]; then read -r -N "$1" -u 3 _; fi
 while :; do
-  if [ -f "$f" ] && [ ! -L "$f" ]; then
-    size=$(stat -c %s "$f")
-    if [ "$size" -gt "$off" ]; then
-      tail -c "+$((off + 1))" "$f" | head -c "$((size - off))"
-      off=$size
-    fi
-  fi
-  sleep 0.25
+  while IFS= read -r line <&3; do printf '%s\n' "$line"; done
+  [ -n "$line" ] && printf '%s' "$line"
+  read -r -t 0.25 -u 9 _
 done`
 
 // syncEvents follows the run's events file in the Pod and appends what the
@@ -511,7 +518,7 @@ done`
 func (b *Backend) syncEvents(ctx context.Context, name, localDir string) {
 	w := &appender{dir: localDir, file: isolation.RunEventsFile}
 	for ctx.Err() == nil {
-		cmd := []string{"sh", "-c", followEvents, "follow-events", strconv.FormatInt(w.n, 10)}
+		cmd := []string{"bash", "-c", followEvents, "follow-events", strconv.FormatInt(w.n, 10)}
 		if err := b.exec(ctx, name, filesContainer, cmd, nil, w); err != nil && ctx.Err() == nil {
 			b.log.Debug("follow run events; starting again", "pod", name, "error", err)
 		}

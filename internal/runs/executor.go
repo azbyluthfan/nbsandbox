@@ -285,13 +285,15 @@ func (e *executor) execute(runCtx context.Context, r store.Run) {
 		shipped <-chan struct{}
 		// set when the run's output broke its contract or a limit
 		outputErr *OutputError
+		// where the time goes (Phases)
+		tl = Timeline{Created: r.CreatedAt, Claimed: started}
 	)
 	defer func() {
 		if p := recover(); p != nil {
 			log.Error("run panicked", "panic", p)
 			runErr = fmt.Errorf("internal error: %v", p)
 		}
-		e.finish(ctx, r, started, res, runErr, cause, outputErr, hub)
+		e.finish(ctx, r, started, tl, res, runErr, cause, outputErr, hub)
 		if shipped != nil {
 			<-shipped
 		}
@@ -326,12 +328,14 @@ func (e *executor) execute(runCtx context.Context, r store.Run) {
 		return
 	}
 	stopEvents := e.tailRunEvents(ctx, r, hub)
+	tl.BackendStart = e.d.Now()
 	res, runErr = e.d.Backend.Run(tctx, isolation.RunSpec{
 		RunID: r.ID, SpaceID: r.SpaceID, Notebook: r.Notebook,
 		SpaceDir: spaceDir, SpaceReadOnly: !r.WritesSpace, RunDir: e.d.Spaces.RunPath(r.SpaceID, r.ID),
 		Image: e.cfg.Image, Runtime: e.cfg.Runtime, Limits: e.cfg.Limits, MaxOutputBytes: e.cfg.MaxOutput,
 		OutputMode: r.OutputMode, DiskBytes: e.diskAllowance(ctx, r.SpaceID),
 	}, hub)
+	tl.BackendDone = e.d.Now()
 	outputErr = stopEvents() // everything it reported is recorded before its final status
 	// The timeout's own cause, or the parent's (cancel, shutdown); nil when
 	// the run ended by itself.
@@ -341,9 +345,10 @@ func (e *executor) execute(runCtx context.Context, r store.Run) {
 // finish classifies the run, records the terminal status (first wins),
 // writes result.json, and then ends the live log. The log ends last, so a
 // viewer that receives "done" always finds the final status recorded.
-func (e *executor) finish(ctx context.Context, r store.Run, started time.Time, res isolation.RunResult,
+func (e *executor) finish(ctx context.Context, r store.Run, started time.Time, tl Timeline, res isolation.RunResult,
 	runErr, cause error, outputErr *OutputError, hub *logs.Hub) {
 	log := e.logFor(r)
+	finishing := e.d.Now()
 	if errors.Is(runErr, isolation.ErrDockerLost) {
 		// Best effort; if Docker is still gone, reconciliation removes it.
 		_ = e.d.Backend.Kill(ctx, r.ID)
@@ -375,6 +380,7 @@ func (e *executor) finish(ctx context.Context, r store.Run, started time.Time, r
 	}
 	finished := e.d.Now()
 	result := e.buildResult(ctx, r, out, ws, res, &started, finished, truncated)
+	result.Usage.PhasesSeconds = Phases(tl, res.Started, res.Finished, ws)
 	if r.OutputMode != contract.ModeStream {
 		result.Output = value // a stream's output (its items) is set by buildResult
 	}
@@ -401,12 +407,21 @@ func (e *executor) finish(ctx context.Context, r store.Run, started time.Time, r
 		return
 	}
 	e.d.Spaces.InvalidateUsage(r.SpaceID)
+	// Recording: writing back the space, reading the status, storing the
+	// run's files and its final status.
+	phases := map[string]float64{"record": e.d.Now().Sub(finishing).Seconds()}
+	for k, v := range result.Usage.PhasesSeconds {
+		phases[k] = v
+	}
 	if e.d.Metrics != nil {
 		e.d.Metrics.RunsTotal.WithLabelValues(out.Status).Inc()
 		e.d.Metrics.RunDuration.Observe(finished.Sub(started).Seconds())
+		for k, v := range phases {
+			e.d.Metrics.RunPhase.WithLabelValues(k).Observe(v)
+		}
 	}
 	log.Info("run finished", "status", out.Status, "error_kind", out.ErrorKind, "fault", out.Fault,
-		"duration_ms", finished.Sub(started).Milliseconds())
+		"duration_ms", finished.Sub(started).Milliseconds(), "phases_seconds", phases)
 }
 
 // reconcile cleans up after a restart of nbsandboxd or Docker: containers of

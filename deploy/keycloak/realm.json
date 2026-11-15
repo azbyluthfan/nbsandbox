@@ -1,0 +1,100 @@
+{
+  "realm": "nbsandbox",
+  "displayName": "nbsandbox test realm (make test-keycloak): every password and secret here is a fixed, public test value; local tests only",
+  "enabled": true,
+  "accessTokenLifespan": 300,
+  "sslRequired": "none",
+  "defaultDefaultClientScopes": ["basic"],
+  "clientScopes": [
+    {
+      "name": "basic",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "false" },
+      "protocolMappers": [
+        { "name": "sub", "protocol": "openid-connect", "protocolMapper": "oidc-sub-mapper",
+          "config": { "access.token.claim": "true", "introspection.token.claim": "true" } }
+      ]
+    },
+    {
+      "name": "backend",
+      "description": "Tokens for the calling backend (the subject of token exchange)",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true" },
+      "protocolMappers": [
+        { "name": "aud-backend", "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper",
+          "config": { "included.client.audience": "nbsandbox-backend", "access.token.claim": "true", "id.token.claim": "false" } }
+      ]
+    },
+    { "name": "nbsandbox.read", "protocol": "openid-connect", "attributes": { "include.in.token.scope": "true" },
+      "protocolMappers": [ { "name": "aud", "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper",
+        "config": { "included.client.audience": "nbsandbox", "access.token.claim": "true", "id.token.claim": "false" } } ] },
+    { "name": "nbsandbox.spaces.write", "protocol": "openid-connect", "attributes": { "include.in.token.scope": "true" },
+      "protocolMappers": [ { "name": "aud", "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper",
+        "config": { "included.client.audience": "nbsandbox", "access.token.claim": "true", "id.token.claim": "false" } } ] },
+    { "name": "nbsandbox.files.write", "protocol": "openid-connect", "attributes": { "include.in.token.scope": "true" },
+      "protocolMappers": [ { "name": "aud", "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper",
+        "config": { "included.client.audience": "nbsandbox", "access.token.claim": "true", "id.token.claim": "false" } } ] },
+    { "name": "nbsandbox.runs", "protocol": "openid-connect", "attributes": { "include.in.token.scope": "true" },
+      "protocolMappers": [ { "name": "aud", "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper",
+        "config": { "included.client.audience": "nbsandbox", "access.token.claim": "true", "id.token.claim": "false" } } ] },
+    { "name": "nbsandbox.functions.invoke", "protocol": "openid-connect", "attributes": { "include.in.token.scope": "true" },
+      "protocolMappers": [ { "name": "aud", "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper",
+        "config": { "included.client.audience": "nbsandbox", "access.token.claim": "true", "id.token.claim": "false" } } ] }
+  ],
+  "clients": [
+    {
+      "clientId": "nbsandbox",
+      "description": "nbsandbox itself: the audience of its tokens; it issues nothing",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "nbsandbox-unused-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "defaultClientScopes": ["basic"]
+    },
+    {
+      "clientId": "nbsandbox-cli",
+      "description": "A user-facing app: signs users in (password grant, test only) and asks for nbsandbox scopes",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "defaultClientScopes": ["basic"],
+      "optionalClientScopes": ["backend", "nbsandbox.read", "nbsandbox.spaces.write", "nbsandbox.files.write", "nbsandbox.runs", "nbsandbox.functions.invoke"]
+    },
+    {
+      "clientId": "nbsandbox-backend",
+      "description": "A backend that calls nbsandbox on behalf of its users (standard token exchange)",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "backend-test-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "attributes": { "standard.token.exchange.enabled": "true" },
+      "defaultClientScopes": ["basic"],
+      "optionalClientScopes": ["nbsandbox.read", "nbsandbox.spaces.write", "nbsandbox.files.write", "nbsandbox.runs", "nbsandbox.functions.invoke"]
+    },
+    {
+      "clientId": "reader-app",
+      "description": "A service calling as itself (client credentials) with read access only",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "reader-test-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "defaultClientScopes": ["basic", "nbsandbox.read"]
+    }
+  ],
+  "users": [
+    { "username": "kc-alice", "enabled": true, "email": "kc-alice@example.test", "emailVerified": true,
+      "firstName": "Alice", "lastName": "Test",
+      "credentials": [ { "type": "password", "value": "kc-alice-test-password", "temporary": false } ] },
+    { "username": "kc-bob", "enabled": true, "email": "kc-bob@example.test", "emailVerified": true,
+      "firstName": "Bob", "lastName": "Test",
+      "credentials": [ { "type": "password", "value": "kc-bob-test-password", "temporary": false } ] },
+    { "username": "service-account-reader-app", "enabled": true, "serviceAccountClientId": "reader-app" }
+  ]
+}

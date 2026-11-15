@@ -47,10 +47,23 @@ type Config struct {
 	RuntimeClass string            // optional: e.g. kata or gvisor
 	NodeSelector map[string]string // optional
 	Tolerations  []corev1.Toleration
-	// SpaceBytes bounds /space and /run on the node (ephemeral storage):
-	// the space quota plus room for outputs.
+	// SpaceBytes bounds /space and /run on the node (ephemeral storage)
+	// for a run without its own allowance: the space quota plus room for
+	// outputs. A run with one (RunSpec.DiskBytes, the space's quota with
+	// any owner override) gets twice its allowance instead.
 	SpaceBytes int64
 	WorkerID   string
+}
+
+// podDisk is the size limit of a run Pod's /space and of its /run: twice
+// the run's own disk allowance when it has one (the space's quota, owner
+// overrides included), so the kubelet's eviction is a ceiling well above
+// the allowance the worker enforces; otherwise the configured default.
+func podDisk(cfg Config, spec isolation.RunSpec) int64 {
+	if spec.DiskBytes > 0 {
+		return 2 * spec.DiskBytes
+	}
+	return cfg.SpaceBytes
 }
 
 // PodName is a run's Pod; one per run.
@@ -64,7 +77,11 @@ func buildPod(cfg Config, spec isolation.RunSpec) *corev1.Pod {
 	mem := resource.NewQuantity(spec.Limits.MemoryBytes, resource.BinarySI)
 	cpu := resource.NewMilliQuantity(spec.Limits.NanoCPUs/1e6, resource.DecimalSI)
 	limits := corev1.ResourceList{corev1.ResourceMemory: *mem, corev1.ResourceCPU: *cpu}
-	small := corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("32Mi"), corev1.ResourceCPU: resource.MustParse("10m")}
+	// The files container copies the run's files in and out (tar through
+	// pods/exec) and follows its events. At 10 millicores it was throttled
+	// in nearly every CPU period: copies took 10–90 s. Requests equal limits,
+	// like the runner's, so the Pod stays Guaranteed.
+	small := corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("32Mi"), corev1.ResourceCPU: resource.MustParse("250m")}
 	containerSec := &corev1.SecurityContext{
 		RunAsNonRoot:             &yes,
 		RunAsUser:                &uid,
@@ -76,9 +93,10 @@ func buildPod(cfg Config, spec isolation.RunSpec) *corev1.Pod {
 		SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 	}
 	storage := func(n int64) *resource.Quantity { return resource.NewQuantity(n, resource.BinarySI) }
+	disk := podDisk(cfg, spec)
 	volumes := []corev1.Volume{
-		{Name: "space", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: storage(cfg.SpaceBytes)}}},
-		{Name: "run", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: storage(cfg.SpaceBytes)}}},
+		{Name: "space", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: storage(disk)}}},
+		{Name: "run", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: storage(disk)}}},
 		// /tmp and /dev/shm in memory, counted toward the run's memory.
 		{Name: "tmp", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{
 			Medium: corev1.StorageMediumMemory, SizeLimit: storage(spec.Limits.TmpfsBytes)}}},

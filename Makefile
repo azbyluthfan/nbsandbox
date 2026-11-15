@@ -219,7 +219,7 @@ test-cluster-failures: cluster-data ## Only the cluster failure tests: kill work
 # A Kubernetes cluster in Docker (kind), with the chart installed: API on
 # 127.0.0.1:8080, two API processes, two workers starting runs as Pods.
 # kind and helm run through go run; kubectl is the one inside the kind node.
-KIND        := $(GO) run sigs.k8s.io/kind@v0.27.0
+KIND        := $(GO) run sigs.k8s.io/kind@v0.33.0
 HELM        := $(GO) run helm.sh/helm/v3/cmd/helm@v3.17.3
 KIND_DIR    := deploy/kubernetes/kind
 # The local cluster's network plugin: cilium (default) or calico, which both
@@ -234,11 +234,21 @@ K8S_RUNTIME_CLASS ?=
 # With gVisor it also counts gVisor's own threads, so it is only a backstop
 # (4 x 256 + 256); the run's limit is RLIMIT_NPROC inside the sandbox.
 KIND_POD_PIDS := $(if $(filter gvisor,$(K8S_RUNTIME_CLASS)),1280,300)
-KIND_NAME   := nbsandbox$(if $(filter cilium,$(K8S_CNI)),,-$(K8S_CNI))
+# Each run's memory on kind. Run Pods reserve all of it: with Docker under
+# 4 GB, two runs at once (the isolation test's holder and probe) don't fit
+# at 1GiB; K8S_RUN_MEMORY=512MiB does.
+K8S_RUN_MEMORY ?= 1GiB
+# The Kubernetes version: the newest supported (default) or the oldest
+# (docs/kubernetes.md#supported-versions). Node images pinned by digest.
+K8S_VERSION ?= 1.37
+KIND_IMAGE_1.37 := kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
+KIND_IMAGE_1.34 := kindest/node:v1.34.11@sha256:44e222ee2132dab25ff87301682f89eb82c7880ea3a1bf543bfe9708fd08d67d
+KIND_IMAGE  := $(or $(KIND_IMAGE_$(K8S_VERSION)),$(error K8S_VERSION must be 1.37 or 1.34))
+KIND_NAME   := nbsandbox$(if $(filter cilium,$(K8S_CNI)),,-$(K8S_CNI))$(if $(filter 1.37,$(K8S_VERSION)),,-k8s$(subst .,,$(K8S_VERSION)))
 KIND_NODE   := $(KIND_NAME)-control-plane
 KIND_CONFIG := $(CURDIR)/bin/kind-kubeconfig-$(K8S_CNI)
 KUBECTL     := docker exec -i $(KIND_NODE) kubectl --kubeconfig=/etc/kubernetes/admin.conf
-CILIUM_VERSION := 1.17.2
+CILIUM_VERSION := 1.20.4
 CALICO_VERSION := 3.29.3
 # Every local kind cluster publishes 127.0.0.1:8080 like the Compose stacks:
 # those stop them (they keep their state; make k8s-up starts one again).
@@ -259,7 +269,7 @@ k8s-cluster: k8s-images
 	-docker start $(KIND_NODE) >/dev/null 2>&1
 	@sed 's/^name: nbsandbox$$/name: $(KIND_NAME)/; $(if $(filter kindnet,$(K8S_CNI)),s/disableDefaultCNI: true/disableDefaultCNI: false/,)' \
 		$(KIND_DIR)/kind.yaml > bin/kind-$(K8S_CNI).yaml
-	$(KIND) get clusters 2>/dev/null | grep -qx $(KIND_NAME) || $(KIND) create cluster --config bin/kind-$(K8S_CNI).yaml
+	$(KIND) get clusters 2>/dev/null | grep -qx $(KIND_NAME) || $(KIND) create cluster --config bin/kind-$(K8S_CNI).yaml --image $(KIND_IMAGE)
 	$(KIND) export kubeconfig --name $(KIND_NAME) --kubeconfig $(KIND_CONFIG)
 	@# A node that was stopped needs a moment before its API server answers.
 	@for i in $$(seq 90); do $(KUBECTL) get --raw /readyz >/dev/null 2>&1 && exit 0; sleep 2; done; echo "API server not ready" >&2; exit 1
@@ -290,7 +300,7 @@ endif
 
 k8s-up: k8s-cluster ## Start nbsandbox on a local Kubernetes (kind, in Docker; K8S_CNI=cilium|calico, K8S_RUNTIME_CLASS=gvisor): API on 127.0.0.1:8080
 	$(HELM) upgrade --install nbsandbox deploy/helm/nbsandbox -n nbsandbox -f $(KIND_DIR)/values.yaml \
-		--set runs.runtimeClass=$(K8S_RUNTIME_CLASS) --kubeconfig $(KIND_CONFIG) --wait --timeout 5m
+		--set runs.runtimeClass=$(K8S_RUNTIME_CLASS) --set runs.memory=$(K8S_RUN_MEMORY) --kubeconfig $(KIND_CONFIG) --wait --timeout 5m
 	$(KUBECTL) -n nbsandbox rollout restart deploy/nbsandbox-api deploy/nbsandbox-worker
 	$(KUBECTL) -n nbsandbox rollout status deploy/nbsandbox-api deploy/nbsandbox-worker --timeout=180s
 
@@ -400,6 +410,22 @@ test-integration: dev-data ## Integration tests against the dev stack (Docker ne
 	-@$(CLUSTER) stop >/dev/null 2>&1
 	NBSANDBOX_SHUTDOWN_GRACE=5s NBSANDBOX_RUN_TIMEOUT=60s $(COMPOSE) up -d --build
 	NBSANDBOX_SHUTDOWN_GRACE=5s NBSANDBOX_RUN_TIMEOUT=60s $(GO) test -tags integration -count=1 -timeout 30m $(TESTFLAGS) ./tests/integration/
+
+KEYCLOAK_COMPOSE := $(COMPOSE) -f deploy/docker-compose.keycloak.yml
+
+.PHONY: test-keycloak
+test-keycloak: dev-data ## End-to-end auth with a real Keycloak (tokens, scopes, audience, token exchange) beside the dev stack
+	@$(STOP_KIND)
+	-@$(CLUSTER) stop >/dev/null 2>&1
+	NBSANDBOX_SHUTDOWN_GRACE=5s NBSANDBOX_RUN_TIMEOUT=60s $(KEYCLOAK_COMPOSE) up -d --build
+	@for i in $$(seq 120); do curl -sf http://127.0.0.1:8180/realms/nbsandbox/.well-known/openid-configuration >/dev/null && exit 0; sleep 2; done; \
+		echo "Keycloak didn't start" >&2; $(KEYCLOAK_COMPOSE) logs --tail 50 keycloak >&2; exit 1
+	NBSANDBOX_KEYCLOAK_URL=http://127.0.0.1:8180 NBSANDBOX_RUN_TIMEOUT=60s $(GO) test -tags integration -count=1 -timeout 15m \
+		-run '^TestKeycloak' $(TESTFLAGS) ./tests/integration/
+	@# Back to the plain dev stack (Keycloak shares nbsandboxd's network, so it goes first).
+	$(KEYCLOAK_COMPOSE) stop keycloak
+	$(KEYCLOAK_COMPOSE) rm --force keycloak
+	$(COMPOSE) up -d
 
 # The slow tests: they wait on real limits (CPU share, the run timeout,
 # endless output) or scan a whole container (isolation). make report runs

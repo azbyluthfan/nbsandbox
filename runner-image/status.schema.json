@@ -11,6 +11,11 @@
     "state": { "enum": ["succeeded", "execution_error", "dead_kernel", "wrapper_error", "terminated"] },
     "started_at": { "type": "string" },
     "finished_at": { "type": "string" },
+    "timings": {
+      "type": "object",
+      "description": "When each step began, in seconds since the epoch: wrapper_started, imports_done, kernel_ready (the first cell starting), executed, rendered. Steps not reached are absent.",
+      "additionalProperties": { "type": "number" }
+    },
     "python_version": { "type": "string" },
     "papermill_version": { "type": "string" },
     "message": { "type": "string" },

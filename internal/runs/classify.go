@@ -68,7 +68,10 @@ type WrapperStatus struct {
 	Message       string `json:"message"`
 	Rendered      bool   `json:"rendered"`
 	RenderError   string `json:"render_error"`
-	Error         *struct {
+	// Timings are when the runner's steps began (seconds since the epoch):
+	// wrapper_started, imports_done, kernel_ready, executed, rendered.
+	Timings map[string]float64 `json:"timings"`
+	Error   *struct {
 		CellIndex      *int   `json:"cell_index"`
 		ExecutionCount *int   `json:"execution_count"`
 		EName          string `json:"ename"`

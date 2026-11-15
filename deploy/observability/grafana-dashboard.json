@@ -63,6 +63,15 @@
         { "expr": "process_resident_memory_bytes{job=\"nbsandboxd\"}", "legendFormat": "RSS", "refId": "A" },
         { "expr": "go_goroutines{job=\"nbsandboxd\"}", "legendFormat": "goroutines", "refId": "B" }
       ]
+    },
+    {
+      "id": 9, "type": "timeseries", "title": "Where run time goes (p50 by phase)",
+      "gridPos": { "x": 0, "y": 28, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "targets": [
+        { "expr": "histogram_quantile(0.5, sum by (le, phase) (rate(nbsandbox_run_phase_seconds_bucket[1h])))", "legendFormat": "{{phase}}", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
     }
   ]
 }

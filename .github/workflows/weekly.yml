@@ -71,6 +71,12 @@ jobs:
         run: make test-backend TESTFLAGS=-v
       - name: Isolation report
         run: make report
+      - name: The same checks through the API (nbsandbox-report check)
+        if: matrix.runtime == 'runc'
+        env:
+          NBSANDBOX_CHECK_A_PASSWORD: alice-dev-password
+          NBSANDBOX_CHECK_B_PASSWORD: bob-dev-password
+        run: go run ./cmd/nbsandbox-report check -url http://127.0.0.1:8080 -user-a alice -user-b bob -out bin/check-report.md
       - name: Soak (45 min, trends)
         run: make soak SOAK_DURATION=45m
       - name: Stack logs on failure
@@ -85,11 +91,16 @@ jobs:
             bin/findings/
 
   kubernetes:
-    name: Kubernetes (${{ matrix.runtime_class || 'default runtime' }})
+    name: Kubernetes ${{ matrix.k8s }} (${{ matrix.runtime_class || 'default runtime' }})
     strategy:
       fail-fast: false
       matrix:
-        runtime_class: ["", gvisor]
+        # The newest supported Kubernetes with both runtimes; the oldest
+        # supported with the default one (docs/kubernetes.md#supported-versions).
+        include:
+          - { k8s: "1.37", runtime_class: "" }
+          - { k8s: "1.37", runtime_class: gvisor }
+          - { k8s: "1.34", runtime_class: "" }
     runs-on: ubuntu-24.04
     timeout-minutes: 110
     steps:
@@ -98,11 +109,11 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Isolation report on kind (Cilium)
-        run: make report-k8s K8S_RUNTIME_CLASS=${{ matrix.runtime_class }}
+        run: make report-k8s K8S_VERSION=${{ matrix.k8s }} K8S_RUNTIME_CLASS=${{ matrix.runtime_class }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
-          name: isolation-report-kubernetes-${{ matrix.runtime_class || 'default' }}
+          name: isolation-report-kubernetes-${{ matrix.k8s }}-${{ matrix.runtime_class || 'default' }}
           path: |
             docs/isolation-report-kubernetes.md
             bin/findings-k8s/
@@ -142,8 +153,32 @@ jobs:
               image --quiet --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$image"
           done
 
+  keycloak:
+    name: Keycloak (end-to-end auth)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      NBSANDBOX_DATA_DIR: ${{ github.workspace }}-data
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Runner image
+        run: make runner-image
+      - name: Data directory owned by uid 1000
+        run: |
+          make dev-data
+          sudo chown -R 1000:1000 "$NBSANDBOX_DATA_DIR"
+          echo "DOCKER_GID=$(getent group docker | cut -d: -f3)" >> "$GITHUB_ENV"
+      - name: Tokens, scopes, audience and token exchange with Keycloak
+        run: make test-keycloak TESTFLAGS=-v
+      - name: Logs on failure
+        if: failure()
+        run: docker compose -f deploy/docker-compose.dev.yml -f deploy/docker-compose.keycloak.yml logs --no-color | tail -300
+
   report-failure:
-    needs: [docker, kubernetes, fuzz, security]
+    needs: [docker, kubernetes, keycloak, fuzz, security]
     if: failure()
     runs-on: ubuntu-24.04
     steps:

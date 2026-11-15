@@ -121,6 +121,11 @@ class RunnerTest(unittest.TestCase):
         self.assertTrue(st["rendered"])
         self.assertEqual(st["schema_version"], 2)
         self.assertTrue(os.path.isdir(os.path.join(self.run_dir, "artifacts")))
+        # When each step began, in order (no cell ran here: no kernel_ready).
+        t = st["timings"]
+        steps = ["wrapper_started", "imports_done", "executed", "rendered"]
+        self.assertEqual(sorted(t), sorted(steps))
+        self.assertEqual([t[s] for s in steps], sorted(t[s] for s in steps))
 
     def test_parameters_are_passed(self):
         os.makedirs(self.run_dir, exist_ok=True)

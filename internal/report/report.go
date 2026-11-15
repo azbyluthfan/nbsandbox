@@ -33,6 +33,16 @@ type Facts struct {
 	NbsandboxRuntime map[string]any `json:"nbsandbox_runtime"`
 	DockerInfo       string         `json:"docker_info"`
 	RecordedAt       time.Time      `json:"recorded_at"`
+	// Checked is the deployment's URL when the findings come from
+	// `nbsandbox-report check` (through its API) rather than the
+	// integration suite.
+	Checked string `json:"checked,omitempty"`
+	// NotChecked are required findings a check leaves out on purpose, with
+	// why (they stop services, or were skipped).
+	NotChecked map[string]string `json:"not_checked,omitempty"`
+	// Cluster describes the Kubernetes cluster when a check had a
+	// kubeconfig (its version, the runs' NetworkPolicies).
+	Cluster string `json:"cluster,omitempty"`
 }
 
 // Run is the findings of one runtime.
@@ -125,6 +135,9 @@ func (r Run) Missing() []string {
 		if r.Kubernetes() && slices.Contains(NotOnKubernetes, id) {
 			continue
 		}
+		if _, skipped := r.Facts.NotChecked[id]; skipped {
+			continue
+		}
 		if _, ok := r.Findings[id]; !ok {
 			out = append(out, id)
 		}
@@ -134,11 +147,14 @@ func (r Run) Missing() []string {
 
 // Platform says whether the findings are from a reference platform.
 func (r Run) Platform() string {
+	if r.Facts.Checked != "" {
+		return r.platformName() + " — **this deployment**, checked through its API at " + r.Facts.Checked
+	}
 	if r.Kubernetes() {
 		if strings.Contains(r.Facts.DockerInfo, "Docker Desktop") {
 			return "Kubernetes in kind on Docker Desktop, network policy by Cilium — **local cluster**: the controls work here; run the suite in each target cluster for its own report"
 		}
-		return "Kubernetes (" + fmt.Sprint(r.Facts.NbsandboxRuntime["docker"]) + ")"
+		return r.platformName()
 	}
 	if strings.Contains(r.Facts.DockerInfo, "Docker Desktop") {
 		return "Docker Desktop — **non-reference platform**: results show the controls work here, but the authoritative report comes from Linux with Docker Engine"
@@ -147,6 +163,21 @@ func (r Run) Platform() string {
 		return "unknown (no facts recorded)"
 	}
 	return "Linux with Docker Engine — reference platform"
+}
+
+// platformName is "Kubernetes v1.37.0" or "Docker 29.9.2 (Docker Desktop)",
+// from /v1/runtime's platform fields.
+func (r Run) platformName() string {
+	d, _ := r.Facts.NbsandboxRuntime["docker"].(map[string]any)
+	version, _ := d["version"].(string)
+	os, _ := d["operating_system"].(string)
+	if r.Kubernetes() {
+		return strings.TrimSpace("Kubernetes " + version)
+	}
+	if os != "" {
+		return strings.TrimSpace("Docker "+version) + " (" + os + ")"
+	}
+	return strings.TrimSpace("Docker " + version)
 }
 
 // Redact replaces old with repl in what the tests observed (for example
@@ -180,7 +211,10 @@ func RenderFor(w io.Writer, runs []Run, generated time.Time, target string) erro
 	p := func(format string, args ...any) { fmt.Fprintf(&b, format, args...) }
 
 	title, deflt := "nbsandbox Isolation Report", "make report"
+	source := "the integration tests' findings"
 	switch {
+	case len(runs) > 0 && runs[0].Facts.Checked != "":
+		title, deflt, source = "nbsandbox Isolation Report: "+runs[0].Facts.Checked, "nbsandbox-report check", "checks run through the deployment's API"
 	case len(runs) > 0 && runs[0].Kubernetes():
 		title, deflt = "nbsandbox Isolation Report: Kubernetes backend", "make report-k8s"
 	case len(runs) > 0 && strings.HasPrefix(runs[0].Platform(), "Linux"):
@@ -190,7 +224,7 @@ func RenderFor(w io.Writer, runs []Run, generated time.Time, target string) erro
 		target = deflt
 	}
 	p("# %s\n\n", title)
-	p("Generated %s by `"+target+"` from the integration tests' findings. Each row is a test that **ran**; the observed column is what the test saw, not what it assumed.\n\n", generated.UTC().Format("2006-01-02 15:04 MST"))
+	p("Generated %s by `"+target+"` from "+source+". Each row is a test that **ran**; the observed column is what the test saw, not what it assumed.\n\n", generated.UTC().Format("2006-01-02 15:04 MST"))
 
 	p("## Summary\n\n| Runtime | Platform | Passed | Failed | Required tests missing |\n|---|---|---|---|---|\n")
 	for _, r := range runs {
@@ -216,10 +250,16 @@ func RenderFor(w io.Writer, runs []Run, generated time.Time, target string) erro
 		limits, _ := json.Marshal(nr["limits"])
 		docker, _ := nr["docker"].(map[string]any)
 		p("**%s**\n\n", r.Runtime)
-		if r.Kubernetes() {
+		switch {
+		case r.Facts.Checked != "":
+			p("- Platform: %v (%v)\n", docker["version"], docker["operating_system"])
+			if r.Facts.Cluster != "" {
+				p("- Cluster: %s\n", r.Facts.Cluster)
+			}
+		case r.Kubernetes():
 			p("- Kubernetes: %v (%v); the Docker underneath: %s\n", docker["version"], docker["operating_system"], r.Facts.DockerInfo)
 			p("- Not applicable: %s (stops Docker Compose services)\n", strings.Join(NotOnKubernetes, ", "))
-		} else {
+		default:
 			p("- Docker: %v (%v); `docker info`: %s\n", docker["version"], docker["operating_system"], r.Facts.DockerInfo)
 		}
 		p("- Runner image: `%v` `%v`, Python %v\n", img["ref"], img["id"], nr["python_version"])
@@ -275,6 +315,22 @@ func RenderFor(w io.Writer, runs []Run, generated time.Time, target string) erro
 			p("\n")
 		}
 		p("\n")
+	}
+
+	for _, r := range runs {
+		if len(r.Facts.NotChecked) == 0 {
+			continue
+		}
+		p("## Not checked here (%s)\n\n", r.Runtime)
+		ids := make([]string, 0, len(r.Facts.NotChecked))
+		for id := range r.Facts.NotChecked {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		for _, id := range ids {
+			p("- **%s**: %s\n", id, r.Facts.NotChecked[id])
+		}
+		p("\nThe integration suite covers these on the reference platforms ([isolation-report.md](https://github.com/azbyluthfan/nbsandbox/blob/main/docs/isolation-report.md)).\n\n")
 	}
 
 	p("## Notes\n\n")

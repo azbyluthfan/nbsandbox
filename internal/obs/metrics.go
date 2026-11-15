@@ -18,6 +18,7 @@ type Metrics struct {
 
 	RunsTotal         *prometheus.CounterVec // by final status
 	RunDuration       prometheus.Histogram
+	RunPhase          *prometheus.HistogramVec // where a run's time went, by phase
 	QueueLength       prometheus.Gauge
 	ActiveRuns        prometheus.Gauge
 	ActiveLogStreams  prometheus.Gauge
@@ -39,6 +40,11 @@ func NewMetrics() *Metrics {
 			Help:    "Duration of finished runs, from start to end.",
 			Buckets: []float64{1, 5, 15, 30, 60, 120, 300, 600, 1800, 3600},
 		}),
+		RunPhase: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "nbsandbox_run_phase_seconds",
+			Help:    "Where finished runs spent their time, by phase (queued, prepare, container_start, runner_start, kernel_start, execute, render, exit, teardown, record).",
+			Buckets: []float64{0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 300},
+		}, []string{"phase"}),
 		QueueLength: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "nbsandbox_queue_length",
 			Help: "Runs waiting in the queue.",
@@ -63,7 +69,7 @@ func NewMetrics() *Metrics {
 	reg.MustRegister(
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
-		m.RunsTotal, m.RunDuration, m.QueueLength, m.ActiveRuns,
+		m.RunsTotal, m.RunDuration, m.RunPhase, m.QueueLength, m.ActiveRuns,
 		m.ActiveLogStreams, m.DockerUp, m.HTTPRequestsTotal,
 	)
 	return m

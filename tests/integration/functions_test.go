@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -266,6 +267,7 @@ func TestStartLatency(t *testing.T) {
 	upload(t, "alice", sp, "models", map[string]string{"model.txt": "m1\n"})
 	publish(t, sp, "forecast", "models")
 	var samples []time.Duration
+	phases := map[string][]float64{} // where the time went, per call
 	for i := 0; i < 3; i++ {
 		start := time.Now()
 		code, res, _ := invoke(t, sp, "forecast/invoke", map[string]any{"region": "l"})
@@ -273,9 +275,29 @@ func TestStartLatency(t *testing.T) {
 			t.Fatalf("invoke %d: %s", code, res.Status)
 		}
 		samples = append(samples, time.Since(start))
+		var run struct {
+			Result struct {
+				Usage struct {
+					Phases map[string]float64 `json:"phases_seconds"`
+				} `json:"usage"`
+			} `json:"result"`
+		}
+		call(t, "GET", "/v1/spaces/"+sp+"/runs/"+res.RunID, "alice", nil, nil).json(t, &run)
+		for k, v := range run.Result.Usage.Phases {
+			phases[k] = append(phases[k], v)
+		}
 	}
-	finding(t, "start-latency", "three small invocations, request to result", "recorded (target: under 1 s of start-up; see the roadmap)",
-		fmt.Sprintf("%v", samples), true)
+	// The phases in a run's order, each with the median of the calls.
+	var parts []string
+	for _, k := range []string{"queued", "prepare", "container_start", "runner_start", "kernel_start", "execute", "render", "exit", "teardown"} {
+		if v := phases[k]; len(v) > 0 {
+			sort.Float64s(v)
+			parts = append(parts, fmt.Sprintf("%s %.2f", k, v[len(v)/2]))
+		}
+	}
+	finding(t, "start-latency", "three small invocations, request to result; where the time went (median seconds per phase)",
+		"recorded (target: under 1 s of start-up; see the roadmap)",
+		fmt.Sprintf("%v; %s", samples, strings.Join(parts, ", ")), true)
 }
 
 // waitResult long-polls a run's result until it has finished.

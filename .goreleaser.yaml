@@ -23,6 +23,17 @@ builds:
     ignore:
       - goos: darwin
         goarch: amd64
+  - id: nbsandbox-mcp
+    main: ./cmd/nbsandbox-mcp
+    binary: nbsandbox-mcp
+    env: [CGO_ENABLED=0]
+    flags: [-trimpath]
+    ldflags: ["-s -w -X main.version={{.Version}}"]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: darwin
+        goarch: amd64
   - id: nbsandbox-report
     main: ./cmd/nbsandbox-report
     binary: nbsandbox-report

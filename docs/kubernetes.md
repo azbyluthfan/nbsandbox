@@ -10,7 +10,7 @@ Workers can start each run as a **Pod** instead of a Docker container (`backend:
 | **Identity** | No service-account token, no service environment variables, no host namespaces, no DNS. |
 | **Privileges** | uid 1000 (non-root), all capabilities dropped, no privilege escalation, read-only root filesystem, seccomp `RuntimeDefault`. It meets the `restricted` Pod Security Standard, which the chart enforces on the runs namespace. |
 | **Network** | None: a deny-all NetworkPolicy covers the whole runs namespace. |
-| **Resources** | Memory and CPU requests equal the limits (Guaranteed), so a node holds only as many runs as its memory allows: size the runs node pool for `worker.replicas × worker.concurrency` runs at `runs.memory` each. An out-of-memory run ends as `oom` (with cgroup v2 the whole container is killed, so its peak memory isn't reported). `/tmp` and `/dev/shm` are size-limited and in memory. `/space` and `/run` have an ephemeral-storage limit; a run that goes over is evicted and ends as `failed` / `resource_disk`. |
+| **Resources** | Memory and CPU requests equal the limits (Guaranteed), so a node holds only as many runs as its memory allows: size the runs node pool for `worker.replicas × worker.concurrency` runs at `runs.memory` each (plus 32 MiB and a quarter of a CPU per run for the container that copies its files). An out-of-memory run ends as `oom` (with cgroup v2 the whole container is killed, so its peak memory isn't reported). `/tmp` and `/dev/shm` are size-limited and in memory. `/space` and `/run` have an ephemeral-storage limit; a run that goes over is evicted and ends as `failed` / `resource_disk`. |
 | **Processes** | Limited **per node** in Kubernetes (kubelet `podPidsLimit`, e.g. 300), not per run. Set it on the nodes that run notebooks: the AKS example does. With a sandbox RuntimeClass, see below. |
 | **Optional sandbox** | `runs.runtimeClass` (gVisor; Kata through AKS Pod Sandboxing). It must exist and is never silently replaced by the default. |
 
@@ -52,6 +52,12 @@ Plugins differ in how they treat traffic to host-network endpoints (the API serv
 
 So a cluster whose plugin doesn't enforce NetworkPolicy fails closed: nbsandbox stops running notebooks instead of running them with network access.
 
+## Supported versions
+
+**Kubernetes 1.34 to 1.37.** The weekly CI run checks both ends on kind (with Cilium): the isolation report on 1.37 with the default runtime and with gVisor, and on 1.34 with the default runtime. A version in between, or a newer one, very likely works too: nbsandbox uses only stable APIs (Pods, `pods/exec` and logs, NetworkPolicy, RuntimeClass); run [`nbsandbox-report check`](check-deployment.md) on it to be sure.
+
+The range moves with upstream support: when a new Kubernetes minor is released, the newest tested version moves up, and the oldest follows within a release or two. `K8S_VERSION=1.34 make k8s-up` runs the local cluster at the oldest supported version.
+
 ## The network probe
 
 The deny-all policy only works if it's really enforced: some plugins accept policies and silently ignore them, or skip some destinations (kind's default plugin lets Pods reach the API server; the local cluster uses Cilium instead).
@@ -63,6 +69,8 @@ So at startup, and every 10 minutes, each worker starts a **probe Pod** labelled
 - the worker itself and its node's kubelet.
 
 If anything answers, the worker refuses runs and reports it on `/readyz` (`runtime`), so a misconfigured cluster never runs a notebook with network access.
+
+The probe checks the network only. To check the whole isolation of your cluster (filesystem, processes, memory, privileges, limits) and get a report for it, run [`nbsandbox-report check`](check-deployment.md) against the deployment.
 
 ## Install with Helm
 
@@ -103,7 +111,7 @@ The API is on http://127.0.0.1:8080 (the demo users, as with `make up`).
 
 | | |
 |---|---|
-| `make k8s-up` / `make k8s-down` | start the stack (stopping the other two, which use the same port) / delete the cluster. `K8S_CNI=calico` uses Calico instead of Cilium, in its own cluster. `K8S_RUNTIME_CLASS=gvisor` installs gVisor in the node (the release in `deploy/gvisor.version`, from gVisor's apt repository, checked against its SHA-256), adds a `gvisor` RuntimeClass and runs notebooks with it |
+| `make k8s-up` / `make k8s-down` | start the stack (stopping the other two, which use the same port) / delete the cluster. `K8S_CNI=calico` uses Calico instead of Cilium, in its own cluster; `K8S_VERSION=1.34` the oldest supported Kubernetes (default 1.37), also in its own cluster. `K8S_RUNTIME_CLASS=gvisor` installs gVisor in the node (the release in `deploy/gvisor.version`, from gVisor's apt repository, checked against its SHA-256), adds a `gvisor` RuntimeClass and runs notebooks with it |
 | `make test-k8s-cni-refuses` | on kind's own plugin (kindnet), which doesn't enforce NetworkPolicy: checks that the workers refuse to run notebooks |
 | `make k8s-logs` | follow the API processes' and workers' logs |
 | `make test-k8s-conformance` | the backend conformance suite (lifecycle, live output, cancel, OOM, orphans) against real Pods |

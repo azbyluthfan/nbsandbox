@@ -112,7 +112,7 @@ scripts/nbsandbox.sh runs follow "$ID" "$RUN"     # the live log, ending with [d
 The integration suite, including the isolation report, runs against a separate dev stack on the same host. It doesn't touch the production stack or its data:
 
 ```bash
-sudo apt-get install -y golang-go     # or Go 1.27.3+ from go.dev
+sudo apt-get install -y golang-go     # or Go 1.27.4+ from go.dev
 sudo make runner-image
 sudo NBSANDBOX_DATA_DIR=/srv/nbsandbox-test DOCKER_GID=$(getent group docker | cut -d: -f3) make dev-data
 sudo chown -R 1000:1000 /srv/nbsandbox-test
@@ -125,6 +125,8 @@ sudo NBSANDBOX_DATA_DIR=/srv/nbsandbox-test NBSANDBOX_PORT=18080 NBSANDBOX_UI_PO
 ```bash
 sudo NBSANDBOX_DATA_DIR=/srv/nbsandbox-test make down
 ```
+
+To check the running production deployment itself, through its API and without a second stack, use [`nbsandbox-report check`](check-deployment.md) with two user accounts. It covers the isolation, resource and failure checks; the tests that restart services stay in `make report`.
 
 ## Next
 

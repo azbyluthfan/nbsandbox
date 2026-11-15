@@ -122,6 +122,33 @@ func TestBuildPod(t *testing.T) {
 	}
 }
 
+// A run's /space and /run follow its own disk allowance, so an owner whose
+// quota is above the server's default isn't evicted at the default.
+func TestPodDiskFollowsAllowance(t *testing.T) {
+	cfg := Config{Namespace: "runs", SpaceBytes: 1 << 30}
+	limits := func(spec isolation.RunSpec) []int64 {
+		var out []int64
+		for _, v := range buildPod(cfg, spec).Spec.Volumes {
+			if v.Name == "space" || v.Name == "run" {
+				out = append(out, v.EmptyDir.SizeLimit.Value())
+			}
+		}
+		return out
+	}
+	spec := testSpec()
+	if got := limits(spec); len(got) != 2 || got[0] != 1<<30 || got[1] != 1<<30 {
+		t.Errorf("no allowance: %v, want the configured 1 GiB", got)
+	}
+	spec.DiskBytes = 5 << 30 // an owner override of 5 GiB
+	if got := limits(spec); len(got) != 2 || got[0] != 10<<30 || got[1] != 10<<30 {
+		t.Errorf("5 GiB allowance: %v, want 10 GiB", got)
+	}
+	b := &Backend{cfg: cfg, MaxCopyOut: 2 << 30}
+	if got := max(b.MaxCopyOut, 2*podDisk(b.cfg, spec)); got != 20<<30 {
+		t.Errorf("copy-out bound %d", got)
+	}
+}
+
 func TestTarRoundTrip(t *testing.T) {
 	src, dst := t.TempDir(), t.TempDir()
 	_ = os.MkdirAll(filepath.Join(src, "data", "empty"), 0o700)

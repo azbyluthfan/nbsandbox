@@ -17,7 +17,7 @@ compose() { sudo docker compose -f deploy/docker-compose.yml --env-file deploy/.
   ```bash
   compose --profile monitoring up -d prometheus      # then http://127.0.0.1:9090 on the host
   ```
-  `deploy/observability/alerts.yml` alerts on nbsandboxd being down, Docker unreachable, a queue backlog, platform errors, and waves of out-of-memory runs. `deploy/observability/grafana-dashboard.json` is an example dashboard: import it into Grafana with a Prometheus data source.
+  `deploy/observability/alerts.yml` alerts on nbsandboxd being down, Docker unreachable, a queue backlog, platform errors, and waves of out-of-memory runs. `deploy/observability/grafana-dashboard.json` is an example dashboard: import it into Grafana with a Prometheus data source. `nbsandbox_run_phase_seconds` breaks each run's time down by phase (queued, prepare, container start, kernel start, execute, render, teardown, record); a run's own breakdown is in its result's `usage.phases_seconds`.
 - **Logs:** `compose logs -f nbsandboxd` gives JSON lines. Every run line carries `run_id` and `space_id`; credentials and parameter values are never logged.
 
 ## Backup
