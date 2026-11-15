@@ -4,6 +4,11 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+### Fixed
+
+- **Kubernetes: copying a run's files in and out took 10–90 s** (since 0.1.0): the files container of each run Pod had 10 millicores of CPU, and the events follower started a process four times a second, so the container was throttled in nearly every CPU period. The follower now starts no process while it waits, and the files container gets 250 millicores (requests equal limits, so run Pods stay Guaranteed). On kind, a small call is back to about 5 s and a cancel to about 1 s.
+- **Kubernetes:** on a busy cluster, the first items of a streamed result could reach the caller together, about a second late, instead of as they were emitted.
+
 ## [0.1.0] - 2026-11-08
 
 The first release. Everything below is new. A guided tour: [docs/tour.md](docs/tour.md).
