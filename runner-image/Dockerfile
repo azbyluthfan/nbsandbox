@@ -12,10 +12,12 @@ FROM python:3.13-slim@sha256:09a17cad02668ae61ece136b4fd36ac3849e14f670ebedb637e
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1
-COPY requirements.txt /tmp/requirements.txt
+COPY requirements.txt builder-requirements.txt /tmp/
 RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/* \
+ && pip install --root-user-action=ignore --require-hashes --no-deps -r /tmp/builder-requirements.txt \
  && pip install --root-user-action=ignore --require-hashes --no-deps -r /tmp/requirements.txt \
- && rm /tmp/requirements.txt \
+ && rm /tmp/requirements.txt /tmp/builder-requirements.txt \
+ && rm -rf /usr/local/lib/python3.13/ensurepip \
  && find / -xdev -type f -perm /6000 -exec chmod a-s {} + \
  && groupadd --gid 1000 nbsandbox \
  && useradd --uid 1000 --gid 1000 --no-create-home --home-dir /tmp --shell /usr/sbin/nologin nbsandbox

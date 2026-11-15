@@ -9,7 +9,7 @@
 #   - Kubernetes (kind with Cilium) with the default runtime and with a
 #     gVisor RuntimeClass: the isolation report;
 #   - every fuzz target for a few minutes;
-#   - a security scan (govulncheck, and Trivy on both images), which reports
+#   - a security scan (govulncheck, and Trivy on the three images), which reports
 #     newly published advisories even in weeks without commits.
 # A failure opens an issue. Also runs from the Actions tab ("Run workflow"),
 # e.g. before a release.
@@ -147,10 +147,10 @@ jobs:
         # Advisories without a published fix are accepted until there is one
         # (docs/security/review.md); a fixable one fails this job.
         run: |
-          for image in nbsandboxd:dev nbsandbox-runner:dev; do
-            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock:ro \
+          for image in nbsandboxd:dev nbsandbox-runner:dev nbsandbox-runner-builder:dev; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock:ro -v "$PWD/.trivyignore:/.trivyignore:ro" \
               aquasec/trivy:0.58.1@sha256:ab70a02200597efa04748f210f793936eb647cbcdb0ea69cc30b226d6f5a22c7 \
-              image --quiet --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$image"
+              image --quiet --severity HIGH,CRITICAL --ignore-unfixed --ignorefile /.trivyignore --exit-code 1 "$image"
           done
 
   keycloak:
