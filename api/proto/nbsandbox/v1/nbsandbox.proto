@@ -375,6 +375,10 @@ message RunUsage {
   double duration_seconds = 1;
   optional int64 peak_memory_bytes = 2;
   optional double cpu_seconds = 3;
+  // Where the run's time went, in seconds, by phase (queued, prepare,
+  // container_start, runner_start, kernel_start, execute, render, exit,
+  // teardown). Diagnostic: the set of phases may change.
+  map<string, double> phases_seconds = 4;
 }
 
 message RunLimits {

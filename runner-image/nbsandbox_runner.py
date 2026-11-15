@@ -60,6 +60,15 @@ _RUN_ID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a
 
 _status_path = None
 _started = time.time()
+# When each step began, in seconds since the epoch (nbsandboxd lines them up
+# with its own timestamps to show where a run's time goes): the wrapper,
+# its imports done, the kernel ready (its first cell starting), execution
+# and rendering done.
+_marks = {"wrapper_started": _started}
+
+
+def mark(name):
+    _marks.setdefault(name, time.time())
 
 
 def _now():
@@ -176,6 +185,7 @@ def write_status(state, **fields):
         "finished_at": _now(),
         "python_version": sys.version.split()[0],
         "cgroup": cgroup_counters(),
+        "timings": {k: round(v, 3) for k, v in _marks.items()},
     }
     status.update(fields)
     if _status_path is None:
@@ -317,6 +327,7 @@ def make_cell_events(orig, events_path):
     cell papermill injects for the parameters is neither reported nor
     counted)."""
     async def execute_cell(self, cell, cell_index, *args, **kwargs):
+        mark("kernel_ready")  # the first cell nbclient sends: the kernel is up
         if cell.get("cell_type") != "code" or "injected-parameters" in _tags(cell):
             return await orig(self, cell, cell_index, *args, **kwargs)
         index = cell_index - sum(1 for c in self.nb.cells[:cell_index] if "injected-parameters" in _tags(c))
@@ -392,6 +403,8 @@ def render_html(output_nb, output_html):
 
 def main(argv):
     global _status_path, _sampler
+    _marks.clear()
+    _marks["wrapper_started"] = _started
     signal.signal(signal.SIGTERM, _on_sigterm)
     apply_nproc()
     if needs_sampling():
@@ -451,6 +464,7 @@ def main(argv):
     nbclient.client.NotebookClient.execute_cell = run_sync(cell_events)
 
     common = {"papermill_version": papermill.__version__}
+    mark("imports_done")
     state, code, extra = "succeeded", EXIT_OK, {}
     try:
         papermill.execute_notebook(
@@ -477,6 +491,7 @@ def main(argv):
     except Exception as e:  # papermill failed outside a cell (bad notebook, kernel start, ...)
         state, code = "wrapper_error", EXIT_WRAPPER_ERROR
         extra["message"] = f"{type(e).__name__}: {e}"[:4000]
+    mark("executed")
 
     rendered, render_error = False, None
     if os.path.exists(output_nb):
@@ -484,6 +499,7 @@ def main(argv):
             rendered, render_error = render_html(output_nb, output_html)
         except Exception as e:
             render_error = f"{type(e).__name__}: {e}"
+    mark("rendered")
     extra["rendered"] = rendered
     if render_error:
         extra["render_error"] = render_error

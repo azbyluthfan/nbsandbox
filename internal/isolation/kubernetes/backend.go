@@ -376,10 +376,13 @@ func (b *Backend) copyOut(ctx context.Context, name string, spec isolation.RunSp
 	for _, d := range dirs {
 		remotes = append(remotes, d.remote)
 	}
-	if err := b.exec(cctx, name, filesContainer, remotes, nil, &sizes); err == nil && duKiB(sizes.String())*1024 > b.MaxCopyOut {
+	// The bound follows the run's own allowance (an owner's quota may be
+	// above the server's default), never below the configured one.
+	maxOut := max(b.MaxCopyOut, 2*podDisk(b.cfg, spec))
+	if err := b.exec(cctx, name, filesContainer, remotes, nil, &sizes); err == nil && duKiB(sizes.String())*1024 > maxOut {
 		return ErrTooLarge
 	}
-	budget := b.MaxCopyOut
+	budget := maxOut
 	for _, d := range dirs {
 		if d.replace {
 			if err := clearDir(d.local); err != nil {

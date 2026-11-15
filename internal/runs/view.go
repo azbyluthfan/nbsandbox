@@ -60,6 +60,8 @@ type ResultUsage struct {
 	DurationSeconds float64  `json:"duration_seconds"`
 	PeakMemoryBytes *int64   `json:"peak_memory_bytes,omitempty"`
 	CPUSeconds      *float64 `json:"cpu_seconds,omitempty"`
+	// PhasesSeconds is where the run's time went, by phase (see Phases).
+	PhasesSeconds map[string]float64 `json:"phases_seconds,omitempty"`
 }
 
 // ResultLimits are the limits the run had.

@@ -8,6 +8,8 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 
 - **Check your deployment:** `nbsandbox-report check` runs the isolation, resource and failure checks against a running deployment (Docker or any Kubernetes cluster) through its API, as two users, and writes the isolation report for that deployment. With a kubeconfig it also checks that run Pods are gone, probes the API server, a worker and the kubelet, and records the cluster version and the runs' NetworkPolicies. It never restarts or stops anything; see [docs/check-deployment.md](docs/check-deployment.md). The integration suite runs the same checks, from one copy of the code.
 
+- **Where a run's time goes:** each run records its phases (queued, preparing files, container start, runner start, kernel start, the cells, rendering, teardown) in its result (`usage.phases_seconds`, REST and gRPC), the `nbsandbox_run_phase_seconds` metric (with a dashboard panel) and its log line; the runner's status file has the matching `timings`. The isolation report's start-latency row shows the breakdown ([docs/perf.md](docs/perf.md#starting-a-run)).
+
 ### Changed
 
 - **Kubernetes 1.34 to 1.37 are supported** ([docs/kubernetes.md](docs/kubernetes.md#supported-versions)). The weekly CI run tests 1.37 with both runtimes and 1.34 with the default one; the local cluster is kind 0.33 with Cilium 1.20 (`K8S_VERSION=1.34` for the oldest, `K8S_RUN_MEMORY` for small Docker hosts).
@@ -15,6 +17,7 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 ### Fixed
 
 - **Kubernetes: copying a run's files in and out took 10–90 s** (since 0.1.0): the files container of each run Pod had 10 millicores of CPU, and the events follower started a process four times a second, so the container was throttled in nearly every CPU period. The follower now starts no process while it waits, and the files container gets 250 millicores (requests equal limits, so run Pods stay Guaranteed). On kind, a small call is back to about 5 s and a cancel to about 1 s.
+- **Kubernetes: a space whose owner has a larger quota** (`quotas.owners[].max_space`) could be evicted at twice the server's default: a run Pod's `/space` and `/run`, and what is copied back, are now sized from the run's own allowance.
 - **Kubernetes:** on a busy cluster, the first items of a streamed result could reach the caller together, about a second late, instead of as they were emitted.
 
 ## [0.1.0] - 2026-11-08

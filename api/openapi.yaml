@@ -1348,6 +1348,16 @@ components:
             duration_seconds: { type: number }
             peak_memory_bytes: { type: integer }
             cpu_seconds: { type: number }
+            phases_seconds:
+              type: object
+              additionalProperties: { type: number }
+              description: |
+                Where the run's time went, in seconds: queued (until a worker
+                took it), prepare (its files), container_start, runner_start
+                (Python and the runner's imports), kernel_start (until the first
+                cell), execute, render (output.html), exit, teardown (outputs
+                copied, container removed). A phase that couldn't be measured is
+                absent. Diagnostic: the set of phases may change.
         limits: { type: object }
         image:
           type: object

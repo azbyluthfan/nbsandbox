@@ -15,6 +15,20 @@ A small function call, timed from the request to the result (`start-latency` in 
 
 Almost all of it is starting a fresh container and Python kernel; the notebook itself takes milliseconds. The "Fast starts" item on the [roadmap](../ROADMAP.md) works against this (target: under 1 s).
 
+**Where the time goes.** Every run records its phases (`usage.phases_seconds` in its result, the `nbsandbox_run_phase_seconds` metric). The same small call, median of three (2026-11-15):
+
+| Phase | Docker Desktop | Kubernetes in kind |
+|---|---|---|
+| Container start | 0.04 s | under 0.5 s |
+| Runner start (Python, the wrapper's imports; on Kubernetes also the files copied in) | 0.54 s | 2.0 s |
+| Kernel start, to the first cell | 0.77 s | 0.90 s |
+| The notebook's cells | 0.39 s | 0.62 s |
+| Rendering `output.html` | 0.99 s | 1.17 s |
+| Teardown (outputs copied out, container removed) | 0.04 s | 2.0 s |
+| Request → result | 2.9 s | 5.1–5.8 s |
+
+Rendering, the kernel and the runner's imports are most of it; on Kubernetes, copying files through the API adds about 4 s.
+
 ## Several runs at once
 
 - **Two calls of one function at once** (`parallel-invocations`): 3.5 s on Docker Desktop, 3.8 s on Linux with `runc`, 6.2 s with gVisor on a 2-CPU VM. The calls overlap; under gVisor on a small host they slow each other more.

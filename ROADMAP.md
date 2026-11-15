@@ -23,7 +23,7 @@ The first release covers what was planned as v0.1 to v0.4, plus scaling out and 
 
 - **Authentication against real identity providers.** Token checking, scopes and on-behalf-of calls are built and unit-tested against a local issuer; next, end-to-end tests with Entra ID and Keycloak, and a guide for each.
 - **Sandboxes on real clusters.** Run the suite under GKE Sandbox (gVisor) and AKS Pod Sandboxing (Kata), and add a GKE Terraform example beside the AKS one.
-- **Fast starts (≤ 1 s).** Today a run spends about 3–5 s (about a second more under gVisor) before its first cell, almost all of it starting a fresh container and Python kernel. Cut it while keeping a fresh container per run:
+- **Fast starts (≤ 1 s).** Today a run spends about 3–5 s (about a second more under gVisor) before its first cell, almost all of it starting a fresh container and Python kernel. Every run now records where its time goes ([perf.md](docs/perf.md#starting-a-run)): rendering, the kernel and the runner's imports are most of it. Cut it while keeping a fresh container per run:
   - skip work at start (render HTML after the result, lighter imports, run nbclient directly instead of papermill);
   - keep a small pool of single-use pre-started containers per published function version (created and kernel started ahead of time, used once, then removed);
   - later, restore a booted kernel from a snapshot (gVisor checkpoint/restore, Firecracker snapshots).
