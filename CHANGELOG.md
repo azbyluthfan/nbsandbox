@@ -17,7 +17,7 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 ### Changed
 
 - **Faster results: rendering `output.html` takes about 0.1 s instead of 1 s.** The runner renders with nbconvert's library, warmed up in the background while the kernel starts, instead of starting a new `python -m nbconvert` (same HTML, same 5-minute limit; a failure still leaves `rendered: false`). A small call on Docker: 2.9 s → 2.5 s ([docs/perf.md](docs/perf.md#starting-a-run)).
-- **The reference reports come from the weekly CI run:** it runs the whole suite on Linux with Docker Engine with `runc` and gVisor at the default limits (2 GiB per run, where the last Linux report used 512 MiB), and on Kubernetes 1.37 (kind, Cilium) with both runtimes; when it passes, a new job renders `docs/isolation-report-linux.md` and `docs/isolation-report-kubernetes.md` and opens a pull request with them (its commit signed off, for the DCO check). `make report-linux` and `make report-k8s` still run them on your own machine.
+- **The reference reports come from the weekly CI run's results:** it runs the whole suite on Linux with Docker Engine with `runc` and gVisor at the default limits (2 GiB per run, where the last Linux report used 512 MiB), and on Kubernetes 1.37 (kind, Cilium) with both runtimes, and attaches the findings to the run. CI never writes to the repository: a person renders the reports from a passing run with `scripts/render-reports.sh` and commits them, usually in the release's pull request. `make report-linux` and `make report-k8s` still run them on your own machine.
 
 ## [0.1.1] - 2026-11-15
 

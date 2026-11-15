@@ -66,7 +66,7 @@ The suite found these differences. nbsandbox handles each of them, so results an
 
 ## Reproduce
 
-**Every week, in CI:** the weekly run's two Docker jobs run the whole suite on GitHub's Linux runner (Docker Engine, 4 CPUs, 16 GB) with `runc` and with `runsc`, at the default limits (2 GiB per run). When the run passes, a job renders their findings into [isolation-report-linux.md](isolation-report-linux.md) (and the Kubernetes jobs' into [isolation-report-kubernetes.md](isolation-report-kubernetes.md)) and opens a pull request with them ("docs: isolation reports from the weekly run"): merge it to publish the new reports.
+**Every week, in CI:** the weekly run's two Docker jobs run the whole suite on GitHub's Linux runner (Docker Engine, 4 CPUs, 16 GB) with `runc` and with `runsc`, at the default limits (2 GiB per run), and attach their findings to the run. CI doesn't change the repository: to publish a run's results as [isolation-report-linux.md](isolation-report-linux.md) (and the Kubernetes jobs' as [isolation-report-kubernetes.md](isolation-report-kubernetes.md)), download the run's `isolation-report-*` artifacts, render them with `scripts/render-reports.sh <folder>`, review and commit them in a pull request.
 
 **On your own Linux machine or VM:**
 

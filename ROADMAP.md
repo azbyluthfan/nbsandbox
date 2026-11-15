@@ -28,7 +28,7 @@ A patch release with two fixes (Kubernetes runs copied their files slowly; Go 1.
 A patch release with two fixes (tornado 6.6.1 in the runner image; gVisor installs again on the local Kubernetes cluster) and:
 
 - **Faster results:** rendering `output.html` takes about 0.1 s instead of 1 s, so a small call on Docker takes 2.5 s instead of 2.9 s ([perf.md](docs/perf.md#starting-a-run)).
-- **The reference reports, every week:** the weekly CI run produces the Linux report at production sizes (runc and gVisor, default 2 GiB per run) and the Kubernetes 1.37 report (runc and gVisor), and opens a pull request with them ([gvisor.md](docs/gvisor.md#reproduce)).
+- **The reference reports at production sizes:** the weekly CI run tests Linux with Docker Engine (runc and gVisor, default 2 GiB per run) and Kubernetes 1.37 (runc and gVisor); the reports in `docs/` are rendered from a passing run by a person and reviewed like any change ([releasing.md](docs/releasing.md)).
 
 ## Next
 
