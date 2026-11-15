@@ -124,13 +124,14 @@ The API is described in [api/openapi.yaml](api/openapi.yaml). When you add a rou
 | Unit | one package, with fakes for what it depends on | `make test` / `make cover` | no |
 | Integration | the API against the dev stack: runs, cancellation, restarts, Docker loss | `make test-integration` (restarts the stack); `make test-quick` skips the slow limit and isolation tests (about 6 min) | yes |
 | Cluster | the same suite through the cluster stack, plus failure tests (killing workers, API processes, Postgres) | `make test-cluster`; `make test-cluster-failures` for only the failure tests | yes |
-| Kubernetes | the backend conformance suite against real Pods; the integration suite through the kind stack | `make test-k8s-conformance`; `make test-k8s` | yes |
-| Isolation | probe notebooks and the isolation reports | `make report` (this machine's Docker); `make report-linux` (Linux with Docker Engine, `runc` and gVisor, in a Lima VM: [docs/gvisor.md](docs/gvisor.md#reproduce)); `make report-k8s` (kind; `K8S_RUNTIME_CLASS=gvisor` adds gVisor) | yes, Linux for authoritative results |
+| Kubernetes | the backend conformance suite against real Pods; the integration suite through the kind stack | `make test-k8s-conformance`; `make test-k8s` (`K8S_VERSION=1.34` for the oldest supported Kubernetes; `K8S_RUN_MEMORY=512MiB` with Docker under 4 GB) | yes |
+| Authentication | a real Keycloak beside the dev stack: user tokens, scopes, audience, token exchange | `make test-keycloak` | yes |
+| Isolation | probe notebooks and the isolation reports | `make report` (this machine's Docker); `make report-linux` (Linux with Docker Engine, `runc` and gVisor, in a Lima VM: [docs/gvisor.md](docs/gvisor.md#reproduce)); `make report-k8s` (kind; `K8S_RUNTIME_CLASS=gvisor` adds gVisor); `nbsandbox-report check` against any running deployment ([docs/check-deployment.md](docs/check-deployment.md)) | yes, Linux for authoritative results |
 | Soak | a long mix of runs, failing on any steady growth | `make soak` (45 min), `make soak-cluster`, `make soak-k8s` | yes |
 | Web UI | the main screens in a headless browser, retaking the tour's screenshots | `make tour` (with `make up` running) | yes |
 | Fuzzing | the parsers of outside input | `make fuzz` (every target, 30 s each; `FUZZTIME=3m` for longer) or one target with `go test ./internal/<pkg> -run '^$' -fuzz '^FuzzName$'` ([docs/security/review.md](docs/security/review.md#fuzzing) lists them) | no |
 
-**In CI:** every pull request runs `make check`, govulncheck, the Compose and workflow lints and shellcheck (`pr`); every push to `main` runs the integration suite on Linux (`main`). Once a week, and on demand from the Actions tab, `weekly` runs every scenario side by side in about 1.5 hours: Docker with runc and gVisor (conformance, isolation report, soak), Kubernetes on kind with both runtimes, all fuzz targets, and a security scan of the code and both images; a failure opens an issue.
+**In CI:** every pull request runs `make check`, govulncheck, the Compose and workflow lints and shellcheck (`pr`); every push to `main` runs the integration suite on Linux (`main`). Once a week, and on demand from the Actions tab, `weekly` runs every scenario side by side in about 1.5 hours: Docker with runc and gVisor (conformance, isolation report, the API check, soak), Kubernetes on kind (1.37 with both runtimes, 1.34 with runc), Keycloak end to end, all fuzz targets, and a security scan of the code and both images; when it passes it opens a pull request with the refreshed Linux and Kubernetes reference reports, and a failure opens an issue.
 
 Coverage thresholds: at least 80 % for core packages (`runs`, `logs`, `spaces`, `store`, `isolation/docker`) and at least 70 % overall. `make cover` enforces both.
 
@@ -139,19 +140,24 @@ Coverage thresholds: at least 80 % for core packages (`runs`, `logs`, `spaces`, 
 | Package | What it does |
 |---|---|
 | `cmd/nbsandboxd` | the service binary: `serve`, `hash-password`, `health`, `backup`, `version` |
-| `cmd/nbsandbox-report` | turns integration-test findings into `docs/isolation-report.md` |
+| `cmd/nbsandbox-report` | turns integration-test findings into `docs/isolation-report.md`; `check` runs the checks against a deployment |
+| `cmd/nbsandbox-mcp` | the MCP server for AI agents ([docs/mcp.md](docs/mcp.md)) |
 | `internal/api` | HTTP routes (one route table), auth middleware, errors, SSE log stream, the web UI's API path |
+| `internal/grpcapi` | the gRPC (Connect) services, the same operations as REST |
+| `internal/apiclient` | a small REST client, shared by `check` and the MCP server |
+| `internal/check` | the isolation, resource and failure checks, run through the API (by the integration suite and by `nbsandbox-report check`) |
+| `internal/mcpserver` | the MCP tools |
 | `internal/auth` | users file, bcrypt, credential cache |
 | `internal/config` | settings file and environment overrides, validated at startup |
-| `internal/spaces` | spaces and files on disk: path checks, uploads, quotas |
+| `internal/spaces` | spaces and files: path checks, uploads, quotas, published versions; contents in object storage (`internal/blob`) |
 | `internal/runs` | run lifecycle: submission, queue, cancel, classification, results, retention |
 | `internal/logs` | the per-run log hub that live viewers subscribe to |
-| `internal/isolation` | the `Backend` interface; `docker` implements it, `backendtest` is its conformance suite |
+| `internal/isolation` | the `Backend` interface; `docker` and `kubernetes` implement it, `backendtest` is its conformance suite |
 | `internal/deps` | the runner image's package manifest and the notebook import check |
 | `internal/store` | PostgreSQL: migrations, spaces, runs, functions, status events, idempotency keys (tests: `make test-db`, one schema per test via `storetest`) |
 | `internal/obs` | logging, metrics, health and readiness |
 | `internal/ui` | the optional local web UI's static files |
-| `runner-image/` | the image notebooks run in, and its wrapper around papermill |
+| `runner-image/` | the image notebooks run in, and its wrapper around papermill (cell events, step timings, rendering) |
 
 Packages talk to each other through small interfaces so each one can be unit-tested with fakes; only integration tests need Docker.
 

@@ -26,14 +26,11 @@ gVisor needs Linux with Docker Engine (x86_64 or arm64). Docker Desktop is not a
 
 4. Set `docker.runtime: runsc` and restart nbsandboxd. `GET /v1/runtime` then reports the runtime.
 
-## Results (2026-11-08)
+## Results
 
-`make report-linux` ran the whole integration suite on Linux with Docker Engine, once with `runc` and once with `runsc`: **49 of 49 checks pass with each** ([isolation-report-linux.md](isolation-report-linux.md)). Setup:
-- Ubuntu 26.04, Docker 29.9, gVisor 20261102.0;
-- a Lima VM with 2 CPUs and 2 GB, on an Apple-silicon Mac;
-- runs limited to 512 MiB, 1 CPU and 256 processes.
+**Every week, in CI:** the whole integration suite runs on Linux with Docker Engine (GitHub's runner: 4 CPUs, 16 GB), once with `runc` and once with `runsc`, at the default limits (2 GiB, 1 CPU and 256 processes per run): **49 of 49 checks pass with each** ([isolation-report-linux.md](isolation-report-linux.md)). There, a small function call takes about 3.4 s with either runtime.
 
-**What it costs**, measured on the same VM, the same runner image and the same limits (best of several runs):
+**What it costs** in detail, measured on 2026-11-08 on a smaller host (a 2-CPU, 2 GB VM with Ubuntu 26.04, Docker 29.9 and gVisor 20261102.0; runs limited to 512 MiB), with the same runner image (best of several runs):
 
 | Work | runc | runsc | runsc / runc |
 |---|---|---|---|
@@ -51,7 +48,7 @@ gVisor needs Linux with Docker Engine (x86_64 or arm64). Docker Desktop is not a
 
 - **Computation runs at the same speed.**
 - **Opening files costs more.** Every file system call goes through gVisor, so work with many small files is several times slower, and large reads and writes about 1.6×.
-- **Start-up is slower.** Python and Jupyter read thousands of small files to start, which is where the extra second per run comes from. The container start itself costs the same.
+- **Start-up can be slower.** Python and Jupyter read thousands of small files to start, which is where the extra second per run came from on the small VM; on the 4-CPU CI runner the two runtimes start equally fast. The container start itself costs the same.
 - **On a busy small host,** two runs at once slow each other more under gVisor (1.9× for two calls vs about 1× with runc on 2 CPUs).
 
 ## How runs differ under gVisor
@@ -69,7 +66,7 @@ The suite found these differences. nbsandbox handles each of them, so results an
 
 ## Reproduce
 
-**Every week, in CI:** the weekly run's two Docker jobs run the whole suite on GitHub's Linux runner (Docker Engine, 4 CPUs, 16 GB) with `runc` and with `runsc`, at the default limits (2 GiB per run). When both pass, a job renders their findings into [isolation-report-linux.md](isolation-report-linux.md) and opens a pull request with it ("docs: Linux isolation report from the weekly run"): merge it to publish the new report.
+**Every week, in CI:** the weekly run's two Docker jobs run the whole suite on GitHub's Linux runner (Docker Engine, 4 CPUs, 16 GB) with `runc` and with `runsc`, at the default limits (2 GiB per run). When the run passes, a job renders their findings into [isolation-report-linux.md](isolation-report-linux.md) (and the Kubernetes jobs' into [isolation-report-kubernetes.md](isolation-report-kubernetes.md)) and opens a pull request with them ("docs: isolation reports from the weekly run"): merge it to publish the new reports.
 
 **On your own Linux machine or VM:**
 

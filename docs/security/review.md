@@ -2,6 +2,16 @@
 
 **2026-11-08, before the first v0.x release.** What was checked, what was found, and what was done about each finding. Repeat it before each release (the commands are at the end). The [threat model](threat-model.md) describes what nbsandbox protects against; this page is the evidence that it was checked.
 
+## Since v0.1.0: the review for v0.1.2 (2026-11-15)
+
+| Area | Result |
+|---|---|
+| Go | Go 1.27.3's `net/http` server could crash on a header race (GO-2026-6859), reachable from the API: **fixed** in 0.1.1 by building with Go 1.27.4. `govulncheck` now: none reached by our code |
+| Runner's Python packages | tornado ≤ 6.6.0's incomplete open-redirect fix (`RedirectHandler`), not reachable (the runner serves no HTTP and runs have no network): **fixed** with tornado 6.6.1. `pip-audit` now: none |
+| Container images | Trivy in the weekly CI run on both images built from this code: no fixable HIGH or CRITICAL |
+| Secrets in the source tree | `gitleaks`: the same `YOUR_PASSWORD` placeholder, and the demo users' published dev passwords in the tour; the Keycloak test realm's fixed test secrets (`deploy/keycloak/realm.json`) are marked as such and used only by `make test-keycloak` |
+| New surfaces | the MCP server, the deployment check and the Keycloak test setup: see the [threat model](threat-model.md#network--service) |
+
 ## Summary
 
 | Area | Result |

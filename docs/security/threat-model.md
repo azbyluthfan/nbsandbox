@@ -1,6 +1,6 @@
 # Threat Model
 
-Status: **reviewed for the first v0.x release** (2026-11-08; see the [security review](review.md)). Every mitigation below names the automated check behind it. The check names match the rows of the isolation reports ([Docker](../isolation-report.md), [Linux with runc and gVisor](../isolation-report-linux.md), [Kubernetes](../isolation-report-kubernetes.md)), or are Go test and fuzz target names. Revisit this when the trust model changes: less trusted users, shared spaces, or network policy.
+Status: **reviewed for v0.1.2** (2026-11-15; first reviewed for v0.1.0 on 2026-11-08; see the [security review](review.md)). Every mitigation below names the automated check behind it. The check names match the rows of the isolation reports ([Docker](../isolation-report.md), [Linux with runc and gVisor](../isolation-report-linux.md), [Kubernetes](../isolation-report-kubernetes.md)), or are Go test and fuzz target names. Revisit this when the trust model changes: less trusted users, shared spaces, or network policy.
 
 ## What we protect
 
@@ -72,6 +72,10 @@ client ──HTTPS──▶ Caddy ──▶ nbsandboxd ──▶ socket proxy �
 |---|---|---|
 | Credential brute force or leaking | bcrypt; timing-safe check for unknown users; TLS through Caddy; users-file permission check; logs redacted; a startup warning when the repository's demo users (public passwords) are loaded; OIDC tokens checked for issuer, audience, expiry and an asymmetric algorithm, keys only from the issuer's key set. **No rate limiting in v0.x** (known limitation: trusted users, small deployments; to come with real authentication) | auth tests, log redaction tests, users-file permission tests |
 | A calling service's credentials do more than invoke | With OIDC, give the calling service a token with only `nbsandbox.functions.invoke nbsandbox.read`: it can call functions and read their results, nothing else. Basic-auth users (development) hold every scope but admin (**known limitation** of basic auth) | `TestScopeMatrix` (generated from the route table: each route refused without its scope); [auth.md](../auth.md) |
+| An AI agent (through `nbsandbox-mcp`) does more than its user meant | The MCP server is only a client of the API: every tool call is checked by nbsandboxd with the agent's own credentials, so an agent can do exactly what its token's scopes allow, in its user's own spaces. Its runs are ordinary runs (no network, the run's limits). Give agents a token with only the scopes they need, and a space of their own | `internal/mcpserver` tests: credentials passed through, errors from nbsandbox shown, tools marked read-only or changing |
+| A shared MCP server (`nbsandbox-mcp -http`) holds or leaks credentials | It has none of its own: each request's `Authorization` header goes to nbsandbox unchanged, and requests without one get `401`; it refuses a server-wide token over HTTP; plain `http` to nbsandbox only on loopback, private or in-cluster addresses | `cmd/nbsandbox-mcp` tests (`requireAuth`, settings refused) |
+| The deployment check (`nbsandbox-report check`) exposes its users' credentials, or leaves data behind | Credentials only from the environment (never flags, so not in the process list); plain `http` only to localhost; its spaces deleted at the end, also on Ctrl-C; nothing restarted or stopped | `cmd/nbsandbox-report` and `internal/check` tests |
+| Test credentials end up in a deployment | The Keycloak test realm's passwords and secrets are fixed public values in `deploy/keycloak/realm.json`, used only by `make test-keycloak` with Keycloak in development mode; the demo users in `config/users.yaml` cause a startup warning | review |
 
 ### nbsandboxd → Docker
 

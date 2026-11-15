@@ -129,7 +129,7 @@ When you start a run, nbsandbox reads the notebook's imports and the space's `re
 scripts/nbsandbox.sh runs get "$ID" "$RUN"        # status, result, usage, error
 ```
 
-`result.error.cell_index` is **0-based and counts the cells of your notebook** as you uploaded it (the parameters cell papermill adds isn't counted). `result.usage` has duration, peak memory and CPU time.
+`result.error.cell_index` is **0-based and counts the cells of your notebook** as you uploaded it (the parameters cell papermill adds isn't counted). `result.usage` has duration, peak memory and CPU time, and `phases_seconds`: where the run's time went (waiting in the queue, starting the container and the kernel, your cells, rendering), for when a run seems slow to start.
 
 Outputs, for any run that got as far as running:
 - **`output.ipynb`:** the executed notebook. For a failed, `oom` or `timeout` run it holds the cells that completed (`result.partial: true`). Stored cell output is capped at 5 MiB in total; beyond that a note replaces further output. The full console output is in the log.

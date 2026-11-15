@@ -78,9 +78,9 @@ func buildPod(cfg Config, spec isolation.RunSpec) *corev1.Pod {
 	cpu := resource.NewMilliQuantity(spec.Limits.NanoCPUs/1e6, resource.DecimalSI)
 	limits := corev1.ResourceList{corev1.ResourceMemory: *mem, corev1.ResourceCPU: *cpu}
 	// The files container copies the run's files in and out (tar through
-	// pods/exec) and follows its events. At 10 millicores it was throttled
-	// in nearly every CPU period: copies took 10–90 s. Requests equal limits,
-	// like the runner's, so the Pod stays Guaranteed.
+	// pods/exec) and follows its events: it needs enough CPU for the copies
+	// not to be throttled. Requests equal limits, like the runner's, so the
+	// Pod stays Guaranteed.
 	small := corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("32Mi"), corev1.ResourceCPU: resource.MustParse("250m")}
 	containerSec := &corev1.SecurityContext{
 		RunAsNonRoot:             &yes,

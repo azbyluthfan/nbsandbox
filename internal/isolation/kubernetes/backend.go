@@ -490,14 +490,13 @@ const eventsRetry = time.Second
 
 // followEvents (bash) prints what is appended to the events file from byte
 // $1 on, looking four times a second. Not `tail -f`: it waits for inotify,
-// which doesn't fire for another container's writes in a gVisor sandbox, so
-// events arrived only when the run ended. And it starts no process while it
-// waits: the files container's CPU is small, and a loop running `stat` and
-// `sleep` four times a second used all of it (at the 10 millicores of
-// 0.1.0), so copying the run's files in and out crawled. It reads the file it opened (a link the notebook puts in its
-// place later isn't followed) with bash's own read, and waits with read -t
-// on a pipe nobody writes. A line still being written is printed in parts;
-// the bytes are the same.
+// which doesn't fire for another container's writes in a gVisor sandbox.
+// And it starts no process while it waits: the files container's CPU is
+// small and also copies the run's files, so a loop starting `stat` and
+// `sleep` four times a second would throttle the copies. It reads the file
+// it opened (a link the notebook puts in its place later isn't followed)
+// with bash's own read, and waits with read -t on a pipe nobody writes. A
+// line still being written is printed in parts; the bytes are the same.
 const followEvents = `export LC_ALL=C; f=/run/` + isolation.RunEventsFile + `
 exec 9<> <(:)
 until [ -f "$f" ] && [ ! -L "$f" ]; do read -r -t 0.25 -u 9 _; done

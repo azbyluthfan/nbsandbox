@@ -23,23 +23,23 @@ A patch release with two fixes (Kubernetes runs copied their files slowly; Go 1.
 - **MCP server for AI agents** (`nbsandbox-mcp`): agents write, run and read notebooks as their user ([mcp.md](docs/mcp.md)).
 - **Keycloak, end to end:** user tokens, scopes, audience and token exchange against a real Keycloak, weekly ([auth.md](docs/auth.md#keycloak)).
 
-## Since v0.1.1 (not released yet)
+## Released in v0.1.2
 
-- **The Linux reference report at production sizes, every week:** the weekly CI run's Docker jobs (runc and gVisor, default 2 GiB per run) produce it and open a pull request with it ([gvisor.md](docs/gvisor.md#reproduce)).
+A patch release with two fixes (tornado 6.6.1 in the runner image; gVisor installs again on the local Kubernetes cluster) and:
+
+- **Faster results:** rendering `output.html` takes about 0.1 s instead of 1 s, so a small call on Docker takes 2.5 s instead of 2.9 s ([perf.md](docs/perf.md#starting-a-run)).
+- **The reference reports, every week:** the weekly CI run produces the Linux report at production sizes (runc and gVisor, default 2 GiB per run) and the Kubernetes 1.37 report (runc and gVisor), and opens a pull request with them ([gvisor.md](docs/gvisor.md#reproduce)).
 
 ## Next
 
 - **Authentication against Entra ID, end to end.** Keycloak is tested end to end (tokens, scopes, audience, token exchange); Entra ID is unit-tested against a local issuer and documented, and needs the same end-to-end test with a real tenant.
-- **Sandboxes on real clusters.** Run the suite under GKE Sandbox (gVisor) and AKS Pod Sandboxing (Kata), and add a GKE Terraform example beside the AKS one.
-- **Fast starts (≤ 1 s).** Today a run spends about 3–5 s (about a second more under gVisor) before its first cell, almost all of it starting a fresh container and Python kernel. Every run now records where its time goes ([perf.md](docs/perf.md#starting-a-run)): rendering, the kernel and the runner's imports are most of it. Cut it while keeping a fresh container per run:
-  - skip work at start: rendering is done (0.1 s instead of 1 s; a small call 2.9 s → 2.5 s); next, run nbclient directly instead of papermill, so the kernel starts while the runner imports, and lighter imports;
-  - keep a small pool of single-use pre-started containers per published function version (created and kernel started ahead of time, used once, then removed);
-  - later, restore a booted kernel from a snapshot (gVisor checkpoint/restore, Firecracker snapshots).
+- **Sandboxes on real clusters.** Run the suite under GKE Sandbox (gVisor) and AKS Pod Sandboxing (Kata), and add a GKE Terraform example beside the AKS one. `nbsandbox-report check` makes each one a deploy, a check and a teardown.
 
 ## Later
 
 | Item | What it adds | Where it lands |
 |---|---|---|
+| Fast starts (under 1 s) | A small call takes about 2.5 s, which suits batch work and most function calls. What remains is CPU work on the run's one CPU (the Jupyter client libraries and the kernel's imports, about 0.6 s each; [perf.md](docs/perf.md#starting-a-run)): starting the kernel earlier doesn't help on one CPU, so going under 1 s takes **a pool of single-use pre-started containers** per published function version (created and kernel started ahead of time, used once, then removed), and later restoring a booted kernel from a snapshot (gVisor checkpoint/restore, Firecracker snapshots). Waits for a caller that needs it | isolation, runs, runner image |
 | Web UI login | The editor becomes usable beyond one's own machine: authorization code with PKCE against the identity provider, and a server-side session cookie (a browser's `EventSource` can't send a bearer token) | web UI, auth |
 | Shared spaces | Grants keyed by caller ID (`space, principal, role`), read or read-write | auth, API, web UI |
 | Token revocation and login rate limiting | Token introspection (RFC 7662) for instant revocation; rate limiting of failed basic-auth logins | auth |

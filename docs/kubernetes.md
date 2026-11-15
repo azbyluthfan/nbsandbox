@@ -42,13 +42,13 @@ nbsandbox doesn't depend on a particular network plugin (CNI). The chart creates
 
 Plugins differ in how they treat traffic to host-network endpoints (the API server, nodes, the cloud metadata service). That's why the workers check the result for themselves, whichever plugin it is.
 
-**Tested locally, on kind (2026-11-08):**
+**Tested on kind:**
 
 | Plugin | Result |
 |---|---|
-| Cilium 1.17 | the full integration suite and its isolation report pass; nothing is reachable from a run Pod |
-| Calico 3.29 | the isolation suite, memory, cancel, disk-quota and runtime tests pass; nothing is reachable from a run Pod |
-| kindnet (kind's own) | doesn't enforce the policy: the probe Pod reached the internet, the node's kubelet, the worker and the API server. Both workers said so, stayed not ready and took no runs; submitting a run got 503 and no run Pod was created |
+| Cilium 1.20 (Kubernetes 1.37 and 1.34) | every week in CI: the full integration suite and its isolation report pass, with runc and under gVisor; nothing is reachable from a run Pod |
+| Calico 3.29 (Kubernetes 1.32, 2026-11-08) | the isolation suite, memory, cancel, disk-quota and runtime tests pass; nothing is reachable from a run Pod |
+| kindnet (kind's own; 2026-11-08) | doesn't enforce the policy: the probe Pod reached the internet, the node's kubelet, the worker and the API server. Both workers said so, stayed not ready and took no runs; submitting a run got 503 and no run Pod was created |
 
 So a cluster whose plugin doesn't enforce NetworkPolicy fails closed: nbsandbox stops running notebooks instead of running them with network access.
 
@@ -79,7 +79,7 @@ The chart is in [deploy/helm/nbsandbox](../deploy/helm/nbsandbox). It doesn't in
 ```bash
 kubectl create namespace nbsandbox
 kubectl -n nbsandbox create secret generic nbsandbox-db --from-literal=database-url='postgres://…?sslmode=require'
-helm upgrade --install nbsandbox oci://ghcr.io/azbyluthfan/charts/nbsandbox --version 0.1.1 -n nbsandbox -f my-values.yaml
+helm upgrade --install nbsandbox oci://ghcr.io/azbyluthfan/charts/nbsandbox --version 0.1.2 -n nbsandbox -f my-values.yaml
 ```
 
 Releases publish the chart signed, on GHCR ([releasing.md](releasing.md) shows how to verify it); from a checkout, use `deploy/helm/nbsandbox` instead of the `oci://` address.
@@ -118,4 +118,4 @@ The API is on http://127.0.0.1:8080 (the demo users, as with `make up`).
 | `make test-k8s` | the integration suite through the Kubernetes stack |
 | `make report-k8s` | the same, writing [isolation-report-kubernetes.md](isolation-report-kubernetes.md): every isolation, resource and failure check, observed on run Pods. With `K8S_RUNTIME_CLASS=gvisor` it adds gVisor's results beside the default runtime's |
 
-On kind, runs get 1 GiB (run Pods reserve their whole limit, and the node has what Docker Desktop gives it). Starting a run takes longer than with Docker (8–30 s on a laptop, [perf.md](perf.md#starting-a-run)): the Pod is scheduled, and the files are copied in through the API. Cancelling takes up to about 10 s more for the same reason.
+On kind, runs get 1 GiB (run Pods reserve their whole limit, and the node has what Docker Desktop gives it; with Docker under 4 GB, `K8S_RUN_MEMORY=512MiB` lets two runs fit at once). Starting a run takes longer than with Docker (5–6 s on a laptop, [perf.md](perf.md#starting-a-run)): the Pod is scheduled, and the files are copied in through the API. Cancelling takes a second or two longer for the same reason.

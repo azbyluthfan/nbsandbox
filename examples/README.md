@@ -50,3 +50,14 @@ With tokens instead (see [docs/auth.md](../docs/auth.md)):
 The token needs the scopes for what the example does: `nbsandbox.spaces.write`, `nbsandbox.files.write`, `nbsandbox.runs` and `nbsandbox.read`, plus `nbsandbox.functions.publish` and `nbsandbox.functions.invoke` for the function part. A backend that only calls existing functions needs just `nbsandbox.functions.invoke nbsandbox.read`.
 
 Each run creates a new space named `example <date time>`; delete it in the web UI or with `DELETE /v1/spaces/{id}` when done.
+
+## From an AI agent
+
+The same API is available to AI agents (Claude Code, Claude Desktop, others) as MCP tools: `nbsandbox-mcp` lets an agent write a notebook into a space, run it and read the result, as its user. With the development stack and the same variables as above:
+
+```bash
+claude mcp add nbsandbox -e NBSANDBOX_URL=http://127.0.0.1:8080 -e NBSANDBOX_USER=alice -e NBSANDBOX_PASSWORD=alice-dev-password -- go run ./cmd/nbsandbox-mcp
+```
+
+[docs/mcp.md](../docs/mcp.md) has the tools, other clients, and running it as a shared server.
+
