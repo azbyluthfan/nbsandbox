@@ -363,6 +363,11 @@ func (m *Manager) submit(ctx context.Context, owner, spaceID string, req SubmitR
 	if !replay {
 		m.ex.signal() // a local worker needn't wait for the notification
 	}
+	if pkgs.Key != "" && !replay {
+		// The set may have failed while the run was being recorded: then
+		// nobody else will fail the run.
+		m.failIfPackagesFailed(ctx, id, pkgs.Key)
+	}
 	v, err := m.Get(ctx, owner, spaceID, id)
 	return v, replay, err
 }

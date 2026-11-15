@@ -276,7 +276,13 @@ type buildResult struct {
 func (s *Service) build(ctx context.Context, ps store.PackageSet) store.BuildOutcome {
 	fail := func(log, reason string) store.BuildOutcome { return store.BuildOutcome{Log: log, Reason: reason} }
 	logs := &tailLog{max: maxLog}
-	dir, err := os.MkdirTemp(filepath.Join(s.cfg.DataDir, "tmp"), "build-")
+	// Under packages/: the only folder besides spaces/ that containers may
+	// bind-mount from (the socket proxy's rule).
+	builds := filepath.Join(s.cacheRoot(), ".builds")
+	if err := os.MkdirAll(builds, 0o700); err != nil {
+		return fail("", "nbsandboxd couldn't prepare the build: "+err.Error())
+	}
+	dir, err := os.MkdirTemp(builds, "build-")
 	if err != nil {
 		return fail("", "nbsandboxd couldn't prepare the build: "+err.Error())
 	}

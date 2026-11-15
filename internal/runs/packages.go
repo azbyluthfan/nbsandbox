@@ -131,13 +131,32 @@ func (m *Manager) packagesFinished(key string, ps store.PackageSet) {
 		m.d.Log.Warn("find runs waiting for a failed package set", "key", key, "error", err)
 		return
 	}
+	for _, r := range waiting {
+		m.failForPackages(ctx, r, ps)
+	}
+}
+
+// failIfPackagesFailed fails the queued run runID if its set has failed
+// (the build ended before the run was recorded, so packagesFinished
+// didn't see it).
+func (m *Manager) failIfPackagesFailed(ctx context.Context, runID, key string) {
+	ps, err := m.d.Packages.Status(ctx, key)
+	if err != nil || ps.Status != store.PackagesFailed {
+		return
+	}
+	if r, err := m.d.DB.RunByID(ctx, runID); err == nil && r.Status == StatusQueued {
+		m.failForPackages(ctx, r, ps)
+	}
+}
+
+// failForPackages fails a queued run whose package set failed (first
+// writer wins: a run already finished stays as it is).
+func (m *Manager) failForPackages(ctx context.Context, r store.Run, ps store.PackageSet) {
 	out := Outcome{Status: StatusFailed, ErrorKind: KindPackages, Fault: FaultCaller,
 		Message: "the space's packages could not be built: " + ps.Error}
-	for _, r := range waiting {
-		if m.record(ctx, r, out, m.buildResult(ctx, r, out, nil, isolation.RunResult{}, nil, m.d.Now(), false), store.Fence{QueuedOnly: true}) &&
-			m.d.Metrics != nil {
-			m.d.Metrics.RunsTotal.WithLabelValues(StatusFailed).Inc()
-		}
+	if m.record(ctx, r, out, m.buildResult(ctx, r, out, nil, isolation.RunResult{}, nil, m.d.Now(), false), store.Fence{QueuedOnly: true}) &&
+		m.d.Metrics != nil {
+		m.d.Metrics.RunsTotal.WithLabelValues(StatusFailed).Inc()
 	}
 }
 

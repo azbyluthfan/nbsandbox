@@ -88,7 +88,7 @@ func TestPackagesEndToEnd(t *testing.T) {
 		t.Fatalf("publish: %d %s", r.Code, r.Body)
 	}
 	start = time.Now()
-	r := call(t, "POST", "/v1/spaces/"+sp+"/functions/pkgs/invoke?wait=120", "alice", strings.NewReader(`{"parameters":{}}`),
+	r := call(t, "POST", "/v1/spaces/"+sp+"/functions/pkgs/invoke?wait=55s", "alice", strings.NewReader(`{"parameters":{}}`),
 		map[string]string{"Content-Type": "application/json"})
 	invokeTook := time.Since(start)
 	if r.Code != http.StatusOK || !strings.Contains(string(r.Body), "1.0 MB") {
@@ -106,7 +106,9 @@ func TestPackagesFailures(t *testing.T) {
 	needPackages(t)
 	sp := space(t, "alice")
 	upload(t, "alice", sp, "", map[string]string{
-		"requirements.txt": "this-package-does-not-exist-nbsandbox-test\n",
+		// A new name each time: a recent failure of the same requirements
+		// is refused at once, without a waiting run.
+		"requirements.txt": fmt.Sprintf("this-package-does-not-exist-nbsandbox-%d\n", time.Now().UnixNano()),
 		"nb.ipynb":         codeNotebook("print('never')"),
 	})
 	run := startRun(t, "alice", sp, "nb.ipynb", nil)
@@ -124,7 +126,8 @@ func TestPackagesFailures(t *testing.T) {
 
 	// A conflict with the runner image's own packages.
 	upload(t, "alice", sp, "", map[string]string{"requirements.txt": "pandas==2.0.0\n"})
-	if r := call(t, "POST", "/v1/spaces/"+sp+"/packages", "alice", nil, nil); r.Code != http.StatusAccepted {
+	// 202 while it builds; 200 (failed) if the same conflict failed minutes ago.
+	if r := call(t, "POST", "/v1/spaces/"+sp+"/packages", "alice", nil, nil); r.Code != http.StatusAccepted && r.Code != http.StatusOK {
 		t.Fatalf("build: %d %s", r.Code, r.Body)
 	}
 	deadline := time.Now().Add(5 * time.Minute)

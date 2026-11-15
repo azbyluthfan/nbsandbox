@@ -296,3 +296,28 @@ func TestAdminRunsAndDrain(t *testing.T) {
 		t.Fatalf("after resuming: %+v", done)
 	}
 }
+
+// A set that failed before its run was recorded still fails the run.
+func TestRunRecordedAfterItsSetFailed(t *testing.T) {
+	e := newPkgEnv(t)
+	ctx := context.Background()
+	sp := e.space(t, "alice")
+	now := time.Now()
+	if _, err := e.db.RequestPackageSet(ctx, store.PackageRequest{Key: "k-failed", Requirements: "badpkg\n"}, time.Minute, now); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = e.db.ClaimPackageBuild(ctx, "w1", time.Minute, now)
+	_, _ = e.db.FinishPackageBuild(ctx, "k-failed", "w1", store.BuildOutcome{Reason: "no wheel for badpkg"}, now)
+	nbFiles, err := e.sp.CreateRun(ctx, "00000000-0000-4000-8000-0000000000aa", []byte(nb), []byte("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := e.db.SubmitRunWithEvent(ctx, store.NewRun{ID: "00000000-0000-4000-8000-0000000000aa", SpaceID: sp, Owner: "alice",
+		Notebook: "nb.ipynb", ParametersJSON: "{}", CreatedAt: now, PackageKey: "k-failed", Files: nbFiles}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	e.m.failIfPackagesFailed(ctx, "00000000-0000-4000-8000-0000000000aa", "k-failed")
+	if r, _ := e.db.RunByID(ctx, "00000000-0000-4000-8000-0000000000aa"); r.Status != StatusFailed || r.ErrorKind != KindPackages {
+		t.Fatalf("run: %+v", r)
+	}
+}

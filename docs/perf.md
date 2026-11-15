@@ -39,6 +39,23 @@ The renderer now warms up in the background while the kernel starts; a run has o
 - **Log hub fan-out** (`go test ./internal/logs/ -run '^$' -bench HubFanOut -benchtime 200000x`): one 64-byte line appended and delivered to N viewers reading as fast as they can, without writing log.txt. Apple silicon (8 cores), Go 1.27: 201 ns a line with no viewers (about 5 M lines/s), 283 ns with one, 1.7 µs with 10 (about 590 k lines/s), 16 µs with 100 (about 62 k lines/s). One allocation per line. A notebook printing as fast as Python can is about 5,000 lines/s, orders of magnitude below.
 - **Viewers under load** (`slow-viewer`): a 20,000-line burst followed by five viewers, one of which stops reading. The run takes as long as with nobody watching (3.1 s and 3.1 s on Docker Desktop; 3.3 s and 2.8 s on Linux), the four others get every line, and the stalled one isn't disconnected: it gets everything once it reads again.
 
+## Package sets
+
+A space's own packages ([packages.md](packages.md)), measured on Docker Desktop (macOS, Apple silicon) on 2026-11-15. Polling every 50 ms, from the request to the result, against PyPI:
+
+| | Time |
+|---|---|
+| Build `humanize==4.16.0`, `tabulate==0.9.0` (691 KiB set), from "build now" to ready | 5.1 s |
+| Build `polars` (polars and its runtime, 167 MiB set) | 10.6 s |
+| A run without a set, median of 7 | 3.00 s |
+| The same with the 691 KiB set mounted (importing both packages), median of 7 | 3.04 s |
+| A run importing polars from its set: the first after the build, then later ones | 5.7 s, then 3.8 s |
+
+- **Steady state:** a mounted set costs nothing measurable. The difference is importing the packages, as from the image; polars takes about 0.8 s to import.
+- **The first run after a large set is built** takes longer, probably the file cache warming up through Docker Desktop's shared file system.
+- **Builds are cached:** the same `requirements.txt` builds once for every space.
+- **Not measured yet:** the first use on another worker downloads the set from object storage and unpacks it; this test stack has one worker.
+
 ## A run's footprint
 
 The smoke notebook on Docker Desktop: about 3.7 s of container time, about 300 MB peak memory, 3 s of CPU. The tour's sales report (pandas, 4 months of data): 4.7 s, 124 MB peak, 4.3 s CPU ([tour.md](tour.md)).

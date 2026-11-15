@@ -112,7 +112,7 @@ services:
       - -allowGET=(/v[0-9.]+)?/(_ping|version|info|containers/json|containers/[a-zA-Z0-9_.-]+/(json|logs|stats)|images/.+/json)
       - -allowPOST=(/v[0-9.]+)?/containers/(create|[a-zA-Z0-9_.-]+/(start|stop|kill|wait))
       - -allowDELETE=(/v[0-9.]+)?/containers/[a-zA-Z0-9_.-]+
-      - -allowbindmountfrom=${NBSANDBOX_DATA_DIR:?set NBSANDBOX_DATA_DIR}/spaces
+      - -allowbindmountfrom=${NBSANDBOX_DATA_DIR:?set NBSANDBOX_DATA_DIR}/spaces,${NBSANDBOX_DATA_DIR:?set NBSANDBOX_DATA_DIR}/packages
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks: [docker-api]

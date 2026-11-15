@@ -54,7 +54,7 @@ run ──► the worker unpacks the set once into its cache ──► mounted r
 - **Cost:**
   - **The first build** of a `requirements.txt`: a few seconds for small sets, minutes for large ones (machine-learning frameworks).
   - **The first run on each worker:** downloading and unpacking the set.
-  - **Every later run:** nothing measurable; it is a read-only mount. Numbers are in [perf.md](perf.md#package-sets).
+  - **Every later run:** nothing measurable; it is a read-only mount. Numbers are in [perf.md](perf.md#package-sets): on Docker Desktop, 5 s to build a small set and 11 s for polars; later runs within 0.05 s of a run without a set.
 - **Shared:** spaces with the same requirements share a set.
 - **One build per set:** several runs waiting for the same set wait for one build.
 - **Clean-up:** sets nobody used for `packages.retention` (30 days) are removed, and rebuilt if asked for again.

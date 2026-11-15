@@ -700,13 +700,13 @@ function packagesSection(space) {
         break;
       case "pending":
       case "building":
-        body.append(el("p", {}, badge("running"), " Building the packages… runs that need them wait."));
+        body.append(el("p", {}, el("span", { class: "badge running" }, "building"), " Building the packages… runs that need them wait."));
         setTimeout(() => api.packages(space).then(render).catch(() => {}), 2000);
         break;
       case "ready": {
         const n = (p.installed || []).length;
         body.append(
-          el("p", {}, badge("succeeded"), ` ${n} package${n === 1 ? "" : "s"} · ${formatBytes(p.size_bytes || 0)}`,
+          el("p", {}, el("span", { class: "badge succeeded" }, "ready"), ` ${n} package${n === 1 ? "" : "s"} · ${formatBytes(p.size_bytes || 0)}`,
             p.built_at ? el("span", { class: "muted" }, ` · built ${timeAgo(p.built_at)}`) : null),
           n ? el("table", { class: "list" }, el("tbody", {}, p.installed.map((i) => el("tr", {}, el("td", {}, i.name), el("td", { class: "muted" }, i.version))))) : null,
           log);
