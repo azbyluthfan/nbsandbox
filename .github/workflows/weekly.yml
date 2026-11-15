@@ -192,6 +192,11 @@ jobs:
           branch: weekly/linux-report
           delete-branch: true
           sign-commits: true
+          # The pr workflow's DCO check wants "Signed-off-by: <author>":
+          # the bot is author and committer, and signs off.
+          author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          signoff: true
           add-paths: docs/isolation-report-linux.md
           commit-message: "docs: Linux isolation report from the weekly run"
           title: "docs: Linux isolation report from the weekly run"
