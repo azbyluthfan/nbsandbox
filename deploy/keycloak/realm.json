@@ -44,10 +44,10 @@
   "clients": [
     {
       "clientId": "nbsandbox",
-      "description": "nbsandbox itself: the audience of its tokens; it issues nothing",
+      "description": "nbsandbox itself: the audience of its tokens, and the client it introspects tokens with",
       "enabled": true,
       "publicClient": false,
-      "secret": "nbsandbox-unused-secret",
+      "secret": "nbsandbox-introspection-test-secret",
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,

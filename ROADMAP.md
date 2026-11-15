@@ -30,6 +30,10 @@ A patch release with two fixes (tornado 6.6.1 in the runner image; gVisor instal
 - **Faster results:** rendering `output.html` takes about 0.1 s instead of 1 s, so a small call on Docker takes 2.5 s instead of 2.9 s ([perf.md](docs/perf.md#starting-a-run)).
 - **The reference reports at production sizes:** the weekly CI run tests Linux with Docker Engine (runc and gVisor, default 2 GiB per run) and Kubernetes 1.37 (runc and gVisor); the reports in `docs/` are rendered from a passing run by a person and reviewed like any change ([releasing.md](docs/releasing.md)).
 
+## Since v0.1.2
+
+- **Token revocation and login rate limiting:** introspection (RFC 7662) for tokens revoked at the provider, and a limit on failed basic-auth sign-ins per username and per client address ([auth.md](docs/auth.md#revoked-tokens)).
+
 ## Next
 
 - **Authentication against Entra ID, end to end.** Keycloak is tested end to end (tokens, scopes, audience, token exchange); Entra ID is unit-tested against a local issuer and documented, and needs the same end-to-end test with a real tenant.
@@ -42,7 +46,6 @@ A patch release with two fixes (tornado 6.6.1 in the runner image; gVisor instal
 | Fast starts (under 1 s) | A small call takes about 2.5 s, which suits batch work and most function calls. What remains is CPU work on the run's one CPU (the Jupyter client libraries and the kernel's imports, about 0.6 s each; [perf.md](docs/perf.md#starting-a-run)): starting the kernel earlier doesn't help on one CPU, so going under 1 s takes **a pool of single-use pre-started containers** per published function version (created and kernel started ahead of time, used once, then removed), and later restoring a booted kernel from a snapshot (gVisor checkpoint/restore, Firecracker snapshots). Waits for a caller that needs it | isolation, runs, runner image |
 | Web UI login | The editor becomes usable beyond one's own machine: authorization code with PKCE against the identity provider, and a server-side session cookie (a browser's `EventSource` can't send a bearer token) | web UI, auth |
 | Shared spaces | Grants keyed by caller ID (`space, principal, role`), read or read-write | auth, API, web UI |
-| Token revocation and login rate limiting | Token introspection (RFC 7662) for instant revocation; rate limiting of failed basic-auth logins | auth |
 | Interactive mode | Run cells live from the editor, without JupyterHub: nbsandboxd starts a long-lived **session** container from the runner image (same limits and mounts as a run, still no network) with a kernel server listening on a Unix socket in the session's folder, and proxies the Jupyter kernel protocol over a WebSocket. A session that can write holds the space's write lock like a writing run; read-only sessions run beside others. Idle timeout, maximum length, and a limit on open sessions. The kernel also answers completion and inspection with live values (`df.` lists the columns). Needs the web UI login first | isolation, runs, API, web UI, runner image |
 | Completion through variables | `df.` after `df = pd.read_csv(...)`: follow return annotations in the completion index (today it knows modules, aliases and names across cells), or the kernel's own completion in interactive mode | runner image, web UI |
 | Deeper lint in the editor | ruff (as WebAssembly, in the browser): undefined names, unused imports, common mistakes across all cells | web UI |

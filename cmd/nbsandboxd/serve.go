@@ -124,12 +124,19 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 	}
 	if cfg.Auth.BasicEnabled() {
 		authn.Users = users
+		failures, refill := cfg.Auth.LoginLimit.Allowance()
+		authn.Limiter = auth.NewLoginLimiter(failures, refill)
+		authn.LimitByAddress = cfg.Auth.ByAddress()
+	}
+	if authn.TrustedProxies, err = auth.NewTrustedProxies(cfg.Auth.TrustedProxies); err != nil {
+		return err // validated at load; kept for safety
 	}
 	if cfg.Auth.OIDC != nil {
 		if authn.OIDC, err = auth.NewVerifier(*cfg.Auth.OIDC, nil); err != nil {
 			return err
 		}
-		logger.Info("bearer tokens accepted", "issuer", cfg.Auth.OIDC.Issuer, "audience", cfg.Auth.OIDC.Audience)
+		logger.Info("bearer tokens accepted", "issuer", cfg.Auth.OIDC.Issuer, "audience", cfg.Auth.OIDC.Audience,
+			"introspection", cfg.Auth.OIDC.Introspection != nil)
 	}
 
 	// 4. The backend (Docker or Kubernetes), on processes that run

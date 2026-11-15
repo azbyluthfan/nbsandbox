@@ -92,7 +92,7 @@ func newEnvWithIDP(t *testing.T, idp *authtest.IDP) testEnv {
 	mgr.SetDockerUp(true)
 	t.Cleanup(func() { mgr.Shutdown(0) })
 	shutdown := make(chan struct{})
-	authn := &auth.Authenticator{Users: us}
+	authn := &auth.Authenticator{Users: us, Limiter: auth.NewLoginLimiter(5, time.Minute)}
 	if idp != nil {
 		authn.OIDC = idp.Verifier(t)
 	}
@@ -143,6 +143,21 @@ func TestV1RequiresAuth(t *testing.T) {
 	rec := e.do(http.MethodGet, "/v1/nope", nil, "alice", "alice-password")
 	if rec.Code != http.StatusNotFound || decodeError(t, rec).Code != CodeNotFound {
 		t.Fatalf("authenticated: code %d body %s", rec.Code, rec.Body)
+	}
+}
+
+// Too many failed sign-ins: 429 too_many_requests with Retry-After, before
+// the password is checked.
+func TestFailedSignInsAreLimited(t *testing.T) {
+	e := newEnv(t)
+	for i := range 5 {
+		if rec := e.do(http.MethodGet, "/v1/spaces", nil, "alice", "guess"); rec.Code != http.StatusUnauthorized {
+			t.Fatalf("failure %d: %d", i, rec.Code)
+		}
+	}
+	rec := e.do(http.MethodGet, "/v1/spaces", nil, "alice", "alice-password")
+	if rec.Code != http.StatusTooManyRequests || decodeError(t, rec).Code != CodeTooManyRequests || rec.Header().Get("Retry-After") == "" {
+		t.Fatalf("after 5 failures: %d %s %v", rec.Code, rec.Body, rec.Header())
 	}
 }
 

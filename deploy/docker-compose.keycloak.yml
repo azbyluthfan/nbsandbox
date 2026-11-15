@@ -16,6 +16,11 @@ services:
       NBSANDBOX_OIDC_AUDIENCE: nbsandbox
       NBSANDBOX_OIDC_ID_PREFIX: kc
       NBSANDBOX_OIDC_ID_CLAIMS: sub
+      # Revocation: ask Keycloak whether each token is still active, and
+      # keep answers only 2 s so the test sees a revocation quickly.
+      NBSANDBOX_OIDC_INTROSPECTION_CLIENT_ID: nbsandbox
+      NBSANDBOX_OIDC_INTROSPECTION_CLIENT_SECRET: nbsandbox-introspection-test-secret
+      NBSANDBOX_OIDC_INTROSPECTION_CACHE: 2s
     ports:
       - "127.0.0.1:8180:8180"
 

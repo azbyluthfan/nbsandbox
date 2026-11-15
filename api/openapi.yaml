@@ -87,6 +87,7 @@ paths:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Space" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "413": { $ref: "#/components/responses/TooLarge" }
     get:
@@ -100,6 +101,7 @@ paths:
         "200": { description: One page, content: { application/json: { schema: { $ref: "#/components/schemas/SpaceList" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
 
   /v1/spaces/{id}:
@@ -113,6 +115,7 @@ paths:
         "200": { description: The space, content: { application/json: { schema: { $ref: "#/components/schemas/Space" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
     patch:
@@ -133,6 +136,7 @@ paths:
         "200": { description: Renamed, content: { application/json: { schema: { $ref: "#/components/schemas/Space" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
     delete:
@@ -143,6 +147,7 @@ paths:
         "204": { description: Deleted }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
@@ -167,6 +172,7 @@ paths:
         "200": { description: One page, content: { application/json: { schema: { $ref: "#/components/schemas/AdminSpaceList" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
 
   /v1/admin/spaces/{id}:
@@ -190,6 +196,7 @@ paths:
         "200": { description: The space, content: { application/json: { schema: { $ref: "#/components/schemas/AdminSpace" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
     delete:
@@ -200,6 +207,7 @@ paths:
         "204": { description: Deleted }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
@@ -235,6 +243,7 @@ paths:
         "201": { description: Stored, content: { application/json: { schema: { $ref: "#/components/schemas/UploadResult" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "413": { $ref: "#/components/responses/TooLarge" }
@@ -246,6 +255,7 @@ paths:
         "200": { description: Files sorted by path, content: { application/json: { schema: { $ref: "#/components/schemas/FileList" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -267,6 +277,7 @@ paths:
         "304": { description: Not modified (If-None-Match matched) }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "412": { description: If-Match didn't match }
@@ -291,6 +302,7 @@ paths:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/File" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "412": { $ref: "#/components/responses/VersionConflict" }
@@ -316,6 +328,7 @@ paths:
         "200": { description: Moved, content: { application/json: { schema: { $ref: "#/components/schemas/File" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
@@ -330,6 +343,7 @@ paths:
         "204": { description: Deleted }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
@@ -355,6 +369,7 @@ paths:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/File" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
@@ -378,6 +393,7 @@ paths:
                   items: { type: array, items: { $ref: "#/components/schemas/Function" } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -393,6 +409,7 @@ paths:
         "200": { description: The function, content: { application/json: { schema: { $ref: "#/components/schemas/Function" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
     delete:
@@ -403,6 +420,7 @@ paths:
         "204": { description: Deleted }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
@@ -447,6 +465,7 @@ paths:
         "201": { description: Published, content: { application/json: { schema: { $ref: "#/components/schemas/FunctionVersion" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "413": { $ref: "#/components/responses/TooLarge" }
@@ -464,6 +483,7 @@ paths:
         "200": { description: The version, content: { application/json: { schema: { $ref: "#/components/schemas/FunctionVersion" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -479,6 +499,7 @@ paths:
         "200": { description: The contract, content: { application/json: { schema: { $ref: "#/components/schemas/Contract" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -521,6 +542,7 @@ paths:
         "202": { description: With wait, the run hadn't finished when the wait ended, content: { application/json: { schema: { $ref: "#/components/schemas/Run" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "422":
@@ -562,6 +584,7 @@ paths:
         "202": { description: With wait, the run hadn't finished when the wait ended, content: { application/json: { schema: { $ref: "#/components/schemas/Run" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "422":
@@ -599,6 +622,7 @@ paths:
         "200": { description: The event stream, content: { text/event-stream: { schema: { type: string } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -624,6 +648,7 @@ paths:
         "200": { description: The event stream, content: { text/event-stream: { schema: { type: string } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -635,6 +660,7 @@ paths:
       responses:
         "200": { description: Runtime, content: { application/json: { schema: { $ref: "#/components/schemas/RuntimeInfo" } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "503": { $ref: "#/components/responses/DockerUnavailable" }
 
@@ -668,6 +694,7 @@ paths:
                     additionalProperties: { type: array, items: { type: array, items: { type: string } } }
         "304": { description: Not modified (If-None-Match matched) }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "503": { $ref: "#/components/responses/DockerUnavailable" }
@@ -711,6 +738,7 @@ paths:
         "200": { description: Replay of an earlier request with the same Idempotency-Key, content: { application/json: { schema: { $ref: "#/components/schemas/Run" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
@@ -732,6 +760,7 @@ paths:
         "200": { description: One page, content: { application/json: { schema: { $ref: "#/components/schemas/RunList" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -747,6 +776,7 @@ paths:
         "200": { description: The run, content: { application/json: { schema: { $ref: "#/components/schemas/Run" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
     delete:
@@ -757,6 +787,7 @@ paths:
         "204": { description: Deleted }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
@@ -782,6 +813,7 @@ paths:
         "202": { description: Cancelling or cancelled, content: { application/json: { schema: { $ref: "#/components/schemas/Run" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
@@ -814,6 +846,7 @@ paths:
         "202": { description: With wait, the run hadn't finished when the wait ended, content: { application/json: { schema: { $ref: "#/components/schemas/Run" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/StillActive" }
@@ -841,6 +874,7 @@ paths:
         "201": { description: Copied, content: { application/json: { schema: { $ref: "#/components/schemas/File" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
@@ -858,6 +892,7 @@ paths:
         "200": { description: Notebook, content: { application/x-ipynb+json: { schema: { type: string, format: binary } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -873,6 +908,7 @@ paths:
         "200": { description: HTML, content: { text/html: { schema: { type: string } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -888,6 +924,7 @@ paths:
         "200": { description: Artifacts, content: { application/json: { schema: { $ref: "#/components/schemas/FileList" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -904,6 +941,7 @@ paths:
         "200": { description: The file, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -919,6 +957,7 @@ paths:
         "200": { description: Log, one line per event, content: { text/plain: { schema: { type: string } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -953,6 +992,7 @@ paths:
         "200": { description: Event stream, content: { text/event-stream: { schema: { type: string } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -1037,6 +1077,7 @@ components:
   responses:
     BadRequest: { description: Invalid request, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
     Unauthorized: { description: "Missing or wrong credentials, or an invalid or expired token (WWW-Authenticate says which schemes are accepted)", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    TooManyRequests: { description: "Too many failed sign-ins with this username or from this address (basic auth): retry after Retry-After seconds. The password isn't checked meanwhile", headers: { Retry-After: { schema: { type: integer } } }, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
     Forbidden: { description: "The access token lacks this endpoint's scope (code forbidden; WWW-Authenticate names the scope). Basic-auth users hold every scope", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
     NotFound: { description: Missing, or owned by another user, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
     Conflict: { description: A run is active in the space, or the run is (not) finished, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
@@ -1108,7 +1149,7 @@ components:
         code:
           type: string
           enum: [bad_request, unauthorized, forbidden, not_found, method_not_allowed, conflict, payload_too_large, unprocessable,
-                 invalid_parameters, invalid_contract, version_mismatch, version_required, docker_unavailable, internal]
+                 invalid_parameters, invalid_contract, version_mismatch, version_required, docker_unavailable, too_many_requests, internal]
         message: { type: string }
         problems:
           type: array

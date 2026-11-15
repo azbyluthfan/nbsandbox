@@ -111,6 +111,9 @@ services:
       NBSANDBOX_RUNNER_IMAGE: ${NBSANDBOX_RUNNER_IMAGE:-ghcr.io/azbyluthfan/nbsandbox-runner:0.1.2}
       NBSANDBOX_LOG_LEVEL: ${NBSANDBOX_LOG_LEVEL:-info}
       NBSANDBOX_UI_ENABLED: "false" # never in production
+      # Clients reach nbsandboxd through Caddy: its X-Forwarded-For names the
+      # client, so failed sign-ins are limited per client address too.
+      NBSANDBOX_TRUSTED_PROXIES: ${NBSANDBOX_TRUSTED_PROXIES:-caddy}
     volumes:
       # Same absolute path inside and outside: Docker resolves the run
       # containers' bind mounts on the host.

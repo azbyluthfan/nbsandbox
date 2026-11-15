@@ -15,11 +15,12 @@ your app ── Authorization: Bearer <token> ──► nbsandboxd
    3. exp / nbf / iat within 60 s of clock leeway; lifetime at most max_lifetime (24 h)
    4. caller ID = <id_prefix>:<id claims>   e.g. entra:<tid>:<oid>
    5. scopes from scp, scope and roles → what the caller may do
+   6. with introspection on: the provider says the token is still active (cached 30 s)
 ```
 
 The provider's keys are fetched from its discovery document (or `jwks_url`), cached, refreshed hourly, and refetched when a token names an unknown key (at most once a minute). If the provider is unreachable, keys already loaded keep working. Tokens are never logged; refused tokens are logged with the reason, and the caller only gets `401` with `WWW-Authenticate: Bearer error="invalid_token"`.
 
-**Spaces belong to the caller ID.** There is no user table: a caller who presents a valid token can create spaces and use their own. Removing someone at the provider ends their access as soon as their tokens expire, so keep access tokens short-lived (5–15 minutes). Basic-auth users are their username (`alice`); a token caller is always `<prefix>:...`, so the two can never collide.
+**Spaces belong to the caller ID.** There is no user table: a caller who presents a valid token can create spaces and use their own. Removing someone at the provider ends their access as soon as their tokens expire, so keep access tokens short-lived (5–15 minutes), or turn on [revocation](#revoked-tokens) to end it within seconds. Basic-auth users are their username (`alice`); a token caller is always `<prefix>:...`, so the two can never collide.
 
 ## Scopes
 
@@ -69,6 +70,44 @@ auth:
 Or with environment variables: `NBSANDBOX_AUTH_BASIC=false`, `NBSANDBOX_OIDC_ISSUER`, `NBSANDBOX_OIDC_AUDIENCE`, `NBSANDBOX_OIDC_JWKS_URL`, `NBSANDBOX_OIDC_ID_PREFIX`, `NBSANDBOX_OIDC_ID_CLAIMS` (comma-separated). Setting the issuer turns tokens on. The issuer and key URLs must be `https` (plain `http` only on loopback, for a local provider). Startup refuses settings with problems and lists them all.
 
 `id_prefix` and `id_claims` decide who owns which space. Choose them once: changing them later orphans every existing space, until an administrator gives each space to its owner's new ID (below).
+
+### Revoked tokens
+
+A token is normally good until it expires. With introspection (RFC 7662), nbsandboxd also asks the provider whether the token is still active, so a token revoked there (a user signed out, an account disabled, a session ended by an administrator) stops working within the cache time:
+
+```yaml
+auth:
+  oidc:
+    # ...
+    introspection:
+      client_id: nbsandbox      # a confidential client allowed to introspect
+      client_secret: ""         # better: NBSANDBOX_OIDC_INTROSPECTION_CLIENT_SECRET
+      # url: ""                 # default: introspection_endpoint from the discovery document
+      # cache: 30s              # how long an "active" answer is trusted; at most 5m
+```
+
+- Only tokens that pass every local check are sent to the provider: a forged or expired token never leaves nbsandboxd.
+- An "active" answer is cached for `cache`; an "inactive" one until the token would have expired, so a revoked token costs one call.
+- **It fails closed:** if the provider can't be reached or refuses nbsandboxd's client, tokens are refused (`401`, logged as `introspection failed`). The provider's availability becomes nbsandbox's.
+- Environment variables: `NBSANDBOX_OIDC_INTROSPECTION_CLIENT_ID`, `NBSANDBOX_OIDC_INTROSPECTION_CLIENT_SECRET`, `NBSANDBOX_OIDC_INTROSPECTION_CACHE`.
+- **Keycloak:** give nbsandbox's client *Client authentication* on, no flows, and use its secret (tested by `make test-keycloak`: a token stops working right after the user signs out). **Entra ID** has no introspection endpoint; keep its tokens short-lived instead.
+
+### Failed sign-ins
+
+Password guessing against basic auth is slowed down. Each username may fail 5 times, then gets `429 Too Many Requests` with `Retry-After` (gRPC: `RESOURCE_EXHAUSTED`, with `retry-after` in the metadata) until the allowance refills, one failure per minute. While limited, the password isn't checked at all. A successful sign-in restores the username's whole allowance.
+
+```yaml
+auth:
+  login_limit:
+    failures: 5        # NBSANDBOX_LOGIN_LIMIT_FAILURES; 0 turns the limit off
+    refill: 1m
+    # per_address: true   # default: on when trusted_proxies is set
+  trusted_proxies: [caddy]  # NBSANDBOX_TRUSTED_PROXIES (comma-separated)
+```
+
+**Per client address** too, against one address trying many usernames: but only when nbsandboxd knows the real address. Behind a proxy every request comes from the proxy, and limiting it would lock everyone out at once, so the address limit is on only when `trusted_proxies` names the proxies (addresses, CIDRs, or host names such as a Compose service, looked up every 30 s). nbsandboxd then takes the client from `X-Forwarded-For`: the nearest address that isn't a trusted proxy; anything a client writes further back is ignored. The Compose stack sets `caddy`; with Kubernetes, set your ingress controller's Pod CIDR. Set `per_address: true` only when clients reach nbsandboxd directly.
+
+Bearer tokens aren't limited: a guessed token would have to be signed by the provider.
 
 ### Quotas per owner
 
@@ -140,11 +179,12 @@ nbsandboxd logs each refused token with the reason (`bearer token refused`); the
 | `unknown signing key` | The key set can't be fetched, or the token comes from another provider |
 | `claim oid is missing` | `id_claims` names a claim this token type doesn't carry |
 | `valid for ..., longer than ...` | Raise `max_lifetime`, or shorten token lifetime at the provider |
+| `revoked (introspection says inactive)` | Revoked at the provider (signed out, disabled): expected |
+| `introspection failed` | The provider is unreachable, or rejects nbsandboxd's client ID or secret |
 
 `403 forbidden` names the missing scope in `WWW-Authenticate`: add it to the token's scopes or app roles.
 
 ## Not yet
 
 - Sharing a space with another caller (grants keyed by caller ID).
-- Token introspection (RFC 7662), for revocation before expiry.
 - Signing in to the web UI with the provider (it stays a local, development-only tool).

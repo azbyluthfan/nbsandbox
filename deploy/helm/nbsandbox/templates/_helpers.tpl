@@ -46,6 +46,10 @@ seccompProfile: { type: RuntimeDefault }
 - name: NBSANDBOX_S3_SECRET_KEY
   valueFrom: { secretKeyRef: { name: {{ .Values.storage.s3.existingSecret | quote }}, key: secret-key } }
 {{- end }}
+{{- if .Values.auth.oidc.introspection.clientId }}
+- name: NBSANDBOX_OIDC_INTROSPECTION_CLIENT_SECRET
+  valueFrom: { secretKeyRef: { name: {{ required "auth.oidc.introspection.secretName is required with clientId" .Values.auth.oidc.introspection.secretName | quote }}, key: client-secret } }
+{{- end }}
 {{- with .Values.extraEnv }}
 {{ toYaml . }}
 {{- end }}

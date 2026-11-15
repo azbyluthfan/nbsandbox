@@ -54,6 +54,12 @@ data:
       {{- end }}
     auth:
       basic: {{ .Values.auth.basic }}
+      login_limit:
+        failures: {{ .Values.auth.loginLimit.failures }}
+        refill: {{ .Values.auth.loginLimit.refill | quote }}
+      {{- with .Values.auth.trustedProxies }}
+      trusted_proxies: {{ toJson . }}
+      {{- end }}
       {{- if .Values.auth.oidc.issuer }}
       oidc:
         issuer: {{ .Values.auth.oidc.issuer | quote }}
@@ -61,5 +67,15 @@ data:
         id_prefix: {{ .Values.auth.oidc.idPrefix | quote }}
         {{- with .Values.auth.oidc.idClaims }}
         id_claims: {{ toJson . }}
+        {{- end }}
+        {{- with .Values.auth.oidc.introspection }}
+        {{- if .clientId }}
+        introspection:
+          client_id: {{ .clientId | quote }}
+          cache: {{ .cache | quote }}
+          {{- with .url }}
+          url: {{ . | quote }}
+          {{- end }}
+        {{- end }}
         {{- end }}
       {{- end }}

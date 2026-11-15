@@ -136,8 +136,11 @@ func notFound(w http.ResponseWriter, _ *http.Request) {
 
 func authFailed(w http.ResponseWriter, _ *http.Request, f auth.Failure) {
 	code := CodeUnauthorized
-	if f.Status == http.StatusForbidden {
+	switch f.Status {
+	case http.StatusForbidden:
 		code = CodeForbidden
+	case http.StatusTooManyRequests:
+		code = CodeTooManyRequests
 	}
 	WriteError(w, f.Status, code, f.Message)
 }

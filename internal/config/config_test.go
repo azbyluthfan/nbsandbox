@@ -239,3 +239,45 @@ func TestDataDirIsCleaned(t *testing.T) {
 		t.Fatalf("data_dir %q, users_file %q", s.DataDir, s.UsersFile)
 	}
 }
+
+func TestLoginLimitTrustedProxiesAndIntrospectionFromEnv(t *testing.T) {
+	s, err := Load("", envOf(map[string]string{
+		"NBSANDBOX_TRUSTED_PROXIES":                  "10.0.0.0/8, 172.18.0.5",
+		"NBSANDBOX_LOGIN_LIMIT_FAILURES":             "8",
+		"NBSANDBOX_OIDC_ISSUER":                      "https://idp.example/realms/r",
+		"NBSANDBOX_OIDC_AUDIENCE":                    "nbsandbox",
+		"NBSANDBOX_OIDC_ID_PREFIX":                   "kc",
+		"NBSANDBOX_OIDC_ID_CLAIMS":                   "sub",
+		"NBSANDBOX_OIDC_INTROSPECTION_CLIENT_ID":     "nbsandbox",
+		"NBSANDBOX_OIDC_INTROSPECTION_CLIENT_SECRET": "s3cret",
+		"NBSANDBOX_OIDC_INTROSPECTION_CACHE":         "5s",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f, r := s.Auth.LoginLimit.Allowance(); f != 8 || r != time.Minute {
+		t.Errorf("login limit %d per %s", f, r)
+	}
+	if len(s.Auth.TrustedProxies) != 2 || !s.Auth.ByAddress() {
+		t.Errorf("trusted proxies %v (by address: %v, want on with proxies)", s.Auth.TrustedProxies, s.Auth.ByAddress())
+	}
+	if Default().Auth.ByAddress() {
+		t.Error("by address must be off without trusted proxies")
+	}
+	in := s.Auth.OIDC.Introspection
+	if in == nil || in.ClientID != "nbsandbox" || in.ClientSecret != "s3cret" || in.Cache != 5*time.Second {
+		t.Errorf("introspection %+v", in)
+	}
+	if f, _ := Default().Auth.LoginLimit.Allowance(); f != 5 {
+		t.Errorf("default allowance %d, want 5", f)
+	}
+	for name, env := range map[string]map[string]string{
+		"bad proxy":            {"NBSANDBOX_TRUSTED_PROXIES": "not an address!"},
+		"negative limit":       {"NBSANDBOX_LOGIN_LIMIT_FAILURES": "-1"},
+		"introspection, no id": {"NBSANDBOX_OIDC_ISSUER": "https://idp.example", "NBSANDBOX_OIDC_AUDIENCE": "a", "NBSANDBOX_OIDC_ID_PREFIX": "kc", "NBSANDBOX_OIDC_ID_CLAIMS": "sub", "NBSANDBOX_OIDC_INTROSPECTION_CLIENT_SECRET": "x"},
+	} {
+		if _, err := Load("", envOf(env)); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}

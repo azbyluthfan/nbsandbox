@@ -6,6 +6,7 @@ package grpcapi
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -106,7 +107,7 @@ func newServer(t *testing.T) func(user string) clients {
 	}
 	mgr.SetDockerUp(true)
 	t.Cleanup(func() { mgr.Shutdown(0) })
-	h := Handler(Deps{Auth: &auth.Authenticator{Users: us}, Spaces: svc, Runs: mgr, Logger: log, Shutdown: make(chan struct{}),
+	h := Handler(Deps{Auth: &auth.Authenticator{Users: us, Limiter: auth.NewLoginLimiter(3, time.Minute), LimitByAddress: true}, Spaces: svc, Runs: mgr, Logger: log, Shutdown: make(chan struct{}),
 		Runtime: func() (api.RuntimeInfo, error) {
 			var ri api.RuntimeInfo
 			ri.Image.Ref, ri.PythonVersion, ri.Packages, ri.Runtime = "nbsandbox-runner:test", "3.13.18", map[string]string{"pandas": "3.1.1"}, "runc"
@@ -492,3 +493,24 @@ func TestResultStreamOverGRPC(t *testing.T) {
 
 const streamingNB = `{"nbformat": 4, "nbformat_minor": 5, "metadata": {}, "cells": [
  {"cell_type": "code", "source": "import nbsandbox\nnbsandbox.emit({'n': 1})", "metadata": {}, "outputs": [], "execution_count": null}]}`
+
+// Too many failed sign-ins: RESOURCE_EXHAUSTED with Retry-After, for the
+// guessed username and for every username from the same address.
+func TestFailedSignInsAreLimited(t *testing.T) {
+	ctx := context.Background()
+	as := newServer(t)
+	intruder, alice := as("intruder"), as("alice")
+	for i := range 3 {
+		if _, err := intruder.spaces.ListSpaces(ctx, connect.NewRequest(&pb.ListSpacesRequest{})); code(err) != connect.CodeUnauthenticated {
+			t.Fatalf("failure %d: %v", i, err)
+		}
+	}
+	_, err := intruder.spaces.ListSpaces(ctx, connect.NewRequest(&pb.ListSpacesRequest{}))
+	var cerr *connect.Error
+	if !errors.As(err, &cerr) || cerr.Code() != connect.CodeResourceExhausted || cerr.Meta().Get("Retry-After") == "" {
+		t.Fatalf("after 3 failures: %v", err)
+	}
+	if _, err := alice.spaces.ListSpaces(ctx, connect.NewRequest(&pb.ListSpacesRequest{})); code(err) != connect.CodeResourceExhausted {
+		t.Fatalf("another user from the same address: %v (the address is limited too)", err)
+	}
+}
