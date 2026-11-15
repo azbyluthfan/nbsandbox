@@ -18,6 +18,10 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 
 - **Kubernetes 1.34 to 1.37 are supported** ([docs/kubernetes.md](docs/kubernetes.md#supported-versions)). The weekly CI run tests 1.37 with both runtimes and 1.34 with the default one; the local cluster is kind 0.33 with Cilium 1.20 (`K8S_VERSION=1.34` for the oldest, `K8S_RUN_MEMORY` for small Docker hosts).
 
+### Security
+
+- **Go 1.27.4** for the binaries and the server image: Go 1.27.3's `net/http` server could crash on a header race with `MaxBytesReader` ([GO-2026-6859](https://pkg.go.dev/vuln/GO-2026-6859)).
+
 ### Fixed
 
 - **Kubernetes: copying a run's files in and out took 10–90 s** (since 0.1.0): the files container of each run Pod had 10 millicores of CPU, and the events follower started a process four times a second, so the container was throttled in nearly every CPU period. The follower now starts no process while it waits, and the files container gets 250 millicores (requests equal limits, so run Pods stay Guaranteed). On kind, a small call is back to about 5 s and a cancel to about 1 s.
