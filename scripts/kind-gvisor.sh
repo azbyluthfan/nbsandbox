@@ -7,8 +7,11 @@
 #
 #   kind-gvisor.sh <node container> [version, default deploy/gvisor.version]
 #
-# The binaries come from gVisor's apt repository, the package checked against
-# the SHA-256 in the repository's index. A kind node is a container: what's installed stays
+# The binaries come from gVisor's release bucket for exactly this version
+# (the apt repository keeps only the newest release, so a pinned one drops
+# out of its index), checked against the release's SHA-512. They are
+# unpacked on this machine, which has bzip2 (the kind node doesn't), and
+# copied into the node. A kind node is a container: what's installed stays
 # while the node is kept (stop/start), and goes with `make k8s-down`.
 set -eu
 cd "$(dirname "$0")/.."
@@ -20,23 +23,23 @@ if node sh -c "command -v runsc >/dev/null && runsc --version | grep -q 'release
 	echo "gVisor $VERSION already in $NODE"
 else
 	echo "installing gVisor $VERSION in $NODE"
-	# From gVisor's apt repository: its index (over HTTPS) gives the
-	# package's path and SHA-256 for this version and architecture.
-	node sh -eu -c "
-		case \$(uname -m) in aarch64) arch=arm64 ;; x86_64) arch=amd64 ;; *) echo unknown arch; exit 1 ;; esac
-		repo=https://storage.googleapis.com/gvisor/releases
-		entry=\$(curl -fsSL \$repo/dists/release/main/binary-\$arch/Packages | awk -v v=$VERSION '
-			/^Version:/ {ver=\$2} /^Filename:/ {f=\$2} /^SHA256:/ {if (ver == v) print f, \$2}' | head -1)
-		[ -n \"\$entry\" ] || { echo \"gVisor $VERSION not found for \$arch\" >&2; exit 1; }
-		set -- \$entry
-		dir=\$(mktemp -d)
-		curl -fsSL -o \$dir/runsc.deb \$repo/\$1
-		echo \"\$2  \$dir/runsc.deb\" | sha256sum -c -
-		dpkg-deb -x \$dir/runsc.deb \$dir/x
-		# runsc, the containerd shim, and the helpers runsc expects beside it (gvisor-bin/).
-		cp -a \$dir/x/usr/bin/. /usr/local/bin/
-		rm -r \$dir
-	"
+	case $(node uname -m) in aarch64 | arm64) arch=aarch64 ;; x86_64) arch=x86_64 ;; *) echo "unknown arch" >&2; exit 1 ;; esac
+	base="https://storage.googleapis.com/gvisor/releases/release/$VERSION/$arch"
+	dir=$(mktemp -d)
+	trap 'rm -rf "$dir"' EXIT
+	curl -fsSL -o "$dir/gvisor.tar.bz2" "$base/gvisor.tar.bz2" || { echo "gVisor $VERSION not found for $arch" >&2; exit 1; }
+	curl -fsSL -o "$dir/gvisor.tar.bz2.sha512" "$base/gvisor.tar.bz2.sha512"
+	if command -v sha512sum >/dev/null; then
+		(cd "$dir" && sha512sum -c gvisor.tar.bz2.sha512)
+	else
+		(cd "$dir" && shasum -a 512 -c gvisor.tar.bz2.sha512)
+	fi
+	mkdir "$dir/x"
+	tar -xjf "$dir/gvisor.tar.bz2" -C "$dir/x"
+	# runsc, the containerd shim, and the helpers runsc expects beside it (gvisor-bin/).
+	docker cp "$dir/x/." "$NODE:/usr/local/bin/"
+	node chmod -R a+rX /usr/local/bin/gvisor-bin
+	node sh -c 'chmod 0755 /usr/local/bin/runsc /usr/local/bin/containerd-shim-runsc-v1'
 fi
 
 # containerd: the runsc handler, with systemd cgroups like runc here.
