@@ -177,6 +177,10 @@ up: dev-data ## Start the dev stack: API on 127.0.0.1:8080, web UI on 127.0.0.1:
 	-@$(CLUSTER) stop >/dev/null 2>&1
 	$(COMPOSE) up -d --build
 
+.PHONY: seed
+seed: ## Fill the dev stack with example spaces, notebooks, data, runs and a function (as the demo users; safe to run again)
+	$(GO) run ./scripts/seed
+
 .PHONY: down
 down: ## Stop the dev stack
 	$(COMPOSE) down
