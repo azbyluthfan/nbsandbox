@@ -430,6 +430,15 @@ test-keycloak: dev-data ## End-to-end auth with a real Keycloak (tokens, scopes,
 	$(KEYCLOAK_COMPOSE) rm --force keycloak
 	$(COMPOSE) up -d
 
+.PHONY: test-packages
+test-packages: dev-data runner-image ## A space's own packages, end to end (the dev stack with packages on; builds reach PyPI)
+	@$(STOP_KIND)
+	-@$(CLUSTER) stop >/dev/null 2>&1
+	NBSANDBOX_PACKAGES_ENABLED=true NBSANDBOX_RUN_TIMEOUT=60s $(COMPOSE) up -d --build
+	NBSANDBOX_TEST_PACKAGES=1 $(GO) test -tags integration -count=1 -timeout 15m -run '^TestPackages' $(TESTFLAGS) ./tests/integration/
+	@# Back to the plain dev stack.
+	$(COMPOSE) up -d
+
 # The slow tests: they wait on real limits (CPU share, the run timeout,
 # endless output) or scan a whole container (isolation). make report runs
 # them; test-quick skips them, with a shorter run timeout, for everyday

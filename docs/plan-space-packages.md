@@ -1,6 +1,6 @@
 # Plan: custom packages per space
 
-**Status (2026-11-15):** agreed: a package set, wheels only, off by default, Docker first (Kubernetes in a follow-up PR; until then it refuses runs that need packages, with a clear message). Being built.
+**Status (2026-11-15):** agreed: a package set, wheels only, off by default, Docker first (Kubernetes in a follow-up PR; until then it refuses runs that need packages, with a clear message). Built (Docker); Kubernetes is the next PR. A set also records the top-level modules it provides, so the dependency check counts them.
 
 ## Today
 

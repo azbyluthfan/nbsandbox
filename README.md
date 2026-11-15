@@ -80,14 +80,15 @@ Stop with `make down`. `make report` runs the isolation suite on your machine an
 | Stronger isolation with gVisor | [docs/gvisor.md](docs/gvisor.md) |
 | Sign-in with your identity provider (OpenID Connect) | [docs/auth.md](docs/auth.md) |
 | Monitoring, backups, upgrades, runbooks | [docs/operations.md](docs/operations.md) |
+| More Python packages for a space (`requirements.txt`) | [docs/packages.md](docs/packages.md) |
 
 ## Limitations
 
 Read [docs/security/threat-model.md](docs/security/threat-model.md) before deploying. In short:
 - **Users are trusted** not to attack the platform on purpose. Runs are hardened and tested, but with `runc` they share the host's kernel. For less trusted users, run notebooks under gVisor ([docs/gvisor.md](docs/gvisor.md)) or another sandbox RuntimeClass on Kubernetes.
 - **Python notebooks only.** Runs use the Python 3 kernel; a notebook written for another kernel (R, Julia, …) is refused when you run or publish it.
-- **No network in runs, fixed packages.** Notebooks can't `pip install`; build a runner image with the packages you need.
-- **Authentication:** bearer tokens from any OpenID Connect provider, or basic auth from a users file. Not yet: sharing a space between users, token revocation before expiry, a login for the web UI, login rate limiting.
+- **No network in runs.** Notebooks can't `pip install`. A space's `requirements.txt` can add packages (wheels from the package index, built once into a set the space's runs import) when the operator turns it on, on Docker for now ([docs/packages.md](docs/packages.md)); otherwise build a runner image with the packages you need.
+- **Authentication:** bearer tokens from any OpenID Connect provider, or basic auth from a users file, with revocation, a limit on failed sign-ins, and a web UI sign-in. Not yet: sharing a space between users.
 - **The web UI is a development tool:** no login, local only.
 - **Reference platforms:** the isolation reports that count are Linux with Docker Engine and your own Kubernetes cluster. Docker Desktop and kind work for development.
 
@@ -98,6 +99,7 @@ Read [docs/security/threat-model.md](docs/security/threat-model.md) before deplo
 | [docs/tour.md](docs/tour.md) | A guided tour, screen by screen |
 | [docs/user-guide.md](docs/user-guide.md) | People running notebooks: spaces, files, parameters, statuses, logs, the editor |
 | [docs/functions.md](docs/functions.md) | Calling a notebook from your service: contracts, publishing, invoking, streamed output |
+| [docs/packages.md](docs/packages.md) | A space's own Python packages (`requirements.txt`) |
 | [docs/api.md](docs/api.md) and [api/openapi.yaml](api/openapi.yaml) | The REST and gRPC APIs and their compatibility policy |
 | [docs/mcp.md](docs/mcp.md) | AI agents: the MCP server, its tools and how to connect Claude |
 | [docs/auth.md](docs/auth.md) | Authentication: tokens from your identity provider, scopes, quotas, administration |

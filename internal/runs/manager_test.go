@@ -118,6 +118,13 @@ type env struct {
 
 func newEnv(t *testing.T, mod ...func(*Config)) *env {
 	t.Helper()
+	return newEnvWith(t, nil, mod...)
+}
+
+// newEnvWith also lets the test add dependencies (package sets); withDeps
+// gets the database and the data folder.
+func newEnvWith(t *testing.T, withDeps func(d *Deps, db *store.DB, data string), mod ...func(*Config)) *env {
+	t.Helper()
 	data := t.TempDir()
 	db := storetest.Open(t)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -141,9 +148,13 @@ func newEnv(t *testing.T, mod ...func(*Config)) *env {
 	var now atomic.Int64
 	now.Store(time.Now().UnixMilli())
 	metrics := obs.NewMetrics()
-	m := New(cfg, Deps{DB: db, Spaces: sp, Backend: be, Manifest: func() *deps.Manifest { return manifest },
+	d := Deps{DB: db, Spaces: sp, Backend: be, Manifest: func() *deps.Manifest { return manifest },
 		ImageID: func() string { return "sha256:img" }, Metrics: metrics, Log: log,
-		Now: func() time.Time { return time.UnixMilli(now.Load()) }})
+		Now: func() time.Time { return time.UnixMilli(now.Load()) }}
+	if withDeps != nil {
+		withDeps(&d, db, data)
+	}
+	m := New(cfg, d)
 	if err := m.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
