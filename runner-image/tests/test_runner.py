@@ -8,8 +8,10 @@ replaced by fakes. Run inside the runner image (stdlib unittest only):
 
 import json
 import os
+import shutil
 import sys
 import tempfile
+import time
 import types
 import unittest
 from unittest import mock
@@ -432,3 +434,52 @@ class NprocTest(unittest.TestCase):
                 with mock.patch.object(nr, "_sampler", sampler):
                     c = nr.cgroup_counters()
             self.assertEqual(c["memory_peak_bytes"], 4096)
+
+
+class RenderTest(unittest.TestCase):
+    """The real renderer (nbconvert is in the image)."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.nb = os.path.join(self.dir, "output.ipynb")
+        import nbformat
+        nb = nbformat.v4.new_notebook()
+        nb.cells = [nbformat.v4.new_markdown_cell("# Title"), nbformat.v4.new_code_cell("print('hi')")]
+        nb.cells[1].outputs = [nbformat.v4.new_output("stream", name="stdout", text="hi\n")]
+        nbformat.write(nb, self.nb)
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def test_same_html_as_nbconvert(self):
+        out = os.path.join(self.dir, "output.html")
+        self.assertEqual(nr.render_html(self.nb, out), (True, None))
+        import subprocess
+        subprocess.run([sys.executable, "-m", "nbconvert", "--to", "html", "--output", "cli.html", self.nb],
+                       check=True, capture_output=True)
+        with open(out) as a, open(os.path.join(self.dir, "cli.html")) as b:
+            self.assertEqual(a.read(), b.read())
+        self.assertFalse(os.path.exists(out + ".tmp"))
+
+    def test_broken_notebook_is_reported(self):
+        with open(self.nb, "w") as f:
+            f.write("{not json")
+        ok, err = nr.render_html(self.nb, os.path.join(self.dir, "output.html"))
+        self.assertFalse(ok)
+        self.assertTrue(err)
+        self.assertFalse(os.path.exists(os.path.join(self.dir, "output.html")))
+
+    def test_a_hang_hits_the_time_limit(self):
+        nr.start_warming_renderer()
+        nr._renderer_ready.wait(60)
+
+        class Slow:
+            def from_filename(self, path):
+                time.sleep(5)
+                return "", {}
+        with mock.patch.dict(nr._renderer, {"exporter": Slow()}):
+            start = time.monotonic()
+            ok, err = nr.render_html(self.nb, os.path.join(self.dir, "output.html"), timeout=0.3)
+        self.assertFalse(ok)
+        self.assertIn("longer than", err)
+        self.assertLess(time.monotonic() - start, 2)

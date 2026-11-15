@@ -6,6 +6,7 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 
 ### Changed
 
+- **Faster results: rendering `output.html` takes about 0.1 s instead of 1 s.** The runner renders with nbconvert's library, warmed up in the background while the kernel starts, instead of starting a new `python -m nbconvert` (same HTML, same 5-minute limit; a failure still leaves `rendered: false`). A small call on Docker: 2.9 s → 2.5 s ([docs/perf.md](docs/perf.md#starting-a-run)).
 - **The Linux reference report comes from the weekly CI run:** its Docker jobs run the whole suite on Linux with Docker Engine with `runc` and gVisor at the default limits (2 GiB per run, where the last report used 512 MiB), and a new job renders their findings into `docs/isolation-report-linux.md` and opens a pull request with it. `make report-linux` still runs it on your own machine.
 
 ## [0.1.1] - 2026-11-15

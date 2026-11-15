@@ -15,19 +15,19 @@ A small function call, timed from the request to the result (`start-latency` in 
 
 Almost all of it is starting a fresh container and Python kernel; the notebook itself takes milliseconds. The "Fast starts" item on the [roadmap](../ROADMAP.md) works against this (target: under 1 s).
 
-**Where the time goes.** Every run records its phases (`usage.phases_seconds` in its result, the `nbsandbox_run_phase_seconds` metric). The same small call, median of three (2026-11-15):
+**Where the time goes.** Every run records its phases (`usage.phases_seconds` in its result, the `nbsandbox_run_phase_seconds` metric). The same small call, median of three (2026-11-15), before and after rendering moved into the runner (it used to start a new Python for `nbconvert`):
 
-| Phase | Docker Desktop | Kubernetes in kind |
-|---|---|---|
-| Container start | 0.04 s | under 0.5 s |
-| Runner start (Python, the wrapper's imports; on Kubernetes also the files copied in) | 0.54 s | 2.0 s |
-| Kernel start, to the first cell | 0.77 s | 0.90 s |
-| The notebook's cells | 0.39 s | 0.62 s |
-| Rendering `output.html` | 0.99 s | 1.17 s |
-| Teardown (outputs copied out, container removed) | 0.04 s | 2.0 s |
-| Request → result | 2.9 s | 5.1–5.8 s |
+| Phase | Docker Desktop, before | Docker Desktop, after | Kubernetes in kind, before |
+|---|---|---|---|
+| Container start | 0.04 s | 0.04 s | under 0.5 s |
+| Runner start (Python, the wrapper's imports; on Kubernetes also the files copied in) | 0.54 s | 0.57 s | 2.0 s |
+| Kernel start, to the first cell | 0.77 s | 1.13 s | 0.90 s |
+| The notebook's cells | 0.39 s | 0.49 s | 0.62 s |
+| Rendering `output.html` | 0.99 s | 0.08 s | 1.17 s |
+| Teardown (outputs copied out, container removed) | 0.04 s | 0.04 s | 2.0 s |
+| Request → result | 2.9 s | 2.5 s | 5.1–5.8 s |
 
-Rendering, the kernel and the runner's imports are most of it; on Kubernetes, copying files through the API adds about 4 s.
+The renderer now warms up in the background while the kernel starts; a run has one CPU, so the kernel's start takes a little longer, and the call is 0.4 s faster overall. What remains is mostly the kernel and the runner's imports (the next steps on the [roadmap](../ROADMAP.md): run nbclient directly and start the kernel sooner, then pre-started containers); on Kubernetes, copying files through the API adds about 4 s.
 
 ## Several runs at once
 
