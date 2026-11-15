@@ -69,6 +69,10 @@ The suite found these differences. nbsandbox handles each of them, so results an
 
 ## Reproduce
 
+**Every week, in CI:** the weekly run's two Docker jobs run the whole suite on GitHub's Linux runner (Docker Engine, 4 CPUs, 16 GB) with `runc` and with `runsc`, at the default limits (2 GiB per run). When both pass, a job renders their findings into [isolation-report-linux.md](isolation-report-linux.md) and opens a pull request with it ("docs: Linux isolation report from the weekly run"): merge it to publish the new report.
+
+**On your own Linux machine or VM:**
+
 ```bash
 make report-linux                          # runc and runsc, writes docs/isolation-report-linux.md
 RUNTIMES=runsc make report-linux           # one runtime (the other's findings are kept)
