@@ -138,4 +138,4 @@ To check the running production deployment itself, through its API and without a
 
 ## Not for production
 
-`make up`, `make run-native` and the local web UI are development tools. The web UI acts as any user without a password, and the production Compose file never enables it.
+`make up` and `make run-native` are development tools. So is the web UI without sign-in (`ui.auth: none`): it acts as any user without a password, and listens on loopback only. To give your users the web UI, turn it on with sign-in ([auth.md](auth.md#signing-in-to-the-web-ui)): set `NBSANDBOX_UI_ENABLED=true`, `NBSANDBOX_UI_OIDC_CLIENT_ID` and `NBSANDBOX_UI_OIDC_CLIENT_SECRET` in `.env` (or `NBSANDBOX_UI_AUTH=basic` for `users.yaml`), and Caddy serves it at `https://<NBSANDBOX_DOMAIN>/`.

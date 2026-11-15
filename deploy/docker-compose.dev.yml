@@ -102,10 +102,12 @@ services:
       NBSANDBOX_EVENT_RETENTION: ${NBSANDBOX_EVENT_RETENTION:-}
       NBSANDBOX_IDEMPOTENCY_WINDOW: ${NBSANDBOX_IDEMPOTENCY_WINDOW:-}
       NBSANDBOX_CLEANUP_EVERY: ${NBSANDBOX_CLEANUP_EVERY:-}
-      # Local web UI. Inside the container it must listen on all
-      # interfaces; the port below is published to 127.0.0.1 on the host only.
+      # Local web UI, without sign-in. Inside the container it must listen on
+      # all interfaces; the port below is published to 127.0.0.1 on the host
+      # only, which is what makes no sign-in acceptable here.
       NBSANDBOX_UI_ENABLED: ${NBSANDBOX_UI_ENABLED:-true}
       NBSANDBOX_UI_LISTEN: 0.0.0.0:8090
+      NBSANDBOX_UI_NO_LOGIN_BEYOND_LOOPBACK: "true"
     volumes:
       # Same absolute path inside and outside: Docker resolves run containers'
       # bind mounts on the host.

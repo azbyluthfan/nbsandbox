@@ -35,6 +35,7 @@ import (
 	"github.com/azbyluthfan/nbsandbox/internal/spaces"
 	"github.com/azbyluthfan/nbsandbox/internal/store"
 	"github.com/azbyluthfan/nbsandbox/internal/ui"
+	"github.com/azbyluthfan/nbsandbox/internal/uiauth"
 )
 
 // minFreeDisk is the free space below which the data directory is not ready.
@@ -108,7 +109,7 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 		return err
 	}
 
-	// 3. Authentication: users.yaml (basic auth and the local web UI) and/or
+	// 3. Authentication: users.yaml (basic auth and the web UI) and/or
 	// bearer tokens from an OpenID Connect provider.
 	authn := &auth.Authenticator{Log: logger}
 	var users *auth.Users
@@ -122,10 +123,12 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 				"users", demo, "file", cfg.UsersFile)
 		}
 	}
+	// One login limiter for every way to send a users.yaml password (basic
+	// auth on the API, the web UI's sign-in form).
+	limiter := auth.NewLoginLimiter(cfg.Auth.LoginLimit.Allowance())
 	if cfg.Auth.BasicEnabled() {
 		authn.Users = users
-		failures, refill := cfg.Auth.LoginLimit.Allowance()
-		authn.Limiter = auth.NewLoginLimiter(failures, refill)
+		authn.Limiter = limiter
 		authn.LimitByAddress = cfg.Auth.ByAddress()
 	}
 	if authn.TrustedProxies, err = auth.NewTrustedProxies(cfg.Auth.TrustedProxies); err != nil {
@@ -293,14 +296,27 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 	if err := listen(cfg.Listen, srv, "nbsandboxd", opt.onListen); err != nil {
 		return err
 	}
-	// The optional local web UI on its own listener.
+	// The optional web UI on its own listener, with or without sign-in.
 	var uiSrv *http.Server
 	if cfg.UI.Enabled && cfg.Serves() {
-		if !isLoopback(cfg.UI.Listen) {
-			logger.Warn("the web UI acts as any user without a password and is listening beyond this machine; "+
-				"make sure only trusted people can reach it", "addr", cfg.UI.Listen)
+		sessions, err := uiauth.New(cfg.UI.SignIn(), uiauth.Deps{
+			Store: db, Verifier: authn.OIDC, Log: logger,
+			Basic: &auth.Authenticator{Users: users, Limiter: limiter, LimitByAddress: cfg.Auth.ByAddress(),
+				TrustedProxies: authn.TrustedProxies, Log: logger},
+		})
+		if err != nil {
+			return err
 		}
-		uiSrv = newServer(api.NewUIHandler(deps, ui.Static()))
+		if sessions == nil {
+			if !config.IsLoopback(cfg.UI.Listen) {
+				logger.Warn("the web UI has no sign-in (ui.auth: none) and listens beyond loopback: anyone who reaches it acts as any user",
+					"addr", cfg.UI.Listen)
+			}
+		} else {
+			go sessions.Run(ctx, 10*time.Minute)
+			logger.Info("web UI sign-in", "auth", cfg.UI.Auth, "public_url", cfg.UI.PublicURL)
+		}
+		uiSrv = newServer(api.NewUIHandler(deps, ui.Static(), sessions))
 		if err := listen(cfg.UI.Listen, uiSrv, "web UI", opt.onUIListen); err != nil {
 			return err
 		}
@@ -360,19 +376,6 @@ func runtimeInfo(cfg config.Settings, st isolation.Status, comps *completions.Pu
 		info.Completions = comps.Ref(st.Completions)
 	}
 	return info, nil
-}
-
-// isLoopback reports whether a listen address only accepts local connections.
-func isLoopback(addr string) bool {
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return false
-	}
-	if host == "localhost" {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
 }
 
 func runtimeName(r string) string {

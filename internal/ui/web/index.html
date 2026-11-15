@@ -23,11 +23,13 @@
     <span id="runtime-status" class="status-pill" hidden></span>
     <button id="runs-toggle" type="button" class="ghost" aria-controls="drawer" title="Runs in this space"><span class="icon i-activity"></span><span>Runs</span><span id="runs-count" class="count" hidden></span></button>
     <button id="fns-toggle" type="button" class="ghost" aria-controls="drawer" title="Functions in this space"><span class="icon i-function"></span><span>Functions</span></button>
-    <label class="user-picker" title="This page acts as the chosen user without a password. Keep it on your machine.">
+    <label class="user-picker" id="user-picker" title="This page acts as the chosen user without a password. Keep it on your machine.">
       <span class="avatar" id="user-avatar" aria-hidden="true"></span>
       <select id="user-select" aria-label="User"></select>
-      <span class="local-note">local · no login</span>
+      <span id="user-name" class="user-name" hidden></span>
+      <span id="local-note" class="local-note">local · no login</span>
     </label>
+    <button id="sign-out" type="button" class="ghost" hidden>Sign out</button>
   </header>
 
   <div class="shell">

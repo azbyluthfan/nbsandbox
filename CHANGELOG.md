@@ -9,6 +9,11 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 - **Token revocation:** with `auth.oidc.introspection`, nbsandboxd asks the identity provider (RFC 7662) whether a token is still active, so a token revoked there stops working within 30 s instead of at its expiry. Fails closed; only tokens that pass the local checks are sent. Tested against Keycloak; Entra ID has no introspection endpoint ([auth.md](docs/auth.md#revoked-tokens)).
 - **Failed sign-in limit:** basic auth allows 5 failed sign-ins per username, then one a minute (`429` with `Retry-After`; gRPC `RESOURCE_EXHAUSTED`), and per client address when the proxies in front are named in `auth.trusted_proxies`. The Compose stack names Caddy; the Helm chart has `auth.loginLimit` and `auth.trustedProxies` ([auth.md](docs/auth.md#failed-sign-ins)).
 - The API's error codes gain `too_many_requests`, and every authenticated operation documents its `429` response.
+- **Signing in to the web UI:** with `ui.auth: oidc`, people sign in with the identity provider (authorization code with PKCE) and are the same caller as through the API; with `ui.auth: basic`, with a `users.yaml` password. Sessions are server-side (tokens never reach the browser), end after 1 h idle or 12 h, follow revocation at the provider, and sign out of the provider too. The Compose stack serves the UI at the domain's root with `NBSANDBOX_UI_ENABLED=true`; the Helm chart with `ui.enabled` ([auth.md](docs/auth.md#signing-in-to-the-web-ui)).
+
+### Changed
+
+- **The web UI without sign-in (`ui.auth: none`, the default) refuses to listen beyond loopback**; it used to start with a warning. To serve the UI to a network, set `ui.auth` to `oidc` or `basic`. A container whose port is published only on the host's loopback can set `ui.no_login_beyond_loopback: true` (the dev Compose stack does).
 
 ## [0.1.2] - 2026-11-15
 

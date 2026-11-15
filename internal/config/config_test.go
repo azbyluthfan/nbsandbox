@@ -163,9 +163,45 @@ func TestUISettings(t *testing.T) {
 	if err != nil || s.UI.Enabled || s.UI.Listen != "127.0.0.1:8090" {
 		t.Fatalf("UI must be off by default on loopback: %+v %v", s.UI, err)
 	}
-	s, err = Load("", envOf(map[string]string{"NBSANDBOX_UI_ENABLED": "true", "NBSANDBOX_UI_LISTEN": "0.0.0.0:9000"}))
+	// Without sign-in, only on loopback, unless explicitly allowed (a
+	// container published on the host's loopback).
+	beyond := map[string]string{"NBSANDBOX_UI_ENABLED": "true", "NBSANDBOX_UI_LISTEN": "0.0.0.0:9000"}
+	if _, err := Load("", envOf(beyond)); err == nil || !strings.Contains(err.Error(), "loopback only") {
+		t.Fatalf("no sign-in beyond loopback: %v", err)
+	}
+	beyond["NBSANDBOX_UI_NO_LOGIN_BEYOND_LOOPBACK"] = "true"
+	s, err = Load("", envOf(beyond))
 	if err != nil || !s.UI.Enabled || s.UI.Listen != "0.0.0.0:9000" {
 		t.Fatalf("env: %+v %v", s.UI, err)
+	}
+	// With sign-in: anywhere, given the public address.
+	s, err = Load("", envOf(map[string]string{"NBSANDBOX_UI_ENABLED": "true", "NBSANDBOX_UI_LISTEN": "0.0.0.0:9000",
+		"NBSANDBOX_UI_AUTH": "basic", "NBSANDBOX_UI_PUBLIC_URL": "https://nb.example.com",
+		"NBSANDBOX_UI_SESSION_IDLE": "30m", "NBSANDBOX_UI_SESSION_MAX": "8h"}))
+	if err != nil || s.UI.Auth != "basic" || s.UI.Session.Idle != 30*time.Minute || s.UI.Session.Max != 8*time.Hour {
+		t.Fatalf("basic: %+v %v", s.UI, err)
+	}
+	for name, env := range map[string]map[string]string{
+		"no public url":    {"NBSANDBOX_UI_AUTH": "basic"},
+		"http public url":  {"NBSANDBOX_UI_AUTH": "basic", "NBSANDBOX_UI_PUBLIC_URL": "http://nb.example.com"},
+		"a path":           {"NBSANDBOX_UI_AUTH": "basic", "NBSANDBOX_UI_PUBLIC_URL": "https://nb.example.com/ui"},
+		"unknown mode":     {"NBSANDBOX_UI_AUTH": "magic"},
+		"oidc without idp": {"NBSANDBOX_UI_AUTH": "oidc", "NBSANDBOX_UI_PUBLIC_URL": "https://nb.example.com", "NBSANDBOX_UI_OIDC_CLIENT_ID": "ui", "NBSANDBOX_UI_OIDC_CLIENT_SECRET": "s"},
+		"oidc no secret": {"NBSANDBOX_UI_AUTH": "oidc", "NBSANDBOX_UI_PUBLIC_URL": "https://nb.example.com", "NBSANDBOX_UI_OIDC_CLIENT_ID": "ui",
+			"NBSANDBOX_OIDC_ISSUER": "https://idp.example", "NBSANDBOX_OIDC_AUDIENCE": "nb", "NBSANDBOX_OIDC_ID_PREFIX": "kc", "NBSANDBOX_OIDC_ID_CLAIMS": "sub"},
+		"idle over max": {"NBSANDBOX_UI_AUTH": "basic", "NBSANDBOX_UI_PUBLIC_URL": "https://nb.example.com", "NBSANDBOX_UI_SESSION_IDLE": "13h"},
+	} {
+		env["NBSANDBOX_UI_ENABLED"] = "true"
+		if _, err := Load("", envOf(env)); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	s, err = Load("", envOf(map[string]string{"NBSANDBOX_UI_ENABLED": "true", "NBSANDBOX_UI_AUTH": "oidc",
+		"NBSANDBOX_UI_PUBLIC_URL": "http://127.0.0.1:8090", "NBSANDBOX_UI_OIDC_CLIENT_ID": "nbsandbox-ui",
+		"NBSANDBOX_UI_OIDC_CLIENT_SECRET": "s", "NBSANDBOX_UI_OIDC_SCOPES": "openid nbsandbox.read",
+		"NBSANDBOX_OIDC_ISSUER": "https://idp.example", "NBSANDBOX_OIDC_AUDIENCE": "nb", "NBSANDBOX_OIDC_ID_PREFIX": "kc", "NBSANDBOX_OIDC_ID_CLAIMS": "sub"}))
+	if err != nil || s.UI.OIDC.ClientSecret != "s" || len(s.UI.OIDC.Scopes) != 2 {
+		t.Fatalf("oidc: %+v %v", s.UI, err)
 	}
 	if _, err := Load("", envOf(map[string]string{"NBSANDBOX_UI_ENABLED": "maybe"})); err == nil {
 		t.Fatal("bad bool accepted")

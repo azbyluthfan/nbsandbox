@@ -6,13 +6,19 @@
 package integration
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html"
+	"io"
+	"mime/multipart"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -279,5 +285,216 @@ func TestKeycloakRevokedTokenIsRefused(t *testing.T) {
 		"refused (401) within the introspection cache (2 s here), long before the token expires", fmt.Sprintf("HTTP %d", code), code == http.StatusUnauthorized)
 	if code != http.StatusUnauthorized {
 		t.Fatalf("token still accepted 15 s after sign-out: %d", code)
+	}
+}
+
+// browser is a cookie-keeping HTTP client, as a browser signing in.
+func browser(t *testing.T) *http.Client {
+	t.Helper()
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &http.Client{Jar: jar, Timeout: 30 * time.Second, Transport: httpClient.Transport}
+}
+
+var kcLoginForm = regexp.MustCompile(`<form[^>]*id="kc-form-login"[^>]*action="([^"]+)"`)
+
+// uiSignIn signs user in to the web UI through Keycloak's real login page,
+// and returns the browser and the page it lands on.
+func uiSignIn(t *testing.T, user string) (*http.Client, string) {
+	t.Helper()
+	b := browser(t)
+	resp, err := b.Get(uiURL + "/ui/login?return=" + url.QueryEscape("/#/after"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	m := kcLoginForm.FindSubmatch(page)
+	if resp.StatusCode != http.StatusOK || m == nil || !strings.HasPrefix(resp.Request.URL.String(), keycloakURL) {
+		t.Fatalf("expected Keycloak's login page, got %d at %s", resp.StatusCode, resp.Request.URL)
+	}
+	resp, err = b.PostForm(html.UnescapeString(string(m[1])), url.Values{"username": {user}, "password": {user + "-test-password"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(resp.Request.URL.String(), uiURL+"/") {
+		t.Fatalf("after Keycloak's login: %d at %s", resp.StatusCode, resp.Request.URL)
+	}
+	return b, resp.Request.URL.String()
+}
+
+// uiDo calls the UI's API as the signed-in browser, as the UI's scripts do.
+func uiDo(t *testing.T, b *http.Client, method, path string, body io.Reader, ct string) (int, []byte) {
+	t.Helper()
+	req, _ := http.NewRequest(method, uiURL+path, body)
+	req.Header.Set("X-Nbsandbox-UI", "1")
+	req.Header.Set("Origin", uiURL)
+	if ct != "" {
+		req.Header.Set("Content-Type", ct)
+	}
+	resp, err := b.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	out, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, out
+}
+
+// A user signs in to the web UI through Keycloak's login page and runs a
+// notebook there; the space and the run are the same caller's as with an
+// API token. Signing out ends the session and Keycloak's.
+func TestKeycloakWebUISignIn(t *testing.T) {
+	needKeycloak(t)
+	b, landed := uiSignIn(t, "kc-alice")
+	if landed != uiURL+"/#/after" && landed != uiURL+"/" {
+		t.Errorf("landed on %s, want the return path", landed)
+	}
+	code, body := uiDo(t, b, "GET", "/ui/api/session", nil, "")
+	var info struct{ Mode, User, Name string }
+	_ = json.Unmarshal(body, &info)
+	tok := userToken(t, "kc-alice", allScopes)
+	sub, _ := claims(t, tok)["sub"].(string)
+	if code != http.StatusOK || info.Mode != "oidc" || info.User != "kc:"+sub || info.Name != "Alice Test" {
+		t.Fatalf("session: %d %s (want user kc:%s)", code, body, sub)
+	}
+
+	// A space, an upload and a run through the UI.
+	code, body = uiDo(t, b, "POST", "/ui/api/v1/spaces", strings.NewReader(`{"name":"`+t.Name()+`"}`), "application/json")
+	var sp struct{ ID string }
+	if _ = json.Unmarshal(body, &sp); code != http.StatusCreated || sp.ID == "" {
+		t.Fatalf("create space: %d %s", code, body)
+	}
+	t.Cleanup(func() {
+		_ = bearer("").DeleteSpace(context.Background(), &apiclient.Identity{Token: userToken(t, "kc-alice", allScopes)}, sp.ID)
+	})
+	nb, err := os.ReadFile(repoRoot() + "/tests/workloads/smoke.ipynb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var form bytes.Buffer
+	mw := multipart.NewWriter(&form)
+	fw, _ := mw.CreateFormFile("file", "smoke.ipynb")
+	_, _ = fw.Write(nb)
+	_ = mw.Close()
+	if code, body = uiDo(t, b, "POST", "/ui/api/v1/spaces/"+sp.ID+"/files", &form, mw.FormDataContentType()); code != http.StatusCreated {
+		t.Fatalf("upload: %d %s", code, body)
+	}
+	code, body = uiDo(t, b, "POST", "/ui/api/v1/spaces/"+sp.ID+"/runs", strings.NewReader(`{"notebook":"smoke.ipynb"}`), "application/json")
+	var run struct{ ID string }
+	if _ = json.Unmarshal(body, &run); code != http.StatusAccepted && code != http.StatusCreated || run.ID == "" {
+		t.Fatalf("run: %d %s", code, body)
+	}
+	// The same caller with an API token sees the space and the run.
+	done, err := bearer("").WaitRun(context.Background(), &apiclient.Identity{Token: tok}, sp.ID, run.ID, 3*time.Minute)
+	if err != nil || done.Status != "succeeded" {
+		t.Fatalf("the UI's run, seen with alice's token: %+v %v", done, err)
+	}
+	// Without the UI's header, a change is refused (CSRF).
+	req, _ := http.NewRequest("POST", uiURL+"/ui/api/v1/spaces", strings.NewReader(`{"name":"x"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := b.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("a change without the UI's header: %d", resp.StatusCode)
+	}
+
+	// Sign out: the UI's session ends, then Keycloak's, which returns to
+	// the signed-out page.
+	code, body = uiDo(t, b, "POST", "/ui/logout", nil, "")
+	var out struct{ Next string }
+	if _ = json.Unmarshal(body, &out); code != http.StatusOK || !strings.HasPrefix(out.Next, keycloakURL) {
+		t.Fatalf("logout: %d %s", code, body)
+	}
+	resp, err = b.Get(out.Next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.Request.URL.String() != uiURL+"/ui/signed-out" || !strings.Contains(string(page), "signed out") {
+		t.Errorf("after Keycloak's sign-out: %d at %s", resp.StatusCode, resp.Request.URL)
+	}
+	if code, _ = uiDo(t, b, "GET", "/ui/api/session", nil, ""); code != http.StatusUnauthorized {
+		t.Errorf("after signing out: %d", code)
+	}
+	// Keycloak's session is gone too: signing in shows its login page again.
+	resp, err = b.Get(uiURL + "/ui/login")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	finding(t, "keycloak-web-ui", "sign in to the web UI through Keycloak's login page, run a notebook there, check it with an API token, sign out",
+		"the UI user is the token's caller (same space and run); a change without the UI's header is refused; signing out ends both sessions",
+		"run "+done.Status, kcLoginForm.Match(page))
+	if !kcLoginForm.Match(page) {
+		t.Error("Keycloak still signed in after the UI's sign-out")
+	}
+}
+
+// A user signed out at Keycloak (here by an administrator) loses their UI
+// session within the introspection cache.
+func TestKeycloakWebUISessionRevoked(t *testing.T) {
+	needKeycloak(t)
+	b, _ := uiSignIn(t, "kc-bob")
+	if code, body := uiDo(t, b, "GET", "/ui/api/v1/spaces", nil, ""); code != http.StatusOK {
+		t.Fatalf("signed in: %d %s", code, body)
+	}
+	// Keycloak's administrator signs in to the master realm.
+	resp, err := httpClient.PostForm(keycloakURL+"/realms/master/protocol/openid-connect/token", url.Values{
+		"grant_type": {"password"}, "client_id": {"admin-cli"}, "username": {"admin"}, "password": {"keycloak-test-only"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var at struct {
+		AccessToken string `json:"access_token"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&at)
+	_ = resp.Body.Close()
+	admin := at.AccessToken
+	if admin == "" {
+		t.Fatalf("admin sign-in: %d", resp.StatusCode)
+	}
+	adminCall := func(method, path string) []byte {
+		req, _ := http.NewRequest(method, keycloakURL+"/admin/realms/nbsandbox"+path, nil)
+		req.Header.Set("Authorization", "Bearer "+admin)
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		out, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode >= 300 {
+			t.Fatalf("admin %s %s: %d %s", method, path, resp.StatusCode, out)
+		}
+		return out
+	}
+	var users []struct{ ID string }
+	_ = json.Unmarshal(adminCall("GET", "/users?exact=true&username=kc-bob"), &users)
+	if len(users) != 1 {
+		t.Fatalf("kc-bob: %v", users)
+	}
+	adminCall("POST", "/users/"+users[0].ID+"/logout")
+
+	deadline := time.Now().Add(15 * time.Second)
+	var code int
+	for time.Now().Before(deadline) {
+		if code, _ = uiDo(t, b, "GET", "/ui/api/v1/spaces", nil, ""); code == http.StatusUnauthorized {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	finding(t, "keycloak-web-ui-revoked", "an administrator signs a user out at Keycloak while they have a web UI session",
+		"the UI session ends (401) within the introspection cache (2 s here)", fmt.Sprintf("HTTP %d", code), code == http.StatusUnauthorized)
+	if code != http.StatusUnauthorized {
+		t.Fatalf("UI session still accepted 15 s after Keycloak's sign-out: %d", code)
 	}
 }

@@ -107,7 +107,7 @@ func User(ctx context.Context) (string, bool) {
 }
 
 // WithUser returns a context carrying a basic-auth user (for tests, the
-// local web UI and internal callers).
+// web UI without sign-in and internal callers).
 func WithUser(ctx context.Context, username string) context.Context {
 	return WithPrincipal(ctx, BasicPrincipal(username))
 }

@@ -1,8 +1,11 @@
 // Copyright 2026 The nbsandbox Authors
 // SPDX-License-Identifier: Apache-2.0
 //
-// API client for the local UI. Every call goes through /ui/api/as/{user}/v1,
-// which runs the normal API as the chosen user.
+// API client for the web UI. Without sign-in every call goes through
+// /ui/api/as/{user}/v1, which runs the normal API as the chosen user; signed
+// in, through /ui/api/v1, as the session's user. Every request carries the
+// UI's header (the server refuses changes without it), and a 401 while
+// signed in goes to the sign-in page.
 
 export class ApiError extends Error {
   constructor(status, code, message, body) {
@@ -32,8 +35,51 @@ export function encodePath(p) {
   return p.split("/").map(enc).join("/");
 }
 
+const UI_HEADER = "X-Nbsandbox-UI";
+let signedIn = false;
+
+/** Goes to the sign-in page, coming back here afterwards. */
+export function signIn() {
+  location.href = "/ui/login?return=" + enc("/" + location.hash);
+}
+
+async function send(url, init = {}) {
+  const headers = new Headers(init.headers || {});
+  headers.set(UI_HEADER, "1");
+  const r = await fetch(url, { ...init, headers, credentials: "same-origin" });
+  if (r.status === 401 && signedIn) {
+    signIn();
+    throw new ApiError(401, "unauthorized", "Signed out: signing in again…", null);
+  }
+  return r;
+}
+
+/**
+ * How this UI signs people in: {mode: "none"}, or {mode: "basic" | "oidc",
+ * user, name, scopes} for the signed-in user. Not signed in: goes to the
+ * sign-in page.
+ */
+export async function session() {
+  const r = await fetch("/ui/api/session", { cache: "no-store", credentials: "same-origin" });
+  if (r.status === 401) {
+    signIn();
+    return new Promise(() => {}); // the page is going away
+  }
+  if (!r.ok) throw new ApiError(r.status, "", "cannot reach nbsandbox", null);
+  const info = await r.json();
+  signedIn = info.mode !== "none";
+  return info;
+}
+
+/** Ends the session and goes where the server says (the provider's sign-out, or the sign-in page). */
+export async function signOut() {
+  const r = await send("/ui/logout", { method: "POST" });
+  const data = await r.json().catch(() => ({}));
+  location.href = data.next || "/ui/login";
+}
+
 export async function listUsers() {
-  const r = await fetch("/ui/api/users");
+  const r = await send("/ui/api/users");
   if (!r.ok) throw new ApiError(r.status, "", "cannot load users", null);
   return (await r.json()).users;
 }
@@ -41,7 +87,7 @@ export async function listUsers() {
 export class Api {
   constructor(user) {
     this.user = user;
-    this.base = `/ui/api/as/${enc(user)}/v1`;
+    this.base = signedIn ? "/ui/api/v1" : `/ui/api/as/${enc(user)}/v1`;
   }
 
   url(path) {
@@ -54,7 +100,7 @@ export class Api {
       init.headers["Content-Type"] = "application/json";
       init.body = JSON.stringify(body);
     }
-    const r = await fetch(this.url(path), init);
+    const r = await send(this.url(path), init);
     const text = await r.text();
     let data = null;
     try {
@@ -84,14 +130,14 @@ export class Api {
 
   /** A file's bytes and the version they are (from the ETag). */
   async fileWithVersion(space, path) {
-    const r = await fetch(this.fileUrl(space, path), { cache: "no-store" });
+    const r = await send(this.fileUrl(space, path), { cache: "no-store" });
     if (!r.ok) throw new ApiError(r.status, "", r.status === 404 ? `${path} no longer exists` : `cannot open ${path}`, null);
     return { bytes: new Uint8Array(await r.arrayBuffer()), version: unquote(r.headers.get("ETag")) };
   }
 
   /** "same", "changed" or "gone": whether the file is still at version. */
   async checkVersion(space, path, version) {
-    const r = await fetch(this.fileUrl(space, path), { method: "GET", cache: "no-store", headers: { "If-None-Match": `"${version}"` } });
+    const r = await send(this.fileUrl(space, path), { method: "GET", cache: "no-store", headers: { "If-None-Match": `"${version}"` } });
     if (r.status === 304) return "same";
     if (r.status === 404) return "gone";
     return r.ok ? "changed" : "same"; // other errors: don't alarm the editor
@@ -106,7 +152,7 @@ export class Api {
     const headers = { "Content-Type": "application/octet-stream" };
     if (version) headers["If-Match"] = `"${version}"`;
     else headers["If-None-Match"] = "*";
-    const r = await fetch(this.fileUrl(space, path), { method: "PUT", headers, body: text });
+    const r = await send(this.fileUrl(space, path), { method: "PUT", headers, body: text });
     const data = await r.json().catch(() => null);
     if (!r.ok) {
       const err = data && data.error ? data.error : { code: "", message: r.statusText };
@@ -132,7 +178,7 @@ export class Api {
     const form = new FormData();
     for (const f of files) form.append("file", f, f.name);
     const q = folder ? `?folder=${enc(folder)}` : "";
-    const r = await fetch(this.url(`/spaces/${enc(space)}/files${q}`), { method: "POST", body: form });
+    const r = await send(this.url(`/spaces/${enc(space)}/files${q}`), { method: "POST", body: form });
     const data = await r.json().catch(() => null);
     if (!r.ok) throw new ApiError(r.status, data && data.error ? data.error.code : "", data && data.error ? data.error.message : r.statusText, data);
     return data;
@@ -180,7 +226,7 @@ export class Api {
   }
 
   async fileBytes(space, path) {
-    const r = await fetch(this.fileUrl(space, path));
+    const r = await send(this.fileUrl(space, path));
     if (!r.ok) throw new ApiError(r.status, "", `cannot open ${path}`, null);
     return new Uint8Array(await r.arrayBuffer());
   }

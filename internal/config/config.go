@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -20,6 +21,7 @@ import (
 	"github.com/azbyluthfan/nbsandbox/internal/auth"
 	"github.com/azbyluthfan/nbsandbox/internal/blob/azstore"
 	"github.com/azbyluthfan/nbsandbox/internal/blob/s3store"
+	"github.com/azbyluthfan/nbsandbox/internal/uiauth"
 )
 
 // Settings is the whole service configuration. Limits apply to every run and
@@ -125,11 +127,55 @@ func (l LoginLimit) Allowance() (int, time.Duration) {
 // BasicEnabled reports whether basic auth is on (the default).
 func (a Auth) BasicEnabled() bool { return a.Basic == nil || *a.Basic }
 
-// UI is the optional local web UI. It acts as any user without
-// a password, so it is off by default and listens on loopback by default.
+// UI is the optional web UI, on its own listener. Off by default. Without
+// sign-in (auth: none) it acts as any users.yaml user without a password, a
+// development tool that listens on loopback only; with auth basic or oidc,
+// people sign in and it can be served to a network.
 type UI struct {
 	Enabled bool   `yaml:"enabled"`
 	Listen  string `yaml:"listen"`
+	// Auth is how people sign in: none, basic or oidc.
+	Auth string `yaml:"auth"`
+	// PublicURL is the address browsers open (required with basic or oidc).
+	PublicURL string `yaml:"public_url"`
+	// NoLoginBeyondLoopback lets auth: none listen beyond loopback. Only for
+	// a container whose port is published on the host's loopback (the dev
+	// Compose stack): anyone who reaches the port can act as any user.
+	NoLoginBeyondLoopback bool      `yaml:"no_login_beyond_loopback"`
+	Session               UISession `yaml:"session"`
+	OIDC                  UIOIDC    `yaml:"oidc"`
+}
+
+// UISession bounds a signed-in session.
+type UISession struct {
+	Idle time.Duration `yaml:"idle"` // without a request
+	Max  time.Duration `yaml:"max"`  // in any case
+}
+
+// UIOIDC is the UI's client at the identity provider (auth.oidc).
+type UIOIDC struct {
+	ClientID     string   `yaml:"client_id"`
+	ClientSecret string   `yaml:"client_secret"`
+	Scopes       []string `yaml:"scopes"`
+}
+
+// SignIn is the UI's sign-in configuration.
+func (u UI) SignIn() uiauth.Config {
+	return uiauth.Config{Mode: uiauth.Mode(u.Auth), PublicURL: u.PublicURL, Idle: u.Session.Idle, Max: u.Session.Max,
+		ClientID: u.OIDC.ClientID, ClientSecret: u.OIDC.ClientSecret, Scopes: u.OIDC.Scopes}
+}
+
+// IsLoopback reports whether a listen address is on loopback only.
+func IsLoopback(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // Docker configures how nbsandboxd reaches Docker and what it runs.
@@ -282,8 +328,11 @@ func Default() Settings {
 			Lease:             30 * time.Second,
 		},
 		ShutdownGrace: 60 * time.Second,
-		UI:            UI{Enabled: false, Listen: "127.0.0.1:8090"},
-		Auth:          Auth{LoginLimit: LoginLimit{Failures: new5(), Refill: time.Minute}, TrustedProxies: []string{}},
+		UI: UI{Enabled: false, Listen: "127.0.0.1:8090", Auth: "none",
+			Session: UISession{Idle: time.Hour, Max: 12 * time.Hour},
+			OIDC: UIOIDC{Scopes: []string{"openid", "profile", auth.ScopeRead, auth.ScopeSpacesWrite, auth.ScopeFilesWrite,
+				auth.ScopeRuns, auth.ScopeFunctionsInvoke, auth.ScopeFunctionsPublish}}},
+		Auth: Auth{LoginLimit: LoginLimit{Failures: new5(), Refill: time.Minute}, TrustedProxies: []string{}},
 	}
 }
 
@@ -420,6 +469,10 @@ func applyEnv(s *Settings, getenv func(string) string) error {
 		"NBSANDBOX_DOCKER_RUNTIME":          &s.Docker.Runtime,
 		"NBSANDBOX_RUNNER_IMAGE":            &s.Docker.Image,
 		"NBSANDBOX_UI_LISTEN":               &s.UI.Listen,
+		"NBSANDBOX_UI_AUTH":                 &s.UI.Auth,
+		"NBSANDBOX_UI_PUBLIC_URL":           &s.UI.PublicURL,
+		"NBSANDBOX_UI_OIDC_CLIENT_ID":       &s.UI.OIDC.ClientID,
+		"NBSANDBOX_UI_OIDC_CLIENT_SECRET":   &s.UI.OIDC.ClientSecret,
 	}
 	for k, p := range str {
 		if v := getenv(k); v != "" {
@@ -436,8 +489,20 @@ func applyEnv(s *Settings, getenv func(string) string) error {
 		}
 		s.UI.Enabled = b
 	}
+	if v := getenv("NBSANDBOX_UI_NO_LOGIN_BEYOND_LOOPBACK"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return fmt.Errorf("NBSANDBOX_UI_NO_LOGIN_BEYOND_LOOPBACK: %w", err)
+		}
+		s.UI.NoLoginBeyondLoopback = b
+	}
+	if v := getenv("NBSANDBOX_UI_OIDC_SCOPES"); v != "" {
+		s.UI.OIDC.Scopes = strings.Fields(strings.ReplaceAll(v, ",", " "))
+	}
 	durations := map[string]*time.Duration{
 		"NBSANDBOX_RUN_TIMEOUT":        &s.Limits.Timeout,
+		"NBSANDBOX_UI_SESSION_IDLE":    &s.UI.Session.Idle,
+		"NBSANDBOX_UI_SESSION_MAX":     &s.UI.Session.Max,
 		"NBSANDBOX_SHUTDOWN_GRACE":     &s.ShutdownGrace,
 		"NBSANDBOX_RUN_RETENTION":      &s.Runs.Retention,
 		"NBSANDBOX_RUN_LEASE":          &s.Runs.Lease,
@@ -527,7 +592,7 @@ func (s Settings) Validate() error {
 	if !filepath.IsAbs(s.DataDir) {
 		add("data_dir: must be an absolute path, got %q", s.DataDir)
 	}
-	if s.UsersFile == "" && (s.Auth.BasicEnabled() || s.UI.Enabled) {
+	if s.UsersFile == "" && (s.Auth.BasicEnabled() || (s.UI.Enabled && s.UI.Auth != string(uiauth.ModeOIDC))) {
 		add("users_file: must not be empty while basic auth or the web UI is on")
 	}
 	if _, err := auth.NewTrustedProxies(s.Auth.TrustedProxies); err != nil {
@@ -636,6 +701,22 @@ func (s Settings) Validate() error {
 	}
 	if s.UI.Enabled && s.UI.Listen == s.Listen {
 		add("ui.listen: must differ from listen (the UI needs its own port)")
+	}
+	if s.UI.Enabled {
+		if err := s.UI.SignIn().Validate("ui"); err != nil {
+			errs = append(errs, err)
+		}
+		switch uiauth.Mode(s.UI.Auth) {
+		case uiauth.ModeNone:
+			if !IsLoopback(s.UI.Listen) && !s.UI.NoLoginBeyondLoopback {
+				add("ui.listen: without sign-in (ui.auth: none) anyone who reaches the UI acts as any user, so it listens on loopback only, "+
+					"got %q; set ui.auth to basic or oidc", s.UI.Listen)
+			}
+		case uiauth.ModeOIDC:
+			if s.Auth.OIDC == nil {
+				add("ui.auth: oidc signs in with the identity provider in auth.oidc, which is not set")
+			}
+		}
 	}
 	if s.ShutdownGrace < 0 {
 		add("shutdown_grace: must not be negative, got %s", s.ShutdownGrace)

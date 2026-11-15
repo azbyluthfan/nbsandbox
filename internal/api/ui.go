@@ -7,30 +7,51 @@ import (
 	"net/http"
 
 	"github.com/azbyluthfan/nbsandbox/internal/auth"
+	"github.com/azbyluthfan/nbsandbox/internal/uiauth"
 )
 
-// UIPrefix is where the web UI reaches the API, acting as {user}.
+// UIPrefix is where the web UI reaches the API when it has no sign-in
+// (ui.auth none), acting as {user}.
 const UIPrefix = "/ui/api/as/{user}"
 
-// NewUIHandler serves the optional local web UI:
-// the static app, the list of usernames, and every authenticated /v1 route
-// under /ui/api/as/{user}/v1/..., run as {user} without a password. It uses
-// the same route table and checks as the main API, so acting as alice still
-// gets 404 on bob's spaces; only how the user is chosen differs. It must only
-// be served on its own, local-only listener.
-func NewUIHandler(d Deps, static http.Handler) http.Handler {
+// UISessionPrefix is where the web UI reaches the API as its signed-in user.
+const UISessionPrefix = "/ui/api"
+
+// NewUIHandler serves the optional web UI: the static app and every
+// authenticated /v1 route, with the same route table and checks as the main
+// API; only how the caller is found differs.
+//
+// With sessions nil (ui.auth none) the routes are under
+// /ui/api/as/{user}/v1/..., run as {user} without a password, plus the list
+// of usernames: a local development tool, for a loopback listener only.
+// Otherwise they are under /ui/api/v1/..., run as the session's caller, next
+// to the sign-in pages.
+func NewUIHandler(d Deps, static http.Handler, sessions *uiauth.Service) http.Handler {
 	a := &API{d: d}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /ui/api/users", func(w http.ResponseWriter, _ *http.Request) {
-		WriteJSON(w, http.StatusOK, map[string]any{"users": d.Users.Names()})
-	})
+	if sessions == nil {
+		mux.HandleFunc("GET /ui/api/users", func(w http.ResponseWriter, _ *http.Request) {
+			WriteJSON(w, http.StatusOK, map[string]any{"users": d.Users.Names()})
+		})
+		mux.HandleFunc("GET /ui/api/session", func(w http.ResponseWriter, _ *http.Request) {
+			WriteJSON(w, http.StatusOK, map[string]any{"mode": uiauth.ModeNone})
+		})
+	} else {
+		sessions.Routes(mux)
+		mux.Handle("GET /ui/api/session", sessions.Require(authFailed, uiauth.SessionInfo(sessions.Mode())))
+	}
 	for _, rt := range a.routes() {
 		if !rt.Auth { // health and metrics stay on the main port only
 			continue
 		}
-		mux.Handle(rt.Method+" "+UIPrefix+rt.Pattern, actAs(d.Users, recordUser(wrapRoute(rt, d))))
+		h := recordUser(wrapRoute(rt, d))
+		if sessions == nil {
+			mux.Handle(rt.Method+" "+UIPrefix+rt.Pattern, actAs(d.Users, h))
+		} else {
+			mux.Handle(rt.Method+" "+UISessionPrefix+rt.Pattern, sessions.Require(authFailed, h))
+		}
 	}
-	mux.HandleFunc("/ui/api/", notFound)
+	mux.HandleFunc("/ui/", notFound)
 	mux.Handle("/", static)
 
 	var h http.Handler = mux

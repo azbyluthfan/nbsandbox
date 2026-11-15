@@ -7,7 +7,9 @@
 #   cp deploy/.env.example deploy/.env    # then edit it
 #   docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d
 #
-# The web UI is never enabled here.
+# The web UI is off unless NBSANDBOX_UI_ENABLED=true, and then only with
+# sign-in (the identity provider, or users.yaml): Caddy serves it at the
+# domain's root, next to the API (docs/auth.md#signing-in-to-the-web-ui).
 
 name: nbsandbox
 
@@ -17,6 +19,7 @@ services:
     environment:
       NBSANDBOX_DOMAIN: ${NBSANDBOX_DOMAIN:-localhost}
       NBSANDBOX_TLS: ${NBSANDBOX_TLS:-internal}
+      NBSANDBOX_UI_ENABLED: ${NBSANDBOX_UI_ENABLED:-false}
     ports:
       - "${NBSANDBOX_HTTP_PORT:-80}:80"
       - "${NBSANDBOX_HTTPS_PORT:-443}:443"
@@ -110,7 +113,15 @@ services:
       NBSANDBOX_DOCKER_HOST: tcp://socket-proxy:2375
       NBSANDBOX_RUNNER_IMAGE: ${NBSANDBOX_RUNNER_IMAGE:-ghcr.io/azbyluthfan/nbsandbox-runner:0.1.2}
       NBSANDBOX_LOG_LEVEL: ${NBSANDBOX_LOG_LEVEL:-info}
-      NBSANDBOX_UI_ENABLED: "false" # never in production
+      # The web UI (off by default). It needs sign-in here: oidc (the
+      # identity provider in settings.yaml, with the UI's own client) or
+      # basic (users.yaml).
+      NBSANDBOX_UI_ENABLED: ${NBSANDBOX_UI_ENABLED:-false}
+      NBSANDBOX_UI_AUTH: ${NBSANDBOX_UI_AUTH:-oidc}
+      NBSANDBOX_UI_LISTEN: 0.0.0.0:8090
+      NBSANDBOX_UI_PUBLIC_URL: ${NBSANDBOX_UI_PUBLIC_URL:-https://${NBSANDBOX_DOMAIN:-localhost}}
+      NBSANDBOX_UI_OIDC_CLIENT_ID: ${NBSANDBOX_UI_OIDC_CLIENT_ID:-}
+      NBSANDBOX_UI_OIDC_CLIENT_SECRET: ${NBSANDBOX_UI_OIDC_CLIENT_SECRET:-}
       # Clients reach nbsandboxd through Caddy: its X-Forwarded-For names the
       # client, so failed sign-ins are limited per client address too.
       NBSANDBOX_TRUSTED_PROXIES: ${NBSANDBOX_TRUSTED_PROXIES:-caddy}

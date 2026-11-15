@@ -107,6 +107,21 @@ auth:
       url: ""                 # default: from the provider's discovery document
       cache: 30s
 
+# The web UI, served by the API Deployment on its own port and, with the
+# Ingress, at the host's root next to /v1/. It always signs people in here.
+ui:
+  enabled: false
+  auth: oidc                # oidc: the identity provider above; basic: users.yaml (auth.basic)
+  publicUrl: ""             # the address browsers open, e.g. https://nbsandbox.example.com
+  session:
+    idle: 1h                # signed out after this long without a request
+    max: 12h                # and after this long in any case
+  oidc:
+    clientId: ""            # the UI's own client at the provider (a confidential web client)
+    secretName: ""          # a Secret with key client-secret
+    scopes: []              # default: openid, profile and the nbsandbox scopes
+                            # (Entra ID: api://<nbsandbox client id>/nbsandbox.read, ...)
+
 functions:
   requireSchemas: false
 

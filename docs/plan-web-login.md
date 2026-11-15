@@ -1,6 +1,10 @@
 # Plan: signing in to the web UI
 
-**Status (2026-11-15):** agreed (the open questions answered as proposed); being built.
+**Status (2026-11-15):** built (the open questions answered as proposed). Differences from the design below:
+- `offline_access` is not in the default scopes: Keycloak's offline tokens outlive the user's session there, so signing out at Keycloak wouldn't end the UI session. Entra ID needs it for refresh tokens; the docs say to add it there.
+- `auth: none` beyond loopback is refused unless `ui.no_login_beyond_loopback` is set: the dev Compose stack's container listens on all interfaces with the port published on the host's loopback only, and sets it.
+- `profile` is in the default scopes, for the display name.
+- Hiding buttons the user's scopes don't allow is left for later; the API refuses them (403) and the UI shows the message.
 
 ## Today
 

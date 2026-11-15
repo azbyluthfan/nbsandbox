@@ -1,13 +1,15 @@
 # Copyright 2026 The nbsandbox Authors
 # SPDX-License-Identifier: Apache-2.0
 #
-# Caddy in front of nbsandboxd. Only the /v1 API and its gRPC twin are forwarded:
-# /healthz, /readyz and /metrics stay internal, and the optional web UI is
-# never exposed through here.
+# Caddy in front of nbsandboxd. The /v1 API and its gRPC twin are forwarded,
+# and, when it is on, the web UI at the domain's root (it signs people in;
+# the API never accepts its cookie). /healthz, /readyz and /metrics stay
+# internal.
 #
-#   NBSANDBOX_DOMAIN  host name, e.g. nbsandbox.example.com (default: localhost)
-#   NBSANDBOX_TLS     "internal" (Caddy's own CA, for tests and private hosts)
-#                   or an e-mail address for Let's Encrypt (public hosts)
+#   NBSANDBOX_DOMAIN      host name, e.g. nbsandbox.example.com (default: localhost)
+#   NBSANDBOX_TLS         "internal" (Caddy's own CA, for tests and private hosts)
+#                         or an e-mail address for Let's Encrypt (public hosts)
+#   NBSANDBOX_UI_ENABLED  true or false (default): forward everything else to the web UI
 
 {
 	admin off
@@ -16,6 +18,26 @@
 			read_header 10s
 			idle 2m
 		}
+	}
+}
+
+# Everything that isn't the API: the web UI when it is on, otherwise nothing.
+(ui-true) {
+	handle {
+		reverse_proxy nbsandboxd:8090 {
+			# Live logs and run events are server-sent events.
+			flush_interval -1
+			transport http {
+				read_timeout 0
+				write_timeout 0
+			}
+		}
+	}
+}
+
+(ui-false) {
+	handle {
+		respond "Not found" 404
 	}
 }
 
@@ -57,9 +79,7 @@
 		}
 	}
 
-	handle {
-		respond "Not found" 404
-	}
+	import ui-{$NBSANDBOX_UI_ENABLED:false}
 
 	log {
 		output stdout
