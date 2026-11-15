@@ -25,7 +25,7 @@ Before v1.0, a minor version may change behaviour; changes are listed in the cha
 4. **Versions in files:** `deploy/.env.example`, the defaults in `deploy/docker-compose.yml`, `deploy/helm/nbsandbox/Chart.yaml` (`version`, `appVersion`) and `values.yaml` (`runnerImage`), and `api/openapi.yaml` `info.version`.
 5. **Scans** (the [security review](security/review.md) lists the commands): `govulncheck`, Trivy on both images, `pip-audit` on the runner's packages, gitleaks on the tree. Fix what has a fix; note what doesn't.
 6. **Isolation reports on every platform** (the release workflow repeats the Docker one on Linux):
-   - `make report-linux`: Linux with Docker Engine, `runc` and `runsc`;
+   - Linux with Docker Engine, `runc` and `runsc`: the weekly run's pull request "docs: Linux isolation report from the weekly run" (start the weekly workflow on `main` for a fresh one, and merge its PR), or `make report-linux` on your own machine;
    - `make report-k8s` and `make report-k8s K8S_RUNTIME_CLASS=gvisor`: Kubernetes, both runtimes.
 7. **Tag** (signed off, like every commit):
    ```bash

@@ -153,6 +153,53 @@ jobs:
               image --quiet --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$image"
           done
 
+  linux-report:
+    # The two Docker jobs above ran the whole suite on Linux with Docker
+    # Engine at the default limits (2 GiB per run), runc and gVisor: their
+    # findings together are the Linux reference report. It reaches main
+    # through a pull request, like every change.
+    name: Linux reference report (PR)
+    needs: docker
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: isolation-report-docker-*
+          path: ${{ runner.temp }}/artifacts
+      - name: Render both runtimes' findings
+        env:
+          ARTIFACTS: ${{ runner.temp }}/artifacts
+          FINDINGS: ${{ runner.temp }}/findings
+        run: |
+          set -euo pipefail
+          mkdir -p "$FINDINGS"
+          for d in "$ARTIFACTS"/isolation-report-docker-*/bin/findings/*/; do
+            cp -R "${d%/}" "$FINDINGS/"
+          done
+          ls "$FINDINGS"
+          go run ./cmd/nbsandbox-report -in "$FINDINGS" -out docs/isolation-report-linux.md -require \
+            -target "make report in the weekly CI run (GitHub's Linux runner, Docker Engine, 2 GiB per run)"
+      - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          branch: weekly/linux-report
+          delete-branch: true
+          sign-commits: true
+          add-paths: docs/isolation-report-linux.md
+          commit-message: "docs: Linux isolation report from the weekly run"
+          title: "docs: Linux isolation report from the weekly run"
+          body: |
+            The weekly run's Docker jobs (runc and gVisor, on GitHub's Linux runner with Docker Engine, at the default 2 GiB per run) passed; this is their isolation report.
+
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
   keycloak:
     name: Keycloak (end-to-end auth)
     runs-on: ubuntu-24.04
