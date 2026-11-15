@@ -64,7 +64,7 @@ RUN=$(scripts/nbsandbox.sh runs start "$ID" smoke.ipynb | jq -r .id)
 scripts/nbsandbox.sh runs follow "$ID" "$RUN"
 ```
 
-You can also open http://127.0.0.1:8090, pick `alice` and the `demo` space, open `smoke.ipynb` and press **Run**. In the dev stack the web UI has no sign-in (deployments sign people in: [docs/auth.md](docs/auth.md#signing-in-to-the-web-ui)). The demo users' passwords are public: nbsandboxd warns at startup when they are loaded.
+You can also run `make seed`, which fills the stack with example spaces, notebooks, data, runs and a published function, then open http://127.0.0.1:8090, pick `alice` and the **Sales analysis** space, open a notebook and press **Run**. In the dev stack the web UI has no sign-in (deployments sign people in: [docs/auth.md](docs/auth.md#signing-in-to-the-web-ui)). The demo users' passwords are public: nbsandboxd warns at startup when they are loaded.
 
 Stop with `make down`. `make report` runs the isolation suite on your machine and writes `docs/isolation-report.md`.
 
