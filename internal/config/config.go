@@ -57,6 +57,8 @@ type Settings struct {
 	ShutdownGrace time.Duration `yaml:"shutdown_grace"`
 
 	UI UI `yaml:"ui"`
+	// Audit records who did what (docs/operations.md#audit-log).
+	Audit Audit `yaml:"audit"`
 
 	Auth Auth `yaml:"auth"`
 
@@ -144,6 +146,13 @@ type UI struct {
 	NoLoginBeyondLoopback bool      `yaml:"no_login_beyond_loopback"`
 	Session               UISession `yaml:"session"`
 	OIDC                  UIOIDC    `yaml:"oidc"`
+}
+
+// Audit configures the audit log.
+type Audit struct {
+	Enabled   bool          `yaml:"enabled"`
+	Retention time.Duration `yaml:"retention"`
+	Downloads bool          `yaml:"downloads"` // also record downloads of files and run outputs
 }
 
 // UISession bounds a signed-in session.
@@ -328,6 +337,7 @@ func Default() Settings {
 			Lease:             30 * time.Second,
 		},
 		ShutdownGrace: 60 * time.Second,
+		Audit:         Audit{Enabled: true, Retention: 90 * 24 * time.Hour, Downloads: true},
 		UI: UI{Enabled: false, Listen: "127.0.0.1:8090", Auth: "none",
 			Session: UISession{Idle: time.Hour, Max: 12 * time.Hour},
 			OIDC: UIOIDC{Scopes: []string{"openid", "profile", auth.ScopeRead, auth.ScopeSpacesWrite, auth.ScopeFilesWrite,
@@ -502,6 +512,7 @@ func applyEnv(s *Settings, getenv func(string) string) error {
 	durations := map[string]*time.Duration{
 		"NBSANDBOX_RUN_TIMEOUT":        &s.Limits.Timeout,
 		"NBSANDBOX_UI_SESSION_IDLE":    &s.UI.Session.Idle,
+		"NBSANDBOX_AUDIT_RETENTION":    &s.Audit.Retention,
 		"NBSANDBOX_UI_SESSION_MAX":     &s.UI.Session.Max,
 		"NBSANDBOX_SHUTDOWN_GRACE":     &s.ShutdownGrace,
 		"NBSANDBOX_RUN_RETENTION":      &s.Runs.Retention,
@@ -524,6 +535,8 @@ func applyEnv(s *Settings, getenv func(string) string) error {
 		"NBSANDBOX_S3_CREATE_BUCKET":       &s.Storage.S3.CreateBucket,
 		"NBSANDBOX_AZURE_CREATE_CONTAINER": &s.Storage.Azure.CreateContainer,
 		"NBSANDBOX_REQUIRE_SCHEMAS":        &s.Functions.RequireSchemas,
+		"NBSANDBOX_AUDIT_ENABLED":          &s.Audit.Enabled,
+		"NBSANDBOX_AUDIT_DOWNLOADS":        &s.Audit.Downloads,
 	} {
 		if v := getenv(name); v != "" {
 			b, err := strconv.ParseBool(v)
@@ -695,6 +708,9 @@ func (s Settings) Validate() error {
 	case "warn", "reject":
 	default:
 		add("runs.dependency_check: must be warn or reject, got %q", s.Runs.DependencyCheck)
+	}
+	if s.Audit.Retention < 24*time.Hour || s.Audit.Retention > 10*365*24*time.Hour {
+		add("audit.retention: must be between 24h and 87600h (10 years), got %s", s.Audit.Retention)
 	}
 	if s.UI.Enabled && s.UI.Listen == "" {
 		add("ui.listen: must not be empty when ui.enabled is true")

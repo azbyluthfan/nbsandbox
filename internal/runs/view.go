@@ -263,7 +263,7 @@ func (m *Manager) List(ctx context.Context, owner, spaceID string, f ListFilter,
 	if err := m.d.Spaces.Owned(ctx, owner, spaceID); err != nil {
 		return nil, "", err
 	}
-	page, err := m.d.DB.ListRuns(ctx, spaceID, store.RunFilter(f), cursor, limit)
+	page, err := m.d.DB.ListRuns(ctx, spaceID, store.RunFilter{Status: f.Status, Function: f.Function, CreatedAfter: f.CreatedAfter, CreatedBefore: f.CreatedBefore}, cursor, limit)
 	if errors.Is(err, store.ErrBadCursor) {
 		return nil, "", &spaces.InvalidError{Msg: "invalid cursor"}
 	}

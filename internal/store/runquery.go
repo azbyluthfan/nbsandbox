@@ -92,6 +92,7 @@ func (db *DB) RunByID(ctx context.Context, runID string) (Run, error) {
 // RunFilter narrows ListRuns.
 type RunFilter struct {
 	Status        string
+	Owner         string // only this owner's runs (administrators, across spaces)
 	Function      string // only invocations of this function
 	CreatedAfter  *time.Time
 	CreatedBefore *time.Time
@@ -103,10 +104,19 @@ type RunPage struct {
 	NextCursor string
 }
 
-// ListRuns lists a space's runs, newest first, with cursor paging.
+// ListRuns lists a space's runs, newest first, with cursor paging. An
+// empty spaceID lists every space's (administrators only).
 func (db *DB) ListRuns(ctx context.Context, spaceID string, f RunFilter, cursor string, limit int) (RunPage, error) {
-	q := "SELECT " + runCols + " FROM runs WHERE space_id = ?"
-	args := []any{spaceID}
+	q := "SELECT " + runCols + " FROM runs WHERE true"
+	var args []any
+	if spaceID != "" {
+		q += " AND space_id = ?"
+		args = append(args, spaceID)
+	}
+	if f.Owner != "" {
+		q += " AND owner = ?"
+		args = append(args, f.Owner)
+	}
 	if f.Status != "" {
 		q += " AND status = ?"
 		args = append(args, f.Status)

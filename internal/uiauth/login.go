@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/azbyluthfan/nbsandbox/internal/audit"
 	"github.com/azbyluthfan/nbsandbox/internal/auth"
 	"github.com/azbyluthfan/nbsandbox/internal/store"
 )
@@ -144,6 +145,7 @@ func (s *Service) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.d.Log.Info("web UI sign-in", "user", p.ID, "method", "oidc", "client", p.Client)
+	s.d.Audit.Record(auth.WithPrincipal(r.Context(), p), audit.Entry{Action: audit.ActionSignIn, Status: http.StatusSeeOther})
 	http.Redirect(w, r, l.ReturnTo, http.StatusSeeOther)
 }
 
@@ -186,6 +188,7 @@ func (s *Service) basicLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.d.Log.Info("web UI sign-in", "user", p.ID, "method", "basic")
+	s.d.Audit.Record(auth.WithPrincipal(r.Context(), p), audit.Entry{Action: audit.ActionSignIn, Status: http.StatusSeeOther})
 	http.Redirect(w, r, ret, http.StatusSeeOther) //nolint:gosec // ret went through localPath: a path on this site only
 }
 
@@ -205,6 +208,7 @@ func (s *Service) logout(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		_ = s.d.Store.DeleteUISession(r.Context(), sess.IDHash)
 		s.d.Log.Info("web UI sign-out", "user", sess.Principal)
+		s.d.Audit.Record(r.Context(), audit.Entry{Actor: sess.Principal, Method: sess.Method, Action: audit.ActionSignOut, Status: http.StatusOK})
 		if sess.Method == "oidc" && s.cfg.Mode == ModeOIDC {
 			if u := s.endSessionURL(r, sess); u != "" {
 				next = u

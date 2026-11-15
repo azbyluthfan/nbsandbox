@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -20,10 +21,12 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 
 	pb "github.com/azbyluthfan/nbsandbox/gen/nbsandbox/v1"
 	"github.com/azbyluthfan/nbsandbox/gen/nbsandbox/v1/nbsandboxv1connect"
 	"github.com/azbyluthfan/nbsandbox/internal/api"
+	"github.com/azbyluthfan/nbsandbox/internal/audit"
 	"github.com/azbyluthfan/nbsandbox/internal/auth"
 	"github.com/azbyluthfan/nbsandbox/internal/completions"
 	"github.com/azbyluthfan/nbsandbox/internal/runs"
@@ -42,6 +45,8 @@ type Deps struct {
 	// Shutdown is closed when the server starts shutting down: open streams
 	// end (callers resume where they were).
 	Shutdown <-chan struct{}
+	// Audit records who did what (nil: nothing is recorded).
+	Audit *audit.Recorder
 }
 
 // maxMessage bounds one message; uploads stream any number of them.
@@ -57,7 +62,7 @@ const Prefix = "/nbsandbox.v1."
 func Handler(d Deps) http.Handler {
 	s := &server{d: d}
 	opts := []connect.HandlerOption{
-		connect.WithInterceptors(&authInterceptor{a: d.Auth}),
+		connect.WithInterceptors(&authInterceptor{a: d.Auth, rec: d.Audit}),
 		connect.WithReadMaxBytes(maxMessage),
 	}
 	mux := http.NewServeMux()
@@ -102,7 +107,10 @@ func opOf(procedure string) auth.Op {
 
 // authInterceptor authenticates every call with its Authorization metadata
 // and checks the operation's scope, as the REST middleware does.
-type authInterceptor struct{ a *auth.Authenticator }
+type authInterceptor struct {
+	a   *auth.Authenticator
+	rec *audit.Recorder
+}
 
 func (i *authInterceptor) check(ctx context.Context, procedure string, h http.Header, peer string) (context.Context, error) {
 	op := opOf(procedure)
@@ -124,21 +132,103 @@ func (i *authInterceptor) check(ctx context.Context, procedure string, h http.He
 		}
 		return ctx, cerr
 	}
+	ctx = auth.WithPrincipal(ctx, p)
 	if !p.Has(scope) {
 		cerr := connect.NewError(connect.CodePermissionDenied, errors.New("the access token lacks the scope "+scope))
 		cerr.Meta().Set("WWW-Authenticate", auth.InsufficientScope(scope))
 		return ctx, cerr
 	}
-	return auth.WithPrincipal(ctx, p), nil
+	return ctx, nil
+}
+
+// record writes the audit row of an audited operation that has finished
+// (or was refused after the caller was known).
+func (i *authInterceptor) record(ctx context.Context, procedure string, msg any, err error) {
+	op := opOf(procedure)
+	if _, known := auth.From(ctx); !known || !i.rec.Audited(op) {
+		return
+	}
+	space, target := targetOf(msg)
+	i.rec.Record(ctx, audit.Entry{Action: string(op), SpaceID: space, Target: target, Status: httpStatus(err)})
+}
+
+// targetOf reads what a request names, as the REST path does: its space,
+// and a run (and artifact), a file or a function (and version).
+func targetOf(msg any) (space, target string) {
+	m, ok := msg.(proto.Message)
+	if !ok || m == nil {
+		return "", ""
+	}
+	r := m.ProtoReflect()
+	// A streaming upload or write names its file in a "target" message.
+	if fd := r.Descriptor().Fields().ByName("target"); fd != nil && fd.Kind() == protoreflect.MessageKind && r.Has(fd) {
+		r = r.Get(fd).Message()
+	}
+	get := func(name string) string {
+		fd := r.Descriptor().Fields().ByName(protoreflect.Name(name))
+		if fd == nil || !r.Has(fd) {
+			return ""
+		}
+		return fmt.Sprint(r.Get(fd).Interface())
+	}
+	run, path, name, version := get("run_id"), get("path"), get("name"), get("version")
+	switch {
+	case run != "" && path != "":
+		target = run + "/" + path
+	case run != "":
+		target = run
+	case path != "":
+		target = path
+	case name != "" && version != "":
+		target = name + "@" + version
+	default:
+		target = name
+	}
+	return get("space_id"), target
+}
+
+// httpStatus maps a call's outcome to the HTTP status REST would give.
+func httpStatus(err error) int {
+	if err == nil {
+		return http.StatusOK
+	}
+	switch connect.CodeOf(err) {
+	case connect.CodeInvalidArgument, connect.CodeOutOfRange:
+		return http.StatusBadRequest
+	case connect.CodeUnauthenticated:
+		return http.StatusUnauthorized
+	case connect.CodePermissionDenied:
+		return http.StatusForbidden
+	case connect.CodeNotFound:
+		return http.StatusNotFound
+	case connect.CodeAlreadyExists, connect.CodeAborted, connect.CodeFailedPrecondition:
+		return http.StatusConflict
+	case connect.CodeResourceExhausted:
+		return http.StatusTooManyRequests
+	case connect.CodeCanceled:
+		return 499 // the client went away
+	case connect.CodeUnavailable:
+		return http.StatusServiceUnavailable
+	case connect.CodeDeadlineExceeded:
+		return http.StatusGatewayTimeout
+	case connect.CodeUnimplemented:
+		return http.StatusNotImplemented
+	default:
+		return http.StatusInternalServerError
+	}
 }
 
 func (i *authInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+		ctx = audit.WithNote(audit.WithVia(ctx, "grpc"))
 		ctx, err := i.check(ctx, req.Spec().Procedure, req.Header(), req.Peer().Addr)
 		if err != nil {
+			i.record(ctx, req.Spec().Procedure, req.Any(), err)
 			return nil, err
 		}
-		return next(ctx, req)
+		resp, err := next(ctx, req)
+		i.record(ctx, req.Spec().Procedure, req.Any(), err)
+		return resp, err
 	}
 }
 
@@ -148,11 +238,20 @@ func (i *authInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) 
 
 func (i *authInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
+		ctx = audit.WithNote(audit.WithVia(ctx, "grpc"))
 		ctx, err := i.check(ctx, conn.Spec().Procedure, conn.RequestHeader(), conn.Peer().Addr)
 		if err != nil {
+			i.record(ctx, conn.Spec().Procedure, nil, err)
 			return err
 		}
-		return next(ctx, conn)
+		if !i.rec.Audited(opOf(conn.Spec().Procedure)) {
+			return next(ctx, conn)
+		}
+		// The request's first message says what the call is about.
+		c := &firstMessage{StreamingHandlerConn: conn}
+		err = next(ctx, c)
+		i.record(ctx, conn.Spec().Procedure, c.first, err)
+		return err
 	}
 }
 
@@ -239,4 +338,27 @@ func (s *server) toErr(err error) error {
 		return connect.NewError(connect.CodeInternal, errors.New("internal error"))
 	}
 	return connect.NewError(code, err)
+}
+
+// firstMessage keeps the first message a streaming call receives.
+type firstMessage struct {
+	connect.StreamingHandlerConn
+	first any
+}
+
+func (c *firstMessage) Receive(m any) error {
+	err := c.StreamingHandlerConn.Receive(m)
+	if err == nil && c.first == nil {
+		c.first = m
+	}
+	return err
+}
+
+// clip keeps an audit detail under 1 KiB.
+func clip(s string) string {
+	const maxDetail = 1024
+	if len(s) <= maxDetail {
+		return s
+	}
+	return s[:maxDetail-3] + "..."
 }

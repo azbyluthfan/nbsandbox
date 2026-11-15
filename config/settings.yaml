@@ -21,6 +21,7 @@
 #             NBSANDBOX_OIDC_INTROSPECTION_CLIENT_ID, NBSANDBOX_OIDC_INTROSPECTION_CLIENT_SECRET,
 #             NBSANDBOX_OIDC_INTROSPECTION_CACHE, NBSANDBOX_LOGIN_LIMIT_FAILURES,
 #             NBSANDBOX_TRUSTED_PROXIES
+#   audit:    NBSANDBOX_AUDIT_ENABLED, NBSANDBOX_AUDIT_RETENTION, NBSANDBOX_AUDIT_DOWNLOADS
 #   web UI:   NBSANDBOX_UI_ENABLED, NBSANDBOX_UI_LISTEN, NBSANDBOX_UI_AUTH, NBSANDBOX_UI_PUBLIC_URL,
 #             NBSANDBOX_UI_NO_LOGIN_BEYOND_LOOPBACK, NBSANDBOX_UI_SESSION_IDLE, NBSANDBOX_UI_SESSION_MAX,
 #             NBSANDBOX_UI_OIDC_CLIENT_ID, NBSANDBOX_UI_OIDC_CLIENT_SECRET, NBSANDBOX_UI_OIDC_SCOPES
@@ -111,6 +112,14 @@ runs:
 # Publishing notebooks as functions (docs/functions.md).
 functions:
   require_schemas: false            # NBSANDBOX_REQUIRE_SCHEMAS; true: refuse a function without input and output schemas
+
+# Who did what, and when (docs/operations.md#audit-log): every change, every
+# download and every administrative operation, refused ones included. Read
+# with GET /v1/admin/audit; each row also goes to the log (msg=audit).
+audit:
+  enabled: true                     # NBSANDBOX_AUDIT_ENABLED
+  retention: 2160h                  # NBSANDBOX_AUDIT_RETENTION: 90 days; 24h to 87600h
+  downloads: true                   # NBSANDBOX_AUDIT_DOWNLOADS: also record downloads of files and run outputs
 
 shutdown_grace: 60s                 # wait for active runs on SIGTERM
 

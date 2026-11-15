@@ -26,6 +26,7 @@ import (
 	pb "github.com/azbyluthfan/nbsandbox/gen/nbsandbox/v1"
 	"github.com/azbyluthfan/nbsandbox/gen/nbsandbox/v1/nbsandboxv1connect"
 	"github.com/azbyluthfan/nbsandbox/internal/api"
+	"github.com/azbyluthfan/nbsandbox/internal/audit"
 	"github.com/azbyluthfan/nbsandbox/internal/auth"
 	"github.com/azbyluthfan/nbsandbox/internal/blob"
 	"github.com/azbyluthfan/nbsandbox/internal/isolation"
@@ -107,7 +108,9 @@ func newServer(t *testing.T) func(user string) clients {
 	}
 	mgr.SetDockerUp(true)
 	t.Cleanup(func() { mgr.Shutdown(0) })
+	rec := audit.New(audit.Config{Enabled: true, Retention: time.Hour, Downloads: true}, db, log, nil)
 	h := Handler(Deps{Auth: &auth.Authenticator{Users: us, Limiter: auth.NewLoginLimiter(3, time.Minute), LimitByAddress: true}, Spaces: svc, Runs: mgr, Logger: log, Shutdown: make(chan struct{}),
+		Audit: rec,
 		Runtime: func() (api.RuntimeInfo, error) {
 			var ri api.RuntimeInfo
 			ri.Image.Ref, ri.PythonVersion, ri.Packages, ri.Runtime = "nbsandbox-runner:test", "3.13.18", map[string]string{"pandas": "3.1.1"}, "runc"

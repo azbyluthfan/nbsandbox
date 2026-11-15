@@ -122,6 +122,12 @@ ui:
     scopes: []              # default: openid, profile and the nbsandbox scopes
                             # (Entra ID: api://<nbsandbox client id>/nbsandbox.read, ...)
 
+# The audit log (docs/operations.md#audit-log).
+audit:
+  enabled: true
+  retention: 2160h          # 90 days
+  downloads: true           # also record downloads of files and run outputs
+
 functions:
   requireSchemas: false
 

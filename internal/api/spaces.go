@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/azbyluthfan/nbsandbox/internal/audit"
 	"github.com/azbyluthfan/nbsandbox/internal/auth"
 	"github.com/azbyluthfan/nbsandbox/internal/obs"
 	"github.com/azbyluthfan/nbsandbox/internal/spaces"
@@ -130,6 +131,8 @@ func (a *API) createSpace(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, r, err)
 		return
 	}
+	audit.SetSpace(r.Context(), sp.ID)
+	audit.SetDetail(r.Context(), "name "+sp.Name)
 	w.Header().Set("Location", "/v1/spaces/"+sp.ID)
 	WriteJSON(w, http.StatusCreated, toSpaceJSON(sp, true))
 }
@@ -239,6 +242,11 @@ func (a *API) uploadFiles(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, r, err)
 		return
 	}
+	names := make([]string, 0, len(files))
+	for _, f := range files {
+		names = append(names, f.Path)
+	}
+	audit.SetDetail(r.Context(), clip(strings.Join(names, ", ")))
 	WriteJSON(w, http.StatusCreated, map[string]any{"files": files})
 }
 
@@ -357,6 +365,7 @@ func (a *API) patchFile(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, r, &spaces.InvalidError{Msg: "path is required"})
 		return
 	}
+	audit.SetDetail(r.Context(), "to "+body.Path)
 	f, err := a.d.Spaces.Move(r.Context(), user(r), r.PathValue("id"), r.PathValue("path"), body.Path,
 		parseETag(r.Header.Get("If-Match")))
 	if err != nil {

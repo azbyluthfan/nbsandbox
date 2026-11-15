@@ -212,6 +212,113 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
+  /v1/admin/runs:
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.admin] }]
+      tags: [admin]
+      summary: Every owner's runs, newest first (administrators)
+      description: |
+        Metadata only, with the owner: never results or outputs. Narrow with
+        `status`, `owner` (a caller ID) and `space`.
+      parameters:
+        - { name: status, in: query, required: false, schema: { type: string } }
+        - { name: owner, in: query, required: false, schema: { type: string } }
+        - { name: space, in: query, required: false, schema: { type: string, format: uuid } }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200": { description: One page, content: { application/json: { schema: { $ref: "#/components/schemas/AdminRunList" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /v1/admin/runs/{run_id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/RunID"
+    post:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.admin] }]
+      tags: [admin]
+      summary: Stop any owner's run (administrators)
+      description: The run's `cancelled_by` is the administrator. A running run stops asynchronously.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                reason: { type: string, maxLength: 500 }
+      responses:
+        "202": { description: Cancel requested, content: { application/json: { schema: { $ref: "#/components/schemas/AdminRun" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /v1/admin/drain:
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.admin] }]
+      tags: [admin]
+      summary: Whether the workers are drained (administrators)
+      responses:
+        "200": { description: The drain state, content: { application/json: { schema: { $ref: "#/components/schemas/Drain" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    put:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.admin] }]
+      tags: [admin]
+      summary: Drain or resume the workers (administrators)
+      description: |
+        While draining, no worker starts a queued run; running runs finish,
+        and new runs are still accepted (they wait, queued). Maintenance can
+        start once `running_runs` is 0. Setting `draining` to false resumes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [draining]
+              properties:
+                draining: { type: boolean }
+                reason: { type: string, maxLength: 500 }
+      responses:
+        "200": { description: The drain state, content: { application/json: { schema: { $ref: "#/components/schemas/Drain" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /v1/admin/audit:
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.admin] }]
+      tags: [admin]
+      summary: The audit log, newest first (administrators)
+      description: |
+        Every change, download and administrative operation, refused ones
+        included (docs/operations.md#audit-log). Reading it is recorded too.
+      parameters:
+        - { name: actor, in: query, required: false, description: A caller ID, schema: { type: string } }
+        - { name: space, in: query, required: false, schema: { type: string } }
+        - { name: action, in: query, required: false, description: An operation, e.g. CreateRun, schema: { type: string } }
+        - { name: since, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: until, in: query, required: false, schema: { type: string, format: date-time } }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200": { description: One page, content: { application/json: { schema: { $ref: "#/components/schemas/AuditList" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
   /v1/spaces/{id}/files:
     parameters:
       - $ref: "#/components/parameters/SpaceID"
@@ -1206,6 +1313,51 @@ components:
           required: [owner]
           properties:
             owner: { type: string, description: The owner's caller ID }
+    AdminRun:
+      allOf:
+        - $ref: "#/components/schemas/Run"
+        - type: object
+          required: [owner]
+          properties:
+            owner: { type: string, description: The owner's caller ID }
+    AdminRunList:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AdminRun" } }
+        next_cursor: { type: string, description: Empty on the last page }
+    Drain:
+      type: object
+      required: [draining, queued_runs, running_runs]
+      properties:
+        draining: { type: boolean }
+        reason: { type: string }
+        by: { type: string, description: The administrator who drained }
+        since: { type: string, format: date-time }
+        queued_runs: { type: integer }
+        running_runs: { type: integer }
+    AuditEvent:
+      type: object
+      required: [id, at, actor, via, action, status]
+      properties:
+        id: { type: string }
+        at: { type: string, format: date-time }
+        actor: { type: string, description: The caller ID }
+        method: { type: string, enum: [basic, oidc] }
+        client: { type: string, description: The token's application }
+        via: { type: string, enum: [rest, grpc, ui] }
+        action: { type: string, description: "The operation (as the gRPC methods are named), SignIn or SignOut" }
+        space_id: { type: string }
+        target: { type: string, description: "A path, run, run/artifact, function or function@version" }
+        detail: { type: string }
+        status: { type: integer, description: The HTTP status (gRPC codes mapped to their HTTP equivalent) }
+        address: { type: string, description: The client's address }
+    AuditList:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AuditEvent" } }
+        next_cursor: { type: string, description: Empty on the last page }
     AdminSpaceList:
       type: object
       required: [items, next_cursor]

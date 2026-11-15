@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/azbyluthfan/nbsandbox/internal/audit"
 	"github.com/azbyluthfan/nbsandbox/internal/completions"
 	"github.com/azbyluthfan/nbsandbox/internal/contract"
 	"github.com/azbyluthfan/nbsandbox/internal/runs"
@@ -106,6 +107,8 @@ func (a *API) createRun(w http.ResponseWriter, r *http.Request) {
 		writeRunError(w, r, err)
 		return
 	}
+	audit.SetTarget(r.Context(), v.ID)
+	audit.SetDetail(r.Context(), "notebook "+body.Notebook)
 	w.Header().Set("Location", "/v1/spaces/"+v.SpaceID+"/runs/"+v.ID)
 	code := http.StatusCreated
 	if replay {
@@ -256,6 +259,7 @@ func (a *API) promoteArtifact(w http.ResponseWriter, r *http.Request) {
 		writeRunError(w, r, err)
 		return
 	}
+	audit.SetDetail(r.Context(), body.Artifact+" to "+body.To)
 	f, err := a.d.Runs.PromoteArtifact(r.Context(), user(r), r.PathValue("id"), r.PathValue("run_id"), body.Artifact, body.To)
 	if err != nil {
 		writeRunError(w, r, err)

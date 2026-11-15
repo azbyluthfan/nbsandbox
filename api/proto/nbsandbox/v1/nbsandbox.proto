@@ -144,6 +144,15 @@ service AdminService {
   rpc AdminListSpaces(AdminListSpacesRequest) returns (AdminListSpacesResponse);
   rpc AdminUpdateSpace(AdminUpdateSpaceRequest) returns (AdminSpace);
   rpc AdminDeleteSpace(AdminDeleteSpaceRequest) returns (AdminDeleteSpaceResponse);
+  // Every owner's runs, newest first (metadata only: no results).
+  rpc AdminListRuns(AdminListRunsRequest) returns (AdminListRunsResponse);
+  // Stops any owner's run; cancelled_by is the administrator.
+  rpc AdminCancelRun(AdminCancelRunRequest) returns (AdminRun);
+  // Draining: while on, no worker starts a queued run; running runs finish.
+  rpc AdminGetDrain(AdminGetDrainRequest) returns (DrainState);
+  rpc AdminSetDrain(AdminSetDrainRequest) returns (DrainState);
+  // The audit log, newest first.
+  rpc AdminListAudit(AdminListAuditRequest) returns (AdminListAuditResponse);
 }
 
 message AdminSpace {
@@ -169,6 +178,68 @@ message AdminUpdateSpaceRequest {
 }
 message AdminDeleteSpaceRequest { string space_id = 1; }
 message AdminDeleteSpaceResponse {}
+
+message AdminRun {
+  Run run = 1; // without result
+  string owner = 2;
+}
+message AdminListRunsRequest {
+  string status = 1;   // "" = any
+  string owner = 2;    // "" = everyone's
+  string space_id = 3; // "" = every space
+  string cursor = 4;
+  int32 limit = 5;
+}
+message AdminListRunsResponse {
+  repeated AdminRun items = 1;
+  string next_cursor = 2;
+}
+message AdminCancelRunRequest {
+  string run_id = 1;
+  string reason = 2;
+}
+
+message DrainState {
+  bool draining = 1;
+  string reason = 2;
+  string by = 3;
+  google.protobuf.Timestamp since = 4;
+  int32 queued_runs = 5;
+  int32 running_runs = 6;
+}
+message AdminGetDrainRequest {}
+message AdminSetDrainRequest {
+  bool draining = 1;
+  string reason = 2;
+}
+
+message AuditEvent {
+  string id = 1;
+  google.protobuf.Timestamp at = 2;
+  string actor = 3;
+  string method = 4;
+  string client = 5;
+  string via = 6;    // rest, grpc or ui
+  string action = 7; // the operation (as these RPCs are named), SignIn or SignOut
+  string space_id = 8;
+  string target = 9;
+  string detail = 10;
+  int32 status = 11; // HTTP status; gRPC codes mapped to their HTTP equivalent
+  string address = 12;
+}
+message AdminListAuditRequest {
+  string actor = 1;
+  string space_id = 2;
+  string action = 3;
+  google.protobuf.Timestamp since = 4;
+  google.protobuf.Timestamp until = 5;
+  string cursor = 6;
+  int32 limit = 7;
+}
+message AdminListAuditResponse {
+  repeated AuditEvent items = 1;
+  string next_cursor = 2;
+}
 
 // ---------------------------------------------------------------- functions
 

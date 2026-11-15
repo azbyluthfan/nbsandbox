@@ -179,7 +179,7 @@ func TestUISignedIn(t *testing.T) {
 	e := newEnv(t)
 	const origin = "http://127.0.0.1:8090"
 	sessions, err := uiauth.New(uiauth.Config{Mode: uiauth.ModeBasic, PublicURL: origin, Idle: time.Hour, Max: 12 * time.Hour},
-		uiauth.Deps{Store: storetest.Open(t), Basic: &auth.Authenticator{Users: e.deps.Users}})
+		uiauth.Deps{Store: storetest.Open(t), Basic: &auth.Authenticator{Users: e.deps.Users}, Audit: e.deps.Audit})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,6 +219,14 @@ func TestUISignedIn(t *testing.T) {
 	if rec := req("GET", "/ui/api/session", "", map[string]string{"Cookie": c}); rec.Code != 200 ||
 		!strings.Contains(rec.Body.String(), `"user":"alice"`) || !strings.Contains(rec.Body.String(), `"mode":"basic"`) {
 		t.Errorf("session: %d %s", rec.Code, rec.Body)
+	}
+	// The sign-in and the UI's change are in the audit log, as the UI's.
+	log := e.audit(t, "?actor=alice")
+	if in, ok := log.find("SignIn", "alice"); !ok || in.Via != "ui" {
+		t.Errorf("sign-in row: %+v", in)
+	}
+	if c, ok := log.find("CreateSpace", "alice"); !ok || c.Via != "ui" || c.Status != 201 || c.Address == "" {
+		t.Errorf("the UI's change: %+v", c)
 	}
 	// The main API never accepts the UI's cookie.
 	r := httptest.NewRequest("GET", "/v1/spaces", nil)

@@ -9,6 +9,7 @@ import (
 	"connectrpc.com/connect"
 
 	pb "github.com/azbyluthfan/nbsandbox/gen/nbsandbox/v1"
+	"github.com/azbyluthfan/nbsandbox/internal/audit"
 	"github.com/azbyluthfan/nbsandbox/internal/contract"
 	"github.com/azbyluthfan/nbsandbox/internal/runs"
 )
@@ -133,6 +134,7 @@ func (s *server) InvokeFunction(ctx context.Context, req *connect.Request[pb.Inv
 	if err != nil {
 		return nil, s.toErr(err)
 	}
+	audit.SetDetail(ctx, "run "+v.ID)
 	var out *pb.RunOrResult
 	if wait > 0 {
 		if out, err = s.answer(ctx, v.SpaceID, v.ID, wait); err != nil {
@@ -167,5 +169,6 @@ func (s *server) InvokeFunctionStream(ctx context.Context, req *connect.Request[
 	if err != nil {
 		return s.toErr(err)
 	}
+	audit.SetDetail(ctx, "run "+v.ID)
 	return s.followResult(ctx, v.SpaceID, v.ID, 0, false, st)
 }

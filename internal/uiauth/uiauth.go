@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/azbyluthfan/nbsandbox/internal/audit"
 	"github.com/azbyluthfan/nbsandbox/internal/auth"
 	"github.com/azbyluthfan/nbsandbox/internal/store"
 )
@@ -76,6 +77,8 @@ type Deps struct {
 	Verifier *auth.Verifier
 	Log      *slog.Logger
 	Client   *http.Client // for the provider; default: 10 s timeout
+	// Audit records sign-ins and sign-outs (nil: not recorded).
+	Audit *audit.Recorder
 }
 
 // Service signs people in to the UI and finds the caller of each request.

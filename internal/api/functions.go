@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/azbyluthfan/nbsandbox/internal/audit"
 	"github.com/azbyluthfan/nbsandbox/internal/contract"
 	"github.com/azbyluthfan/nbsandbox/internal/runs"
 	"github.com/azbyluthfan/nbsandbox/internal/spaces"
@@ -74,6 +75,7 @@ func (a *API) publishFunction(w http.ResponseWriter, r *http.Request) {
 		writeRunError(w, r, err)
 		return
 	}
+	audit.SetDetail(r.Context(), "version "+strconv.Itoa(v.Version)+" from "+body.Notebook)
 	w.Header().Set("Location", "/v1/spaces/"+r.PathValue("id")+"/functions/"+v.Function+"/versions/"+strconv.Itoa(v.Version))
 	WriteJSON(w, http.StatusCreated, v)
 }
@@ -132,6 +134,7 @@ func (a *API) invokeFunction(w http.ResponseWriter, r *http.Request) {
 		writeRunError(w, r, err)
 		return
 	}
+	audit.SetDetail(r.Context(), "run "+v.ID)
 	w.Header().Set("Location", "/v1/spaces/"+v.SpaceID+"/runs/"+v.ID)
 	if wantsStream(r) {
 		// The call's result as it is made, as GET .../result streams it.

@@ -9,12 +9,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "github.com/azbyluthfan/nbsandbox/gen/nbsandbox/v1"
 	"github.com/azbyluthfan/nbsandbox/internal/api"
+	"github.com/azbyluthfan/nbsandbox/internal/audit"
 	"github.com/azbyluthfan/nbsandbox/internal/spaces"
 )
 
@@ -54,6 +56,8 @@ func (s *server) CreateSpace(ctx context.Context, req *connect.Request[pb.Create
 	if err != nil {
 		return nil, s.toErr(err)
 	}
+	audit.SetSpace(ctx, sp.ID)
+	audit.SetDetail(ctx, "name "+sp.Name)
 	return connect.NewResponse(toSpace(sp, true)), nil
 }
 
@@ -194,6 +198,11 @@ func (s *server) UploadFiles(ctx context.Context, st *connect.ClientStream[pb.Up
 	if err != nil {
 		return nil, s.toErr(err)
 	}
+	names := make([]string, 0, len(files))
+	for _, f := range files {
+		names = append(names, f.Path)
+	}
+	audit.SetDetail(ctx, clip(strings.Join(names, ", ")))
 	return connect.NewResponse(&pb.UploadFilesResponse{Files: toFiles(files)}), nil
 }
 
@@ -278,6 +287,7 @@ func (s *server) MoveFile(ctx context.Context, req *connect.Request[pb.MoveFileR
 	if req.Msg.NewPath == "" {
 		return nil, invalid("new_path is required")
 	}
+	audit.SetDetail(ctx, "to "+req.Msg.NewPath)
 	f, err := s.d.Spaces.Move(ctx, owner(ctx), req.Msg.SpaceId, req.Msg.Path, req.Msg.NewPath, req.Msg.IfMatch)
 	if err != nil {
 		return nil, s.toErr(err)

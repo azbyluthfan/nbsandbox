@@ -20,13 +20,15 @@ var ErrFenced = errors.New("the run's lease is no longer held by this worker")
 const dbNowMS = "(extract(epoch from clock_timestamp()) * 1000)::bigint"
 
 // ClaimRun gives the oldest unclaimed queued run to worker, with a lease of
-// d and a new token. ErrNotFound when there is none. Concurrent claims never
-// take the same run, and never wait for each other.
+// d and a new token. ErrNotFound when there is none, or while the workers
+// are drained. Concurrent claims never take the same run, and never wait for
+// each other.
 func (db *DB) ClaimRun(ctx context.Context, worker string, d time.Duration) (Run, error) {
 	r, err := scanRun(db.w.QueryRowContext(ctx, `
 		UPDATE runs SET worker = ?, lease_until = `+dbNowMS+` + ?, token = nextval('run_tokens')
 		WHERE id = (
 			SELECT id FROM runs WHERE status = 'queued' AND worker = ''
+				AND NOT (SELECT draining FROM drain WHERE id = 1)
 			ORDER BY queue_seq FOR UPDATE SKIP LOCKED LIMIT 1)
 		RETURNING `+runCols, worker, d.Milliseconds()))
 	if errors.Is(err, sql.ErrNoRows) {

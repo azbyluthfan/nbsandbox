@@ -55,6 +55,11 @@ const (
 	OpAdminListSpaces  Op = "AdminListSpaces"
 	OpAdminUpdateSpace Op = "AdminUpdateSpace"
 	OpAdminDeleteSpace Op = "AdminDeleteSpace"
+	OpAdminListRuns    Op = "AdminListRuns"
+	OpAdminCancelRun   Op = "AdminCancelRun"
+	OpAdminGetDrain    Op = "AdminGetDrain"
+	OpAdminSetDrain    Op = "AdminSetDrain"
+	OpAdminListAudit   Op = "AdminListAudit"
 
 	// gRPC only: REST serves these on the same route as their twin, as a
 	// stream when asked (Accept: text/event-stream).
@@ -120,6 +125,11 @@ var opScopes = map[Op]string{
 	OpAdminListSpaces:  ScopeAdmin,
 	OpAdminUpdateSpace: ScopeAdmin,
 	OpAdminDeleteSpace: ScopeAdmin,
+	OpAdminListRuns:    ScopeAdmin,
+	OpAdminCancelRun:   ScopeAdmin,
+	OpAdminGetDrain:    ScopeAdmin,
+	OpAdminSetDrain:    ScopeAdmin,
+	OpAdminListAudit:   ScopeAdmin,
 
 	OpFollowRunResult:      ScopeRead,
 	OpInvokeFunctionStream: ScopeFunctionsInvoke,

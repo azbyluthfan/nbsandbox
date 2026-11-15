@@ -33,6 +33,7 @@ A patch release with two fixes (tornado 6.6.1 in the runner image; gVisor instal
 ## Since v0.1.2
 
 - **Token revocation and login rate limiting:** introspection (RFC 7662) for tokens revoked at the provider, and a limit on failed basic-auth sign-ins per username and per client address ([auth.md](docs/auth.md#revoked-tokens)).
+- **Audit log and admin operations:** who did what, when and from where, for every change, download and administrative operation; administrators list and stop any run, and drain the workers before maintenance ([operations.md](docs/operations.md#audit-log)).
 - **Web UI login:** the editor is usable beyond one's own machine. Users sign in with the identity provider (or `users.yaml`) and are the same caller as through the API; server-side sessions; served at the domain's root by Caddy or the Ingress ([auth.md](docs/auth.md#signing-in-to-the-web-ui)).
 
 ## Next
@@ -53,8 +54,6 @@ A patch release with two fixes (tornado 6.6.1 in the runner image; gVisor instal
 | Custom packages per space | A space's requirements built into a derived, cached image (today's dependency check becomes the input) | runner image, runs |
 | Other notebook languages | R first, then Julia if asked for. One runner image per language, chosen from the notebook's kernel against an allow-list (smaller and patched separately, rather than one image with every language): the language's kernel, parameter injection (papermill supports R and Julia), a `nbsandbox.output()` equivalent writing the same status file, its package list for the missing-import check, and editor highlighting. Until then, non-Python notebooks are refused | runner images, runs, web UI |
 | Network access to registered endpoints | Runs have no network today. When notebooks need external APIs: the space owner registers HTTPS endpoints (within a list the operator allows); runs with endpoints join an internal network whose only exit is an egress proxy that permits just those hosts; private addresses (host, other containers, cloud metadata) are always refused; no DNS inside the container; every attempt is logged and shown with the run; isolation tests prove unregistered hosts and bypasses fail. Comes with **space secrets** (encrypted API keys injected only into runs, never logged or returned) | host setup, isolation, runs, API, web UI |
-| Audit log | Who uploaded, ran, downloaded or deleted what, and when | store, runs, observability |
-| Admin operations | List and stop any run; drain mode before maintenance | runs, API |
 | Resource tiers | e.g. small and large runs, chosen from a configured list | isolation, runs |
 | Scheduled runs | Run a notebook on a schedule with fixed parameters | runs |
 | Filesystem quotas | Quotas enforced by the filesystem, not just checked every few seconds | host setup, spaces |

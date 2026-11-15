@@ -1708,6 +1708,686 @@ func (*AdminDeleteSpaceResponse) Descriptor() ([]byte, []int) {
 	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{29}
 }
 
+type AdminRun struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Run           *Run                   `protobuf:"bytes,1,opt,name=run,proto3" json:"run,omitempty"` // without result
+	Owner         string                 `protobuf:"bytes,2,opt,name=owner,proto3" json:"owner,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminRun) Reset() {
+	*x = AdminRun{}
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminRun) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminRun) ProtoMessage() {}
+
+func (x *AdminRun) ProtoReflect() protoreflect.Message {
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminRun.ProtoReflect.Descriptor instead.
+func (*AdminRun) Descriptor() ([]byte, []int) {
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *AdminRun) GetRun() *Run {
+	if x != nil {
+		return x.Run
+	}
+	return nil
+}
+
+func (x *AdminRun) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
+type AdminListRunsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`                  // "" = any
+	Owner         string                 `protobuf:"bytes,2,opt,name=owner,proto3" json:"owner,omitempty"`                    // "" = everyone's
+	SpaceId       string                 `protobuf:"bytes,3,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"` // "" = every space
+	Cursor        string                 `protobuf:"bytes,4,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	Limit         int32                  `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminListRunsRequest) Reset() {
+	*x = AdminListRunsRequest{}
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminListRunsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminListRunsRequest) ProtoMessage() {}
+
+func (x *AdminListRunsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminListRunsRequest.ProtoReflect.Descriptor instead.
+func (*AdminListRunsRequest) Descriptor() ([]byte, []int) {
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *AdminListRunsRequest) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *AdminListRunsRequest) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
+func (x *AdminListRunsRequest) GetSpaceId() string {
+	if x != nil {
+		return x.SpaceId
+	}
+	return ""
+}
+
+func (x *AdminListRunsRequest) GetCursor() string {
+	if x != nil {
+		return x.Cursor
+	}
+	return ""
+}
+
+func (x *AdminListRunsRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type AdminListRunsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Items         []*AdminRun            `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminListRunsResponse) Reset() {
+	*x = AdminListRunsResponse{}
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminListRunsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminListRunsResponse) ProtoMessage() {}
+
+func (x *AdminListRunsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminListRunsResponse.ProtoReflect.Descriptor instead.
+func (*AdminListRunsResponse) Descriptor() ([]byte, []int) {
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *AdminListRunsResponse) GetItems() []*AdminRun {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+func (x *AdminListRunsResponse) GetNextCursor() string {
+	if x != nil {
+		return x.NextCursor
+	}
+	return ""
+}
+
+type AdminCancelRunRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RunId         string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminCancelRunRequest) Reset() {
+	*x = AdminCancelRunRequest{}
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminCancelRunRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminCancelRunRequest) ProtoMessage() {}
+
+func (x *AdminCancelRunRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminCancelRunRequest.ProtoReflect.Descriptor instead.
+func (*AdminCancelRunRequest) Descriptor() ([]byte, []int) {
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *AdminCancelRunRequest) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *AdminCancelRunRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type DrainState struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Draining      bool                   `protobuf:"varint,1,opt,name=draining,proto3" json:"draining,omitempty"`
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	By            string                 `protobuf:"bytes,3,opt,name=by,proto3" json:"by,omitempty"`
+	Since         *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=since,proto3" json:"since,omitempty"`
+	QueuedRuns    int32                  `protobuf:"varint,5,opt,name=queued_runs,json=queuedRuns,proto3" json:"queued_runs,omitempty"`
+	RunningRuns   int32                  `protobuf:"varint,6,opt,name=running_runs,json=runningRuns,proto3" json:"running_runs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DrainState) Reset() {
+	*x = DrainState{}
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DrainState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DrainState) ProtoMessage() {}
+
+func (x *DrainState) ProtoReflect() protoreflect.Message {
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DrainState.ProtoReflect.Descriptor instead.
+func (*DrainState) Descriptor() ([]byte, []int) {
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *DrainState) GetDraining() bool {
+	if x != nil {
+		return x.Draining
+	}
+	return false
+}
+
+func (x *DrainState) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *DrainState) GetBy() string {
+	if x != nil {
+		return x.By
+	}
+	return ""
+}
+
+func (x *DrainState) GetSince() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Since
+	}
+	return nil
+}
+
+func (x *DrainState) GetQueuedRuns() int32 {
+	if x != nil {
+		return x.QueuedRuns
+	}
+	return 0
+}
+
+func (x *DrainState) GetRunningRuns() int32 {
+	if x != nil {
+		return x.RunningRuns
+	}
+	return 0
+}
+
+type AdminGetDrainRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminGetDrainRequest) Reset() {
+	*x = AdminGetDrainRequest{}
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminGetDrainRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminGetDrainRequest) ProtoMessage() {}
+
+func (x *AdminGetDrainRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminGetDrainRequest.ProtoReflect.Descriptor instead.
+func (*AdminGetDrainRequest) Descriptor() ([]byte, []int) {
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{35}
+}
+
+type AdminSetDrainRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Draining      bool                   `protobuf:"varint,1,opt,name=draining,proto3" json:"draining,omitempty"`
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminSetDrainRequest) Reset() {
+	*x = AdminSetDrainRequest{}
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminSetDrainRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminSetDrainRequest) ProtoMessage() {}
+
+func (x *AdminSetDrainRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminSetDrainRequest.ProtoReflect.Descriptor instead.
+func (*AdminSetDrainRequest) Descriptor() ([]byte, []int) {
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *AdminSetDrainRequest) GetDraining() bool {
+	if x != nil {
+		return x.Draining
+	}
+	return false
+}
+
+func (x *AdminSetDrainRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type AuditEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	At            *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=at,proto3" json:"at,omitempty"`
+	Actor         string                 `protobuf:"bytes,3,opt,name=actor,proto3" json:"actor,omitempty"`
+	Method        string                 `protobuf:"bytes,4,opt,name=method,proto3" json:"method,omitempty"`
+	Client        string                 `protobuf:"bytes,5,opt,name=client,proto3" json:"client,omitempty"`
+	Via           string                 `protobuf:"bytes,6,opt,name=via,proto3" json:"via,omitempty"`       // rest, grpc or ui
+	Action        string                 `protobuf:"bytes,7,opt,name=action,proto3" json:"action,omitempty"` // the operation (as these RPCs are named), SignIn or SignOut
+	SpaceId       string                 `protobuf:"bytes,8,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"`
+	Target        string                 `protobuf:"bytes,9,opt,name=target,proto3" json:"target,omitempty"`
+	Detail        string                 `protobuf:"bytes,10,opt,name=detail,proto3" json:"detail,omitempty"`
+	Status        int32                  `protobuf:"varint,11,opt,name=status,proto3" json:"status,omitempty"` // HTTP status; gRPC codes mapped to their HTTP equivalent
+	Address       string                 `protobuf:"bytes,12,opt,name=address,proto3" json:"address,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AuditEvent) Reset() {
+	*x = AuditEvent{}
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AuditEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AuditEvent) ProtoMessage() {}
+
+func (x *AuditEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AuditEvent.ProtoReflect.Descriptor instead.
+func (*AuditEvent) Descriptor() ([]byte, []int) {
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *AuditEvent) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *AuditEvent) GetAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.At
+	}
+	return nil
+}
+
+func (x *AuditEvent) GetActor() string {
+	if x != nil {
+		return x.Actor
+	}
+	return ""
+}
+
+func (x *AuditEvent) GetMethod() string {
+	if x != nil {
+		return x.Method
+	}
+	return ""
+}
+
+func (x *AuditEvent) GetClient() string {
+	if x != nil {
+		return x.Client
+	}
+	return ""
+}
+
+func (x *AuditEvent) GetVia() string {
+	if x != nil {
+		return x.Via
+	}
+	return ""
+}
+
+func (x *AuditEvent) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *AuditEvent) GetSpaceId() string {
+	if x != nil {
+		return x.SpaceId
+	}
+	return ""
+}
+
+func (x *AuditEvent) GetTarget() string {
+	if x != nil {
+		return x.Target
+	}
+	return ""
+}
+
+func (x *AuditEvent) GetDetail() string {
+	if x != nil {
+		return x.Detail
+	}
+	return ""
+}
+
+func (x *AuditEvent) GetStatus() int32 {
+	if x != nil {
+		return x.Status
+	}
+	return 0
+}
+
+func (x *AuditEvent) GetAddress() string {
+	if x != nil {
+		return x.Address
+	}
+	return ""
+}
+
+type AdminListAuditRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Actor         string                 `protobuf:"bytes,1,opt,name=actor,proto3" json:"actor,omitempty"`
+	SpaceId       string                 `protobuf:"bytes,2,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"`
+	Action        string                 `protobuf:"bytes,3,opt,name=action,proto3" json:"action,omitempty"`
+	Since         *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=since,proto3" json:"since,omitempty"`
+	Until         *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=until,proto3" json:"until,omitempty"`
+	Cursor        string                 `protobuf:"bytes,6,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	Limit         int32                  `protobuf:"varint,7,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminListAuditRequest) Reset() {
+	*x = AdminListAuditRequest{}
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminListAuditRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminListAuditRequest) ProtoMessage() {}
+
+func (x *AdminListAuditRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminListAuditRequest.ProtoReflect.Descriptor instead.
+func (*AdminListAuditRequest) Descriptor() ([]byte, []int) {
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *AdminListAuditRequest) GetActor() string {
+	if x != nil {
+		return x.Actor
+	}
+	return ""
+}
+
+func (x *AdminListAuditRequest) GetSpaceId() string {
+	if x != nil {
+		return x.SpaceId
+	}
+	return ""
+}
+
+func (x *AdminListAuditRequest) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *AdminListAuditRequest) GetSince() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Since
+	}
+	return nil
+}
+
+func (x *AdminListAuditRequest) GetUntil() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Until
+	}
+	return nil
+}
+
+func (x *AdminListAuditRequest) GetCursor() string {
+	if x != nil {
+		return x.Cursor
+	}
+	return ""
+}
+
+func (x *AdminListAuditRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type AdminListAuditResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Items         []*AuditEvent          `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminListAuditResponse) Reset() {
+	*x = AdminListAuditResponse{}
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminListAuditResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminListAuditResponse) ProtoMessage() {}
+
+func (x *AdminListAuditResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminListAuditResponse.ProtoReflect.Descriptor instead.
+func (*AdminListAuditResponse) Descriptor() ([]byte, []int) {
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *AdminListAuditResponse) GetItems() []*AuditEvent {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+func (x *AdminListAuditResponse) GetNextCursor() string {
+	if x != nil {
+		return x.NextCursor
+	}
+	return ""
+}
+
 type Function struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -1721,7 +2401,7 @@ type Function struct {
 
 func (x *Function) Reset() {
 	*x = Function{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[30]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1733,7 +2413,7 @@ func (x *Function) String() string {
 func (*Function) ProtoMessage() {}
 
 func (x *Function) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[30]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1746,7 +2426,7 @@ func (x *Function) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Function.ProtoReflect.Descriptor instead.
 func (*Function) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{30}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *Function) GetName() string {
@@ -1801,7 +2481,7 @@ type FunctionVersion struct {
 
 func (x *FunctionVersion) Reset() {
 	*x = FunctionVersion{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[31]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1813,7 +2493,7 @@ func (x *FunctionVersion) String() string {
 func (*FunctionVersion) ProtoMessage() {}
 
 func (x *FunctionVersion) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[31]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1826,7 +2506,7 @@ func (x *FunctionVersion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FunctionVersion.ProtoReflect.Descriptor instead.
 func (*FunctionVersion) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{31}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *FunctionVersion) GetFunction() string {
@@ -1907,7 +2587,7 @@ type Contract struct {
 
 func (x *Contract) Reset() {
 	*x = Contract{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[32]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1919,7 +2599,7 @@ func (x *Contract) String() string {
 func (*Contract) ProtoMessage() {}
 
 func (x *Contract) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[32]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1932,7 +2612,7 @@ func (x *Contract) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Contract.ProtoReflect.Descriptor instead.
 func (*Contract) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{32}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *Contract) GetFunction() string {
@@ -1996,7 +2676,7 @@ type ContractSpec struct {
 
 func (x *ContractSpec) Reset() {
 	*x = ContractSpec{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[33]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2008,7 +2688,7 @@ func (x *ContractSpec) String() string {
 func (*ContractSpec) ProtoMessage() {}
 
 func (x *ContractSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[33]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2021,7 +2701,7 @@ func (x *ContractSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContractSpec.ProtoReflect.Descriptor instead.
 func (*ContractSpec) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{33}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *ContractSpec) GetInput() *structpb.Value {
@@ -2047,7 +2727,7 @@ type ListFunctionsRequest struct {
 
 func (x *ListFunctionsRequest) Reset() {
 	*x = ListFunctionsRequest{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[34]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2059,7 +2739,7 @@ func (x *ListFunctionsRequest) String() string {
 func (*ListFunctionsRequest) ProtoMessage() {}
 
 func (x *ListFunctionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[34]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2072,7 +2752,7 @@ func (x *ListFunctionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListFunctionsRequest.ProtoReflect.Descriptor instead.
 func (*ListFunctionsRequest) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{34}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ListFunctionsRequest) GetSpaceId() string {
@@ -2091,7 +2771,7 @@ type ListFunctionsResponse struct {
 
 func (x *ListFunctionsResponse) Reset() {
 	*x = ListFunctionsResponse{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[35]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2103,7 +2783,7 @@ func (x *ListFunctionsResponse) String() string {
 func (*ListFunctionsResponse) ProtoMessage() {}
 
 func (x *ListFunctionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[35]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2116,7 +2796,7 @@ func (x *ListFunctionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListFunctionsResponse.ProtoReflect.Descriptor instead.
 func (*ListFunctionsResponse) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{35}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *ListFunctionsResponse) GetItems() []*Function {
@@ -2136,7 +2816,7 @@ type GetFunctionRequest struct {
 
 func (x *GetFunctionRequest) Reset() {
 	*x = GetFunctionRequest{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[36]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2148,7 +2828,7 @@ func (x *GetFunctionRequest) String() string {
 func (*GetFunctionRequest) ProtoMessage() {}
 
 func (x *GetFunctionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[36]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2161,7 +2841,7 @@ func (x *GetFunctionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFunctionRequest.ProtoReflect.Descriptor instead.
 func (*GetFunctionRequest) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{36}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *GetFunctionRequest) GetSpaceId() string {
@@ -2188,7 +2868,7 @@ type DeleteFunctionRequest struct {
 
 func (x *DeleteFunctionRequest) Reset() {
 	*x = DeleteFunctionRequest{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[37]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2200,7 +2880,7 @@ func (x *DeleteFunctionRequest) String() string {
 func (*DeleteFunctionRequest) ProtoMessage() {}
 
 func (x *DeleteFunctionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[37]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2213,7 +2893,7 @@ func (x *DeleteFunctionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteFunctionRequest.ProtoReflect.Descriptor instead.
 func (*DeleteFunctionRequest) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{37}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *DeleteFunctionRequest) GetSpaceId() string {
@@ -2238,7 +2918,7 @@ type DeleteFunctionResponse struct {
 
 func (x *DeleteFunctionResponse) Reset() {
 	*x = DeleteFunctionResponse{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[38]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2250,7 +2930,7 @@ func (x *DeleteFunctionResponse) String() string {
 func (*DeleteFunctionResponse) ProtoMessage() {}
 
 func (x *DeleteFunctionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[38]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2263,7 +2943,7 @@ func (x *DeleteFunctionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteFunctionResponse.ProtoReflect.Descriptor instead.
 func (*DeleteFunctionResponse) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{38}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{48}
 }
 
 type PublishFunctionRequest struct {
@@ -2279,7 +2959,7 @@ type PublishFunctionRequest struct {
 
 func (x *PublishFunctionRequest) Reset() {
 	*x = PublishFunctionRequest{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[39]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2291,7 +2971,7 @@ func (x *PublishFunctionRequest) String() string {
 func (*PublishFunctionRequest) ProtoMessage() {}
 
 func (x *PublishFunctionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[39]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2304,7 +2984,7 @@ func (x *PublishFunctionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PublishFunctionRequest.ProtoReflect.Descriptor instead.
 func (*PublishFunctionRequest) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{39}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *PublishFunctionRequest) GetSpaceId() string {
@@ -2353,7 +3033,7 @@ type GetFunctionVersionRequest struct {
 
 func (x *GetFunctionVersionRequest) Reset() {
 	*x = GetFunctionVersionRequest{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[40]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2365,7 +3045,7 @@ func (x *GetFunctionVersionRequest) String() string {
 func (*GetFunctionVersionRequest) ProtoMessage() {}
 
 func (x *GetFunctionVersionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[40]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2378,7 +3058,7 @@ func (x *GetFunctionVersionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFunctionVersionRequest.ProtoReflect.Descriptor instead.
 func (*GetFunctionVersionRequest) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{40}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *GetFunctionVersionRequest) GetSpaceId() string {
@@ -2412,7 +3092,7 @@ type GetFunctionContractRequest struct {
 
 func (x *GetFunctionContractRequest) Reset() {
 	*x = GetFunctionContractRequest{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[41]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2424,7 +3104,7 @@ func (x *GetFunctionContractRequest) String() string {
 func (*GetFunctionContractRequest) ProtoMessage() {}
 
 func (x *GetFunctionContractRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[41]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2437,7 +3117,7 @@ func (x *GetFunctionContractRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFunctionContractRequest.ProtoReflect.Descriptor instead.
 func (*GetFunctionContractRequest) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{41}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *GetFunctionContractRequest) GetSpaceId() string {
@@ -2468,7 +3148,7 @@ type InvokeFunctionRequest struct {
 
 func (x *InvokeFunctionRequest) Reset() {
 	*x = InvokeFunctionRequest{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[42]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2480,7 +3160,7 @@ func (x *InvokeFunctionRequest) String() string {
 func (*InvokeFunctionRequest) ProtoMessage() {}
 
 func (x *InvokeFunctionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[42]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2493,7 +3173,7 @@ func (x *InvokeFunctionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InvokeFunctionRequest.ProtoReflect.Descriptor instead.
 func (*InvokeFunctionRequest) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{42}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *InvokeFunctionRequest) GetSpaceId() string {
@@ -2569,7 +3249,7 @@ type Run struct {
 
 func (x *Run) Reset() {
 	*x = Run{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[43]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2581,7 +3261,7 @@ func (x *Run) String() string {
 func (*Run) ProtoMessage() {}
 
 func (x *Run) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[43]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2594,7 +3274,7 @@ func (x *Run) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Run.ProtoReflect.Descriptor instead.
 func (*Run) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{43}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *Run) GetId() string {
@@ -2769,7 +3449,7 @@ type DependencyWarning struct {
 
 func (x *DependencyWarning) Reset() {
 	*x = DependencyWarning{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[44]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2781,7 +3461,7 @@ func (x *DependencyWarning) String() string {
 func (*DependencyWarning) ProtoMessage() {}
 
 func (x *DependencyWarning) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[44]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2794,7 +3474,7 @@ func (x *DependencyWarning) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DependencyWarning.ProtoReflect.Descriptor instead.
 func (*DependencyWarning) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{44}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *DependencyWarning) GetModule() string {
@@ -2858,7 +3538,7 @@ type RunRecord struct {
 
 func (x *RunRecord) Reset() {
 	*x = RunRecord{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[45]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2870,7 +3550,7 @@ func (x *RunRecord) String() string {
 func (*RunRecord) ProtoMessage() {}
 
 func (x *RunRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[45]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2883,7 +3563,7 @@ func (x *RunRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunRecord.ProtoReflect.Descriptor instead.
 func (*RunRecord) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{45}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *RunRecord) GetSchemaVersion() int32 {
@@ -3115,7 +3795,7 @@ type CellError struct {
 
 func (x *CellError) Reset() {
 	*x = CellError{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[46]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3127,7 +3807,7 @@ func (x *CellError) String() string {
 func (*CellError) ProtoMessage() {}
 
 func (x *CellError) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[46]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3140,7 +3820,7 @@ func (x *CellError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CellError.ProtoReflect.Descriptor instead.
 func (*CellError) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{46}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *CellError) GetCellIndex() int32 {
@@ -3186,7 +3866,7 @@ type RunUsage struct {
 
 func (x *RunUsage) Reset() {
 	*x = RunUsage{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[47]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3198,7 +3878,7 @@ func (x *RunUsage) String() string {
 func (*RunUsage) ProtoMessage() {}
 
 func (x *RunUsage) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[47]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3211,7 +3891,7 @@ func (x *RunUsage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunUsage.ProtoReflect.Descriptor instead.
 func (*RunUsage) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{47}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *RunUsage) GetDurationSeconds() float64 {
@@ -3256,7 +3936,7 @@ type RunLimits struct {
 
 func (x *RunLimits) Reset() {
 	*x = RunLimits{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[48]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3268,7 +3948,7 @@ func (x *RunLimits) String() string {
 func (*RunLimits) ProtoMessage() {}
 
 func (x *RunLimits) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[48]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3281,7 +3961,7 @@ func (x *RunLimits) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunLimits.ProtoReflect.Descriptor instead.
 func (*RunLimits) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{48}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *RunLimits) GetMemoryBytes() int64 {
@@ -3336,7 +4016,7 @@ type RunImage struct {
 
 func (x *RunImage) Reset() {
 	*x = RunImage{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[49]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3348,7 +4028,7 @@ func (x *RunImage) String() string {
 func (*RunImage) ProtoMessage() {}
 
 func (x *RunImage) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[49]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3361,7 +4041,7 @@ func (x *RunImage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunImage.ProtoReflect.Descriptor instead.
 func (*RunImage) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{49}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *RunImage) GetRef() string {
@@ -3396,7 +4076,7 @@ type Result struct {
 
 func (x *Result) Reset() {
 	*x = Result{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[50]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3408,7 +4088,7 @@ func (x *Result) String() string {
 func (*Result) ProtoMessage() {}
 
 func (x *Result) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[50]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3421,7 +4101,7 @@ func (x *Result) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Result.ProtoReflect.Descriptor instead.
 func (*Result) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{50}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *Result) GetRunId() string {
@@ -3500,7 +4180,7 @@ type ResultError struct {
 
 func (x *ResultError) Reset() {
 	*x = ResultError{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[51]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3512,7 +4192,7 @@ func (x *ResultError) String() string {
 func (*ResultError) ProtoMessage() {}
 
 func (x *ResultError) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[51]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3525,7 +4205,7 @@ func (x *ResultError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResultError.ProtoReflect.Descriptor instead.
 func (*ResultError) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{51}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *ResultError) GetKind() string {
@@ -3626,7 +4306,7 @@ type RunOrResult struct {
 
 func (x *RunOrResult) Reset() {
 	*x = RunOrResult{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[52]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3638,7 +4318,7 @@ func (x *RunOrResult) String() string {
 func (*RunOrResult) ProtoMessage() {}
 
 func (x *RunOrResult) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[52]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3651,7 +4331,7 @@ func (x *RunOrResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunOrResult.ProtoReflect.Descriptor instead.
 func (*RunOrResult) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{52}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *RunOrResult) GetAnswer() isRunOrResult_Answer {
@@ -3718,7 +4398,7 @@ type Runtime struct {
 
 func (x *Runtime) Reset() {
 	*x = Runtime{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[53]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3730,7 +4410,7 @@ func (x *Runtime) String() string {
 func (*Runtime) ProtoMessage() {}
 
 func (x *Runtime) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[53]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3743,7 +4423,7 @@ func (x *Runtime) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Runtime.ProtoReflect.Descriptor instead.
 func (*Runtime) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{53}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *Runtime) GetImage() *RuntimeImage {
@@ -3813,7 +4493,7 @@ type RuntimeImage struct {
 
 func (x *RuntimeImage) Reset() {
 	*x = RuntimeImage{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[54]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3825,7 +4505,7 @@ func (x *RuntimeImage) String() string {
 func (*RuntimeImage) ProtoMessage() {}
 
 func (x *RuntimeImage) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[54]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3838,7 +4518,7 @@ func (x *RuntimeImage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RuntimeImage.ProtoReflect.Descriptor instead.
 func (*RuntimeImage) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{54}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *RuntimeImage) GetRef() string {
@@ -3879,7 +4559,7 @@ type RuntimeLimits struct {
 
 func (x *RuntimeLimits) Reset() {
 	*x = RuntimeLimits{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[55]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3891,7 +4571,7 @@ func (x *RuntimeLimits) String() string {
 func (*RuntimeLimits) ProtoMessage() {}
 
 func (x *RuntimeLimits) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[55]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3904,7 +4584,7 @@ func (x *RuntimeLimits) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RuntimeLimits.ProtoReflect.Descriptor instead.
 func (*RuntimeLimits) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{55}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *RuntimeLimits) GetMemoryBytes() int64 {
@@ -3980,7 +4660,7 @@ type RuntimeDocker struct {
 
 func (x *RuntimeDocker) Reset() {
 	*x = RuntimeDocker{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[56]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3992,7 +4672,7 @@ func (x *RuntimeDocker) String() string {
 func (*RuntimeDocker) ProtoMessage() {}
 
 func (x *RuntimeDocker) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[56]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4005,7 +4685,7 @@ func (x *RuntimeDocker) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RuntimeDocker.ProtoReflect.Descriptor instead.
 func (*RuntimeDocker) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{56}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *RuntimeDocker) GetVersion() string {
@@ -4030,7 +4710,7 @@ type GetRuntimeRequest struct {
 
 func (x *GetRuntimeRequest) Reset() {
 	*x = GetRuntimeRequest{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[57]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4042,7 +4722,7 @@ func (x *GetRuntimeRequest) String() string {
 func (*GetRuntimeRequest) ProtoMessage() {}
 
 func (x *GetRuntimeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[57]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4055,7 +4735,7 @@ func (x *GetRuntimeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRuntimeRequest.ProtoReflect.Descriptor instead.
 func (*GetRuntimeRequest) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{57}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{67}
 }
 
 type GetCompletionsRequest struct {
@@ -4066,7 +4746,7 @@ type GetCompletionsRequest struct {
 
 func (x *GetCompletionsRequest) Reset() {
 	*x = GetCompletionsRequest{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[58]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4078,7 +4758,7 @@ func (x *GetCompletionsRequest) String() string {
 func (*GetCompletionsRequest) ProtoMessage() {}
 
 func (x *GetCompletionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[58]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4091,7 +4771,7 @@ func (x *GetCompletionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCompletionsRequest.ProtoReflect.Descriptor instead.
 func (*GetCompletionsRequest) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{58}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{68}
 }
 
 type Completions struct {
@@ -4104,7 +4784,7 @@ type Completions struct {
 
 func (x *Completions) Reset() {
 	*x = Completions{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[59]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4116,7 +4796,7 @@ func (x *Completions) String() string {
 func (*Completions) ProtoMessage() {}
 
 func (x *Completions) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[59]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4129,7 +4809,7 @@ func (x *Completions) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Completions.ProtoReflect.Descriptor instead.
 func (*Completions) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{59}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *Completions) GetSha256() string {
@@ -4156,7 +4836,7 @@ type RuntimeCompletions struct {
 
 func (x *RuntimeCompletions) Reset() {
 	*x = RuntimeCompletions{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[60]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4168,7 +4848,7 @@ func (x *RuntimeCompletions) String() string {
 func (*RuntimeCompletions) ProtoMessage() {}
 
 func (x *RuntimeCompletions) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[60]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4181,7 +4861,7 @@ func (x *RuntimeCompletions) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RuntimeCompletions.ProtoReflect.Descriptor instead.
 func (*RuntimeCompletions) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{60}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *RuntimeCompletions) GetSha256() string {
@@ -4211,7 +4891,7 @@ type CreateRunRequest struct {
 
 func (x *CreateRunRequest) Reset() {
 	*x = CreateRunRequest{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[61]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4223,7 +4903,7 @@ func (x *CreateRunRequest) String() string {
 func (*CreateRunRequest) ProtoMessage() {}
 
 func (x *CreateRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[61]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4236,7 +4916,7 @@ func (x *CreateRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateRunRequest.ProtoReflect.Descriptor instead.
 func (*CreateRunRequest) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{61}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *CreateRunRequest) GetSpaceId() string {
@@ -4288,7 +4968,7 @@ type ListRunsRequest struct {
 
 func (x *ListRunsRequest) Reset() {
 	*x = ListRunsRequest{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[62]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4300,7 +4980,7 @@ func (x *ListRunsRequest) String() string {
 func (*ListRunsRequest) ProtoMessage() {}
 
 func (x *ListRunsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[62]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4313,7 +4993,7 @@ func (x *ListRunsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRunsRequest.ProtoReflect.Descriptor instead.
 func (*ListRunsRequest) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{62}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *ListRunsRequest) GetSpaceId() string {
@@ -4368,7 +5048,7 @@ type ListRunsResponse struct {
 
 func (x *ListRunsResponse) Reset() {
 	*x = ListRunsResponse{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[63]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4380,7 +5060,7 @@ func (x *ListRunsResponse) String() string {
 func (*ListRunsResponse) ProtoMessage() {}
 
 func (x *ListRunsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[63]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4393,7 +5073,7 @@ func (x *ListRunsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRunsResponse.ProtoReflect.Descriptor instead.
 func (*ListRunsResponse) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{63}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *ListRunsResponse) GetItems() []*Run {
@@ -4420,7 +5100,7 @@ type GetRunRequest struct {
 
 func (x *GetRunRequest) Reset() {
 	*x = GetRunRequest{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[64]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4432,7 +5112,7 @@ func (x *GetRunRequest) String() string {
 func (*GetRunRequest) ProtoMessage() {}
 
 func (x *GetRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[64]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4445,7 +5125,7 @@ func (x *GetRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRunRequest.ProtoReflect.Descriptor instead.
 func (*GetRunRequest) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{64}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *GetRunRequest) GetSpaceId() string {
@@ -4473,7 +5153,7 @@ type CancelRunRequest struct {
 
 func (x *CancelRunRequest) Reset() {
 	*x = CancelRunRequest{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[65]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4485,7 +5165,7 @@ func (x *CancelRunRequest) String() string {
 func (*CancelRunRequest) ProtoMessage() {}
 
 func (x *CancelRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[65]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4498,7 +5178,7 @@ func (x *CancelRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelRunRequest.ProtoReflect.Descriptor instead.
 func (*CancelRunRequest) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{65}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *CancelRunRequest) GetSpaceId() string {
@@ -4533,7 +5213,7 @@ type GetRunResultRequest struct {
 
 func (x *GetRunResultRequest) Reset() {
 	*x = GetRunResultRequest{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[66]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4545,7 +5225,7 @@ func (x *GetRunResultRequest) String() string {
 func (*GetRunResultRequest) ProtoMessage() {}
 
 func (x *GetRunResultRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[66]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4558,7 +5238,7 @@ func (x *GetRunResultRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRunResultRequest.ProtoReflect.Descriptor instead.
 func (*GetRunResultRequest) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{66}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *GetRunResultRequest) GetSpaceId() string {
@@ -4592,7 +5272,7 @@ type DeleteRunRequest struct {
 
 func (x *DeleteRunRequest) Reset() {
 	*x = DeleteRunRequest{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[67]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4604,7 +5284,7 @@ func (x *DeleteRunRequest) String() string {
 func (*DeleteRunRequest) ProtoMessage() {}
 
 func (x *DeleteRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[67]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4617,7 +5297,7 @@ func (x *DeleteRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteRunRequest.ProtoReflect.Descriptor instead.
 func (*DeleteRunRequest) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{67}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *DeleteRunRequest) GetSpaceId() string {
@@ -4642,7 +5322,7 @@ type DeleteRunResponse struct {
 
 func (x *DeleteRunResponse) Reset() {
 	*x = DeleteRunResponse{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[68]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4654,7 +5334,7 @@ func (x *DeleteRunResponse) String() string {
 func (*DeleteRunResponse) ProtoMessage() {}
 
 func (x *DeleteRunResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[68]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4667,7 +5347,7 @@ func (x *DeleteRunResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteRunResponse.ProtoReflect.Descriptor instead.
 func (*DeleteRunResponse) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{68}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{78}
 }
 
 type GetRunFileRequest struct {
@@ -4680,7 +5360,7 @@ type GetRunFileRequest struct {
 
 func (x *GetRunFileRequest) Reset() {
 	*x = GetRunFileRequest{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[69]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4692,7 +5372,7 @@ func (x *GetRunFileRequest) String() string {
 func (*GetRunFileRequest) ProtoMessage() {}
 
 func (x *GetRunFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[69]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4705,7 +5385,7 @@ func (x *GetRunFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRunFileRequest.ProtoReflect.Descriptor instead.
 func (*GetRunFileRequest) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{69}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *GetRunFileRequest) GetSpaceId() string {
@@ -4732,7 +5412,7 @@ type ListArtifactsRequest struct {
 
 func (x *ListArtifactsRequest) Reset() {
 	*x = ListArtifactsRequest{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[70]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4744,7 +5424,7 @@ func (x *ListArtifactsRequest) String() string {
 func (*ListArtifactsRequest) ProtoMessage() {}
 
 func (x *ListArtifactsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[70]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4757,7 +5437,7 @@ func (x *ListArtifactsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListArtifactsRequest.ProtoReflect.Descriptor instead.
 func (*ListArtifactsRequest) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{70}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *ListArtifactsRequest) GetSpaceId() string {
@@ -4783,7 +5463,7 @@ type ListArtifactsResponse struct {
 
 func (x *ListArtifactsResponse) Reset() {
 	*x = ListArtifactsResponse{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[71]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4795,7 +5475,7 @@ func (x *ListArtifactsResponse) String() string {
 func (*ListArtifactsResponse) ProtoMessage() {}
 
 func (x *ListArtifactsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[71]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4808,7 +5488,7 @@ func (x *ListArtifactsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListArtifactsResponse.ProtoReflect.Descriptor instead.
 func (*ListArtifactsResponse) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{71}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *ListArtifactsResponse) GetItems() []*File {
@@ -4829,7 +5509,7 @@ type GetArtifactRequest struct {
 
 func (x *GetArtifactRequest) Reset() {
 	*x = GetArtifactRequest{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[72]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4841,7 +5521,7 @@ func (x *GetArtifactRequest) String() string {
 func (*GetArtifactRequest) ProtoMessage() {}
 
 func (x *GetArtifactRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[72]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4854,7 +5534,7 @@ func (x *GetArtifactRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetArtifactRequest.ProtoReflect.Descriptor instead.
 func (*GetArtifactRequest) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{72}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *GetArtifactRequest) GetSpaceId() string {
@@ -4890,7 +5570,7 @@ type PromoteArtifactRequest struct {
 
 func (x *PromoteArtifactRequest) Reset() {
 	*x = PromoteArtifactRequest{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[73]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4902,7 +5582,7 @@ func (x *PromoteArtifactRequest) String() string {
 func (*PromoteArtifactRequest) ProtoMessage() {}
 
 func (x *PromoteArtifactRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[73]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4915,7 +5595,7 @@ func (x *PromoteArtifactRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PromoteArtifactRequest.ProtoReflect.Descriptor instead.
 func (*PromoteArtifactRequest) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{73}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *PromoteArtifactRequest) GetSpaceId() string {
@@ -4957,7 +5637,7 @@ type FollowRunLogRequest struct {
 
 func (x *FollowRunLogRequest) Reset() {
 	*x = FollowRunLogRequest{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[74]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4969,7 +5649,7 @@ func (x *FollowRunLogRequest) String() string {
 func (*FollowRunLogRequest) ProtoMessage() {}
 
 func (x *FollowRunLogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[74]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4982,7 +5662,7 @@ func (x *FollowRunLogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FollowRunLogRequest.ProtoReflect.Descriptor instead.
 func (*FollowRunLogRequest) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{74}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *FollowRunLogRequest) GetSpaceId() string {
@@ -5019,7 +5699,7 @@ type LogEvent struct {
 
 func (x *LogEvent) Reset() {
 	*x = LogEvent{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[75]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5031,7 +5711,7 @@ func (x *LogEvent) String() string {
 func (*LogEvent) ProtoMessage() {}
 
 func (x *LogEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[75]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5044,7 +5724,7 @@ func (x *LogEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogEvent.ProtoReflect.Descriptor instead.
 func (*LogEvent) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{75}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *LogEvent) GetEvent() isLogEvent_Event {
@@ -5098,7 +5778,7 @@ type LogLine struct {
 
 func (x *LogLine) Reset() {
 	*x = LogLine{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[76]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5110,7 +5790,7 @@ func (x *LogLine) String() string {
 func (*LogLine) ProtoMessage() {}
 
 func (x *LogLine) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[76]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5123,7 +5803,7 @@ func (x *LogLine) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogLine.ProtoReflect.Descriptor instead.
 func (*LogLine) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{76}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{86}
 }
 
 func (x *LogLine) GetSeq() int64 {
@@ -5151,7 +5831,7 @@ type LogEnd struct {
 
 func (x *LogEnd) Reset() {
 	*x = LogEnd{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[77]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5163,7 +5843,7 @@ func (x *LogEnd) String() string {
 func (*LogEnd) ProtoMessage() {}
 
 func (x *LogEnd) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[77]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5176,7 +5856,7 @@ func (x *LogEnd) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogEnd.ProtoReflect.Descriptor instead.
 func (*LogEnd) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{77}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *LogEnd) GetStatus() string {
@@ -5212,7 +5892,7 @@ type FollowRunEventsRequest struct {
 
 func (x *FollowRunEventsRequest) Reset() {
 	*x = FollowRunEventsRequest{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[78]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5224,7 +5904,7 @@ func (x *FollowRunEventsRequest) String() string {
 func (*FollowRunEventsRequest) ProtoMessage() {}
 
 func (x *FollowRunEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[78]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5237,7 +5917,7 @@ func (x *FollowRunEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FollowRunEventsRequest.ProtoReflect.Descriptor instead.
 func (*FollowRunEventsRequest) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{78}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *FollowRunEventsRequest) GetSpaceId() string {
@@ -5280,7 +5960,7 @@ type FollowSpaceEventsRequest struct {
 
 func (x *FollowSpaceEventsRequest) Reset() {
 	*x = FollowSpaceEventsRequest{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[79]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5292,7 +5972,7 @@ func (x *FollowSpaceEventsRequest) String() string {
 func (*FollowSpaceEventsRequest) ProtoMessage() {}
 
 func (x *FollowSpaceEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[79]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5305,7 +5985,7 @@ func (x *FollowSpaceEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FollowSpaceEventsRequest.ProtoReflect.Descriptor instead.
 func (*FollowSpaceEventsRequest) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{79}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *FollowSpaceEventsRequest) GetSpaceId() string {
@@ -5348,7 +6028,7 @@ type FollowRunResultRequest struct {
 
 func (x *FollowRunResultRequest) Reset() {
 	*x = FollowRunResultRequest{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[80]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5360,7 +6040,7 @@ func (x *FollowRunResultRequest) String() string {
 func (*FollowRunResultRequest) ProtoMessage() {}
 
 func (x *FollowRunResultRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[80]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5373,7 +6053,7 @@ func (x *FollowRunResultRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FollowRunResultRequest.ProtoReflect.Descriptor instead.
 func (*FollowRunResultRequest) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{80}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{90}
 }
 
 func (x *FollowRunResultRequest) GetSpaceId() string {
@@ -5418,7 +6098,7 @@ type ResultEvent struct {
 
 func (x *ResultEvent) Reset() {
 	*x = ResultEvent{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[81]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5430,7 +6110,7 @@ func (x *ResultEvent) String() string {
 func (*ResultEvent) ProtoMessage() {}
 
 func (x *ResultEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[81]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5443,7 +6123,7 @@ func (x *ResultEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResultEvent.ProtoReflect.Descriptor instead.
 func (*ResultEvent) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{81}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *ResultEvent) GetEvent() isResultEvent_Event {
@@ -5518,7 +6198,7 @@ type ResultItem struct {
 
 func (x *ResultItem) Reset() {
 	*x = ResultItem{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[82]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[92]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5530,7 +6210,7 @@ func (x *ResultItem) String() string {
 func (*ResultItem) ProtoMessage() {}
 
 func (x *ResultItem) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[82]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[92]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5543,7 +6223,7 @@ func (x *ResultItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResultItem.ProtoReflect.Descriptor instead.
 func (*ResultItem) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{82}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{92}
 }
 
 func (x *ResultItem) GetRunId() string {
@@ -5623,7 +6303,7 @@ type RunEvent struct {
 
 func (x *RunEvent) Reset() {
 	*x = RunEvent{}
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[83]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[93]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5635,7 +6315,7 @@ func (x *RunEvent) String() string {
 func (*RunEvent) ProtoMessage() {}
 
 func (x *RunEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[83]
+	mi := &file_nbsandbox_v1_nbsandbox_proto_msgTypes[93]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5648,7 +6328,7 @@ func (x *RunEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunEvent.ProtoReflect.Descriptor instead.
 func (*RunEvent) Descriptor() ([]byte, []int) {
-	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{83}
+	return file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP(), []int{93}
 }
 
 func (x *RunEvent) GetSeq() int64 {
@@ -5868,7 +6548,63 @@ const file_nbsandbox_v1_nbsandbox_proto_rawDesc = "" +
 	"\x05owner\x18\x02 \x01(\tR\x05owner\"4\n" +
 	"\x17AdminDeleteSpaceRequest\x12\x19\n" +
 	"\bspace_id\x18\x01 \x01(\tR\aspaceId\"\x1a\n" +
-	"\x18AdminDeleteSpaceResponse\"\xf6\x01\n" +
+	"\x18AdminDeleteSpaceResponse\"E\n" +
+	"\bAdminRun\x12#\n" +
+	"\x03run\x18\x01 \x01(\v2\x11.nbsandbox.v1.RunR\x03run\x12\x14\n" +
+	"\x05owner\x18\x02 \x01(\tR\x05owner\"\x8d\x01\n" +
+	"\x14AdminListRunsRequest\x12\x16\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x12\x14\n" +
+	"\x05owner\x18\x02 \x01(\tR\x05owner\x12\x19\n" +
+	"\bspace_id\x18\x03 \x01(\tR\aspaceId\x12\x16\n" +
+	"\x06cursor\x18\x04 \x01(\tR\x06cursor\x12\x14\n" +
+	"\x05limit\x18\x05 \x01(\x05R\x05limit\"f\n" +
+	"\x15AdminListRunsResponse\x12,\n" +
+	"\x05items\x18\x01 \x03(\v2\x16.nbsandbox.v1.AdminRunR\x05items\x12\x1f\n" +
+	"\vnext_cursor\x18\x02 \x01(\tR\n" +
+	"nextCursor\"F\n" +
+	"\x15AdminCancelRunRequest\x12\x15\n" +
+	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"\xc6\x01\n" +
+	"\n" +
+	"DrainState\x12\x1a\n" +
+	"\bdraining\x18\x01 \x01(\bR\bdraining\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\x12\x0e\n" +
+	"\x02by\x18\x03 \x01(\tR\x02by\x120\n" +
+	"\x05since\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x05since\x12\x1f\n" +
+	"\vqueued_runs\x18\x05 \x01(\x05R\n" +
+	"queuedRuns\x12!\n" +
+	"\frunning_runs\x18\x06 \x01(\x05R\vrunningRuns\"\x16\n" +
+	"\x14AdminGetDrainRequest\"J\n" +
+	"\x14AdminSetDrainRequest\x12\x1a\n" +
+	"\bdraining\x18\x01 \x01(\bR\bdraining\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"\xb5\x02\n" +
+	"\n" +
+	"AuditEvent\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12*\n" +
+	"\x02at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x02at\x12\x14\n" +
+	"\x05actor\x18\x03 \x01(\tR\x05actor\x12\x16\n" +
+	"\x06method\x18\x04 \x01(\tR\x06method\x12\x16\n" +
+	"\x06client\x18\x05 \x01(\tR\x06client\x12\x10\n" +
+	"\x03via\x18\x06 \x01(\tR\x03via\x12\x16\n" +
+	"\x06action\x18\a \x01(\tR\x06action\x12\x19\n" +
+	"\bspace_id\x18\b \x01(\tR\aspaceId\x12\x16\n" +
+	"\x06target\x18\t \x01(\tR\x06target\x12\x16\n" +
+	"\x06detail\x18\n" +
+	" \x01(\tR\x06detail\x12\x16\n" +
+	"\x06status\x18\v \x01(\x05R\x06status\x12\x18\n" +
+	"\aaddress\x18\f \x01(\tR\aaddress\"\xf2\x01\n" +
+	"\x15AdminListAuditRequest\x12\x14\n" +
+	"\x05actor\x18\x01 \x01(\tR\x05actor\x12\x19\n" +
+	"\bspace_id\x18\x02 \x01(\tR\aspaceId\x12\x16\n" +
+	"\x06action\x18\x03 \x01(\tR\x06action\x120\n" +
+	"\x05since\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x05since\x120\n" +
+	"\x05until\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x05until\x12\x16\n" +
+	"\x06cursor\x18\x06 \x01(\tR\x06cursor\x12\x14\n" +
+	"\x05limit\x18\a \x01(\x05R\x05limit\"i\n" +
+	"\x16AdminListAuditResponse\x12.\n" +
+	"\x05items\x18\x01 \x03(\v2\x18.nbsandbox.v1.AuditEventR\x05items\x12\x1f\n" +
+	"\vnext_cursor\x18\x02 \x01(\tR\n" +
+	"nextCursor\"\xf6\x01\n" +
 	"\bFunction\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12%\n" +
 	"\x0elatest_version\x18\x02 \x01(\x05R\rlatestVersion\x129\n" +
@@ -6242,11 +6978,16 @@ const file_nbsandbox_v1_nbsandbox_proto_rawDesc = "" +
 	"\bMoveFile\x12\x1d.nbsandbox.v1.MoveFileRequest\x1a\x12.nbsandbox.v1.File\x12O\n" +
 	"\n" +
 	"DeleteFile\x12\x1f.nbsandbox.v1.DeleteFileRequest\x1a .nbsandbox.v1.DeleteFileResponse\x12E\n" +
-	"\fCreateFolder\x12!.nbsandbox.v1.CreateFolderRequest\x1a\x12.nbsandbox.v1.File2\xa6\x02\n" +
+	"\fCreateFolder\x12!.nbsandbox.v1.CreateFolderRequest\x1a\x12.nbsandbox.v1.File2\xca\x05\n" +
 	"\fAdminService\x12^\n" +
 	"\x0fAdminListSpaces\x12$.nbsandbox.v1.AdminListSpacesRequest\x1a%.nbsandbox.v1.AdminListSpacesResponse\x12S\n" +
 	"\x10AdminUpdateSpace\x12%.nbsandbox.v1.AdminUpdateSpaceRequest\x1a\x18.nbsandbox.v1.AdminSpace\x12a\n" +
-	"\x10AdminDeleteSpace\x12%.nbsandbox.v1.AdminDeleteSpaceRequest\x1a&.nbsandbox.v1.AdminDeleteSpaceResponse2\xcc\x05\n" +
+	"\x10AdminDeleteSpace\x12%.nbsandbox.v1.AdminDeleteSpaceRequest\x1a&.nbsandbox.v1.AdminDeleteSpaceResponse\x12X\n" +
+	"\rAdminListRuns\x12\".nbsandbox.v1.AdminListRunsRequest\x1a#.nbsandbox.v1.AdminListRunsResponse\x12M\n" +
+	"\x0eAdminCancelRun\x12#.nbsandbox.v1.AdminCancelRunRequest\x1a\x16.nbsandbox.v1.AdminRun\x12M\n" +
+	"\rAdminGetDrain\x12\".nbsandbox.v1.AdminGetDrainRequest\x1a\x18.nbsandbox.v1.DrainState\x12M\n" +
+	"\rAdminSetDrain\x12\".nbsandbox.v1.AdminSetDrainRequest\x1a\x18.nbsandbox.v1.DrainState\x12[\n" +
+	"\x0eAdminListAudit\x12#.nbsandbox.v1.AdminListAuditRequest\x1a$.nbsandbox.v1.AdminListAuditResponse2\xcc\x05\n" +
 	"\x0fFunctionService\x12X\n" +
 	"\rListFunctions\x12\".nbsandbox.v1.ListFunctionsRequest\x1a#.nbsandbox.v1.ListFunctionsResponse\x12G\n" +
 	"\vGetFunction\x12 .nbsandbox.v1.GetFunctionRequest\x1a\x16.nbsandbox.v1.Function\x12[\n" +
@@ -6292,7 +7033,7 @@ func file_nbsandbox_v1_nbsandbox_proto_rawDescGZIP() []byte {
 	return file_nbsandbox_v1_nbsandbox_proto_rawDescData
 }
 
-var file_nbsandbox_v1_nbsandbox_proto_msgTypes = make([]protoimpl.MessageInfo, 86)
+var file_nbsandbox_v1_nbsandbox_proto_msgTypes = make([]protoimpl.MessageInfo, 96)
 var file_nbsandbox_v1_nbsandbox_proto_goTypes = []any{
 	(*Space)(nil),                      // 0: nbsandbox.v1.Space
 	(*Usage)(nil),                      // 1: nbsandbox.v1.Usage
@@ -6324,219 +7065,246 @@ var file_nbsandbox_v1_nbsandbox_proto_goTypes = []any{
 	(*AdminUpdateSpaceRequest)(nil),    // 27: nbsandbox.v1.AdminUpdateSpaceRequest
 	(*AdminDeleteSpaceRequest)(nil),    // 28: nbsandbox.v1.AdminDeleteSpaceRequest
 	(*AdminDeleteSpaceResponse)(nil),   // 29: nbsandbox.v1.AdminDeleteSpaceResponse
-	(*Function)(nil),                   // 30: nbsandbox.v1.Function
-	(*FunctionVersion)(nil),            // 31: nbsandbox.v1.FunctionVersion
-	(*Contract)(nil),                   // 32: nbsandbox.v1.Contract
-	(*ContractSpec)(nil),               // 33: nbsandbox.v1.ContractSpec
-	(*ListFunctionsRequest)(nil),       // 34: nbsandbox.v1.ListFunctionsRequest
-	(*ListFunctionsResponse)(nil),      // 35: nbsandbox.v1.ListFunctionsResponse
-	(*GetFunctionRequest)(nil),         // 36: nbsandbox.v1.GetFunctionRequest
-	(*DeleteFunctionRequest)(nil),      // 37: nbsandbox.v1.DeleteFunctionRequest
-	(*DeleteFunctionResponse)(nil),     // 38: nbsandbox.v1.DeleteFunctionResponse
-	(*PublishFunctionRequest)(nil),     // 39: nbsandbox.v1.PublishFunctionRequest
-	(*GetFunctionVersionRequest)(nil),  // 40: nbsandbox.v1.GetFunctionVersionRequest
-	(*GetFunctionContractRequest)(nil), // 41: nbsandbox.v1.GetFunctionContractRequest
-	(*InvokeFunctionRequest)(nil),      // 42: nbsandbox.v1.InvokeFunctionRequest
-	(*Run)(nil),                        // 43: nbsandbox.v1.Run
-	(*DependencyWarning)(nil),          // 44: nbsandbox.v1.DependencyWarning
-	(*RunRecord)(nil),                  // 45: nbsandbox.v1.RunRecord
-	(*CellError)(nil),                  // 46: nbsandbox.v1.CellError
-	(*RunUsage)(nil),                   // 47: nbsandbox.v1.RunUsage
-	(*RunLimits)(nil),                  // 48: nbsandbox.v1.RunLimits
-	(*RunImage)(nil),                   // 49: nbsandbox.v1.RunImage
-	(*Result)(nil),                     // 50: nbsandbox.v1.Result
-	(*ResultError)(nil),                // 51: nbsandbox.v1.ResultError
-	(*RunOrResult)(nil),                // 52: nbsandbox.v1.RunOrResult
-	(*Runtime)(nil),                    // 53: nbsandbox.v1.Runtime
-	(*RuntimeImage)(nil),               // 54: nbsandbox.v1.RuntimeImage
-	(*RuntimeLimits)(nil),              // 55: nbsandbox.v1.RuntimeLimits
-	(*RuntimeDocker)(nil),              // 56: nbsandbox.v1.RuntimeDocker
-	(*GetRuntimeRequest)(nil),          // 57: nbsandbox.v1.GetRuntimeRequest
-	(*GetCompletionsRequest)(nil),      // 58: nbsandbox.v1.GetCompletionsRequest
-	(*Completions)(nil),                // 59: nbsandbox.v1.Completions
-	(*RuntimeCompletions)(nil),         // 60: nbsandbox.v1.RuntimeCompletions
-	(*CreateRunRequest)(nil),           // 61: nbsandbox.v1.CreateRunRequest
-	(*ListRunsRequest)(nil),            // 62: nbsandbox.v1.ListRunsRequest
-	(*ListRunsResponse)(nil),           // 63: nbsandbox.v1.ListRunsResponse
-	(*GetRunRequest)(nil),              // 64: nbsandbox.v1.GetRunRequest
-	(*CancelRunRequest)(nil),           // 65: nbsandbox.v1.CancelRunRequest
-	(*GetRunResultRequest)(nil),        // 66: nbsandbox.v1.GetRunResultRequest
-	(*DeleteRunRequest)(nil),           // 67: nbsandbox.v1.DeleteRunRequest
-	(*DeleteRunResponse)(nil),          // 68: nbsandbox.v1.DeleteRunResponse
-	(*GetRunFileRequest)(nil),          // 69: nbsandbox.v1.GetRunFileRequest
-	(*ListArtifactsRequest)(nil),       // 70: nbsandbox.v1.ListArtifactsRequest
-	(*ListArtifactsResponse)(nil),      // 71: nbsandbox.v1.ListArtifactsResponse
-	(*GetArtifactRequest)(nil),         // 72: nbsandbox.v1.GetArtifactRequest
-	(*PromoteArtifactRequest)(nil),     // 73: nbsandbox.v1.PromoteArtifactRequest
-	(*FollowRunLogRequest)(nil),        // 74: nbsandbox.v1.FollowRunLogRequest
-	(*LogEvent)(nil),                   // 75: nbsandbox.v1.LogEvent
-	(*LogLine)(nil),                    // 76: nbsandbox.v1.LogLine
-	(*LogEnd)(nil),                     // 77: nbsandbox.v1.LogEnd
-	(*FollowRunEventsRequest)(nil),     // 78: nbsandbox.v1.FollowRunEventsRequest
-	(*FollowSpaceEventsRequest)(nil),   // 79: nbsandbox.v1.FollowSpaceEventsRequest
-	(*FollowRunResultRequest)(nil),     // 80: nbsandbox.v1.FollowRunResultRequest
-	(*ResultEvent)(nil),                // 81: nbsandbox.v1.ResultEvent
-	(*ResultItem)(nil),                 // 82: nbsandbox.v1.ResultItem
-	(*RunEvent)(nil),                   // 83: nbsandbox.v1.RunEvent
-	nil,                                // 84: nbsandbox.v1.RunUsage.PhasesSecondsEntry
-	nil,                                // 85: nbsandbox.v1.Runtime.PackagesEntry
-	(*timestamppb.Timestamp)(nil),      // 86: google.protobuf.Timestamp
-	(*structpb.Value)(nil),             // 87: google.protobuf.Value
+	(*AdminRun)(nil),                   // 30: nbsandbox.v1.AdminRun
+	(*AdminListRunsRequest)(nil),       // 31: nbsandbox.v1.AdminListRunsRequest
+	(*AdminListRunsResponse)(nil),      // 32: nbsandbox.v1.AdminListRunsResponse
+	(*AdminCancelRunRequest)(nil),      // 33: nbsandbox.v1.AdminCancelRunRequest
+	(*DrainState)(nil),                 // 34: nbsandbox.v1.DrainState
+	(*AdminGetDrainRequest)(nil),       // 35: nbsandbox.v1.AdminGetDrainRequest
+	(*AdminSetDrainRequest)(nil),       // 36: nbsandbox.v1.AdminSetDrainRequest
+	(*AuditEvent)(nil),                 // 37: nbsandbox.v1.AuditEvent
+	(*AdminListAuditRequest)(nil),      // 38: nbsandbox.v1.AdminListAuditRequest
+	(*AdminListAuditResponse)(nil),     // 39: nbsandbox.v1.AdminListAuditResponse
+	(*Function)(nil),                   // 40: nbsandbox.v1.Function
+	(*FunctionVersion)(nil),            // 41: nbsandbox.v1.FunctionVersion
+	(*Contract)(nil),                   // 42: nbsandbox.v1.Contract
+	(*ContractSpec)(nil),               // 43: nbsandbox.v1.ContractSpec
+	(*ListFunctionsRequest)(nil),       // 44: nbsandbox.v1.ListFunctionsRequest
+	(*ListFunctionsResponse)(nil),      // 45: nbsandbox.v1.ListFunctionsResponse
+	(*GetFunctionRequest)(nil),         // 46: nbsandbox.v1.GetFunctionRequest
+	(*DeleteFunctionRequest)(nil),      // 47: nbsandbox.v1.DeleteFunctionRequest
+	(*DeleteFunctionResponse)(nil),     // 48: nbsandbox.v1.DeleteFunctionResponse
+	(*PublishFunctionRequest)(nil),     // 49: nbsandbox.v1.PublishFunctionRequest
+	(*GetFunctionVersionRequest)(nil),  // 50: nbsandbox.v1.GetFunctionVersionRequest
+	(*GetFunctionContractRequest)(nil), // 51: nbsandbox.v1.GetFunctionContractRequest
+	(*InvokeFunctionRequest)(nil),      // 52: nbsandbox.v1.InvokeFunctionRequest
+	(*Run)(nil),                        // 53: nbsandbox.v1.Run
+	(*DependencyWarning)(nil),          // 54: nbsandbox.v1.DependencyWarning
+	(*RunRecord)(nil),                  // 55: nbsandbox.v1.RunRecord
+	(*CellError)(nil),                  // 56: nbsandbox.v1.CellError
+	(*RunUsage)(nil),                   // 57: nbsandbox.v1.RunUsage
+	(*RunLimits)(nil),                  // 58: nbsandbox.v1.RunLimits
+	(*RunImage)(nil),                   // 59: nbsandbox.v1.RunImage
+	(*Result)(nil),                     // 60: nbsandbox.v1.Result
+	(*ResultError)(nil),                // 61: nbsandbox.v1.ResultError
+	(*RunOrResult)(nil),                // 62: nbsandbox.v1.RunOrResult
+	(*Runtime)(nil),                    // 63: nbsandbox.v1.Runtime
+	(*RuntimeImage)(nil),               // 64: nbsandbox.v1.RuntimeImage
+	(*RuntimeLimits)(nil),              // 65: nbsandbox.v1.RuntimeLimits
+	(*RuntimeDocker)(nil),              // 66: nbsandbox.v1.RuntimeDocker
+	(*GetRuntimeRequest)(nil),          // 67: nbsandbox.v1.GetRuntimeRequest
+	(*GetCompletionsRequest)(nil),      // 68: nbsandbox.v1.GetCompletionsRequest
+	(*Completions)(nil),                // 69: nbsandbox.v1.Completions
+	(*RuntimeCompletions)(nil),         // 70: nbsandbox.v1.RuntimeCompletions
+	(*CreateRunRequest)(nil),           // 71: nbsandbox.v1.CreateRunRequest
+	(*ListRunsRequest)(nil),            // 72: nbsandbox.v1.ListRunsRequest
+	(*ListRunsResponse)(nil),           // 73: nbsandbox.v1.ListRunsResponse
+	(*GetRunRequest)(nil),              // 74: nbsandbox.v1.GetRunRequest
+	(*CancelRunRequest)(nil),           // 75: nbsandbox.v1.CancelRunRequest
+	(*GetRunResultRequest)(nil),        // 76: nbsandbox.v1.GetRunResultRequest
+	(*DeleteRunRequest)(nil),           // 77: nbsandbox.v1.DeleteRunRequest
+	(*DeleteRunResponse)(nil),          // 78: nbsandbox.v1.DeleteRunResponse
+	(*GetRunFileRequest)(nil),          // 79: nbsandbox.v1.GetRunFileRequest
+	(*ListArtifactsRequest)(nil),       // 80: nbsandbox.v1.ListArtifactsRequest
+	(*ListArtifactsResponse)(nil),      // 81: nbsandbox.v1.ListArtifactsResponse
+	(*GetArtifactRequest)(nil),         // 82: nbsandbox.v1.GetArtifactRequest
+	(*PromoteArtifactRequest)(nil),     // 83: nbsandbox.v1.PromoteArtifactRequest
+	(*FollowRunLogRequest)(nil),        // 84: nbsandbox.v1.FollowRunLogRequest
+	(*LogEvent)(nil),                   // 85: nbsandbox.v1.LogEvent
+	(*LogLine)(nil),                    // 86: nbsandbox.v1.LogLine
+	(*LogEnd)(nil),                     // 87: nbsandbox.v1.LogEnd
+	(*FollowRunEventsRequest)(nil),     // 88: nbsandbox.v1.FollowRunEventsRequest
+	(*FollowSpaceEventsRequest)(nil),   // 89: nbsandbox.v1.FollowSpaceEventsRequest
+	(*FollowRunResultRequest)(nil),     // 90: nbsandbox.v1.FollowRunResultRequest
+	(*ResultEvent)(nil),                // 91: nbsandbox.v1.ResultEvent
+	(*ResultItem)(nil),                 // 92: nbsandbox.v1.ResultItem
+	(*RunEvent)(nil),                   // 93: nbsandbox.v1.RunEvent
+	nil,                                // 94: nbsandbox.v1.RunUsage.PhasesSecondsEntry
+	nil,                                // 95: nbsandbox.v1.Runtime.PackagesEntry
+	(*timestamppb.Timestamp)(nil),      // 96: google.protobuf.Timestamp
+	(*structpb.Value)(nil),             // 97: google.protobuf.Value
 }
 var file_nbsandbox_v1_nbsandbox_proto_depIdxs = []int32{
-	86,  // 0: nbsandbox.v1.Space.created_at:type_name -> google.protobuf.Timestamp
-	86,  // 1: nbsandbox.v1.Space.updated_at:type_name -> google.protobuf.Timestamp
+	96,  // 0: nbsandbox.v1.Space.created_at:type_name -> google.protobuf.Timestamp
+	96,  // 1: nbsandbox.v1.Space.updated_at:type_name -> google.protobuf.Timestamp
 	1,   // 2: nbsandbox.v1.Space.usage:type_name -> nbsandbox.v1.Usage
 	0,   // 3: nbsandbox.v1.ListSpacesResponse.items:type_name -> nbsandbox.v1.Space
-	86,  // 4: nbsandbox.v1.File.modified:type_name -> google.protobuf.Timestamp
+	96,  // 4: nbsandbox.v1.File.modified:type_name -> google.protobuf.Timestamp
 	11,  // 5: nbsandbox.v1.UploadFilesRequest.target:type_name -> nbsandbox.v1.UploadTarget
 	9,   // 6: nbsandbox.v1.UploadFilesResponse.files:type_name -> nbsandbox.v1.File
 	9,   // 7: nbsandbox.v1.ListFilesResponse.items:type_name -> nbsandbox.v1.File
 	9,   // 8: nbsandbox.v1.FileChunk.file:type_name -> nbsandbox.v1.File
 	18,  // 9: nbsandbox.v1.PutFileRequest.target:type_name -> nbsandbox.v1.PutTarget
 	9,   // 10: nbsandbox.v1.PutFileResponse.file:type_name -> nbsandbox.v1.File
-	86,  // 11: nbsandbox.v1.AdminSpace.created_at:type_name -> google.protobuf.Timestamp
-	86,  // 12: nbsandbox.v1.AdminSpace.updated_at:type_name -> google.protobuf.Timestamp
+	96,  // 11: nbsandbox.v1.AdminSpace.created_at:type_name -> google.protobuf.Timestamp
+	96,  // 12: nbsandbox.v1.AdminSpace.updated_at:type_name -> google.protobuf.Timestamp
 	1,   // 13: nbsandbox.v1.AdminSpace.usage:type_name -> nbsandbox.v1.Usage
 	24,  // 14: nbsandbox.v1.AdminListSpacesResponse.items:type_name -> nbsandbox.v1.AdminSpace
-	86,  // 15: nbsandbox.v1.Function.created_at:type_name -> google.protobuf.Timestamp
-	86,  // 16: nbsandbox.v1.Function.updated_at:type_name -> google.protobuf.Timestamp
-	31,  // 17: nbsandbox.v1.Function.versions:type_name -> nbsandbox.v1.FunctionVersion
-	86,  // 18: nbsandbox.v1.FunctionVersion.created_at:type_name -> google.protobuf.Timestamp
-	32,  // 19: nbsandbox.v1.FunctionVersion.contract:type_name -> nbsandbox.v1.Contract
-	87,  // 20: nbsandbox.v1.Contract.input:type_name -> google.protobuf.Value
-	87,  // 21: nbsandbox.v1.Contract.output:type_name -> google.protobuf.Value
-	87,  // 22: nbsandbox.v1.Contract.item:type_name -> google.protobuf.Value
-	87,  // 23: nbsandbox.v1.ContractSpec.input:type_name -> google.protobuf.Value
-	87,  // 24: nbsandbox.v1.ContractSpec.output:type_name -> google.protobuf.Value
-	30,  // 25: nbsandbox.v1.ListFunctionsResponse.items:type_name -> nbsandbox.v1.Function
-	33,  // 26: nbsandbox.v1.PublishFunctionRequest.contract:type_name -> nbsandbox.v1.ContractSpec
-	87,  // 27: nbsandbox.v1.InvokeFunctionRequest.parameters:type_name -> google.protobuf.Value
-	87,  // 28: nbsandbox.v1.Run.parameters:type_name -> google.protobuf.Value
-	44,  // 29: nbsandbox.v1.Run.dependency_warnings:type_name -> nbsandbox.v1.DependencyWarning
-	86,  // 30: nbsandbox.v1.Run.created_at:type_name -> google.protobuf.Timestamp
-	86,  // 31: nbsandbox.v1.Run.started_at:type_name -> google.protobuf.Timestamp
-	86,  // 32: nbsandbox.v1.Run.finished_at:type_name -> google.protobuf.Timestamp
-	45,  // 33: nbsandbox.v1.Run.result:type_name -> nbsandbox.v1.RunRecord
-	87,  // 34: nbsandbox.v1.RunRecord.parameters:type_name -> google.protobuf.Value
-	46,  // 35: nbsandbox.v1.RunRecord.error:type_name -> nbsandbox.v1.CellError
-	87,  // 36: nbsandbox.v1.RunRecord.output:type_name -> google.protobuf.Value
-	44,  // 37: nbsandbox.v1.RunRecord.dependency_warnings:type_name -> nbsandbox.v1.DependencyWarning
-	47,  // 38: nbsandbox.v1.RunRecord.usage:type_name -> nbsandbox.v1.RunUsage
-	48,  // 39: nbsandbox.v1.RunRecord.limits:type_name -> nbsandbox.v1.RunLimits
-	49,  // 40: nbsandbox.v1.RunRecord.image:type_name -> nbsandbox.v1.RunImage
-	86,  // 41: nbsandbox.v1.RunRecord.created_at:type_name -> google.protobuf.Timestamp
-	86,  // 42: nbsandbox.v1.RunRecord.started_at:type_name -> google.protobuf.Timestamp
-	86,  // 43: nbsandbox.v1.RunRecord.finished_at:type_name -> google.protobuf.Timestamp
-	84,  // 44: nbsandbox.v1.RunUsage.phases_seconds:type_name -> nbsandbox.v1.RunUsage.PhasesSecondsEntry
-	87,  // 45: nbsandbox.v1.Result.output:type_name -> google.protobuf.Value
-	51,  // 46: nbsandbox.v1.Result.error:type_name -> nbsandbox.v1.ResultError
-	50,  // 47: nbsandbox.v1.RunOrResult.result:type_name -> nbsandbox.v1.Result
-	43,  // 48: nbsandbox.v1.RunOrResult.run:type_name -> nbsandbox.v1.Run
-	54,  // 49: nbsandbox.v1.Runtime.image:type_name -> nbsandbox.v1.RuntimeImage
-	85,  // 50: nbsandbox.v1.Runtime.packages:type_name -> nbsandbox.v1.Runtime.PackagesEntry
-	55,  // 51: nbsandbox.v1.Runtime.limits:type_name -> nbsandbox.v1.RuntimeLimits
-	56,  // 52: nbsandbox.v1.Runtime.docker:type_name -> nbsandbox.v1.RuntimeDocker
-	60,  // 53: nbsandbox.v1.Runtime.completions:type_name -> nbsandbox.v1.RuntimeCompletions
-	87,  // 54: nbsandbox.v1.CreateRunRequest.parameters:type_name -> google.protobuf.Value
-	86,  // 55: nbsandbox.v1.ListRunsRequest.created_after:type_name -> google.protobuf.Timestamp
-	86,  // 56: nbsandbox.v1.ListRunsRequest.created_before:type_name -> google.protobuf.Timestamp
-	43,  // 57: nbsandbox.v1.ListRunsResponse.items:type_name -> nbsandbox.v1.Run
-	9,   // 58: nbsandbox.v1.ListArtifactsResponse.items:type_name -> nbsandbox.v1.File
-	76,  // 59: nbsandbox.v1.LogEvent.line:type_name -> nbsandbox.v1.LogLine
-	77,  // 60: nbsandbox.v1.LogEvent.end:type_name -> nbsandbox.v1.LogEnd
-	82,  // 61: nbsandbox.v1.ResultEvent.item:type_name -> nbsandbox.v1.ResultItem
-	83,  // 62: nbsandbox.v1.ResultEvent.progress:type_name -> nbsandbox.v1.RunEvent
-	50,  // 63: nbsandbox.v1.ResultEvent.result:type_name -> nbsandbox.v1.Result
-	87,  // 64: nbsandbox.v1.ResultItem.item:type_name -> google.protobuf.Value
-	50,  // 65: nbsandbox.v1.RunEvent.result:type_name -> nbsandbox.v1.Result
-	2,   // 66: nbsandbox.v1.SpaceService.CreateSpace:input_type -> nbsandbox.v1.CreateSpaceRequest
-	3,   // 67: nbsandbox.v1.SpaceService.ListSpaces:input_type -> nbsandbox.v1.ListSpacesRequest
-	5,   // 68: nbsandbox.v1.SpaceService.GetSpace:input_type -> nbsandbox.v1.GetSpaceRequest
-	6,   // 69: nbsandbox.v1.SpaceService.UpdateSpace:input_type -> nbsandbox.v1.UpdateSpaceRequest
-	7,   // 70: nbsandbox.v1.SpaceService.DeleteSpace:input_type -> nbsandbox.v1.DeleteSpaceRequest
-	10,  // 71: nbsandbox.v1.SpaceService.UploadFiles:input_type -> nbsandbox.v1.UploadFilesRequest
-	13,  // 72: nbsandbox.v1.SpaceService.ListFiles:input_type -> nbsandbox.v1.ListFilesRequest
-	15,  // 73: nbsandbox.v1.SpaceService.GetFile:input_type -> nbsandbox.v1.GetFileRequest
-	17,  // 74: nbsandbox.v1.SpaceService.PutFile:input_type -> nbsandbox.v1.PutFileRequest
-	20,  // 75: nbsandbox.v1.SpaceService.MoveFile:input_type -> nbsandbox.v1.MoveFileRequest
-	21,  // 76: nbsandbox.v1.SpaceService.DeleteFile:input_type -> nbsandbox.v1.DeleteFileRequest
-	23,  // 77: nbsandbox.v1.SpaceService.CreateFolder:input_type -> nbsandbox.v1.CreateFolderRequest
-	25,  // 78: nbsandbox.v1.AdminService.AdminListSpaces:input_type -> nbsandbox.v1.AdminListSpacesRequest
-	27,  // 79: nbsandbox.v1.AdminService.AdminUpdateSpace:input_type -> nbsandbox.v1.AdminUpdateSpaceRequest
-	28,  // 80: nbsandbox.v1.AdminService.AdminDeleteSpace:input_type -> nbsandbox.v1.AdminDeleteSpaceRequest
-	34,  // 81: nbsandbox.v1.FunctionService.ListFunctions:input_type -> nbsandbox.v1.ListFunctionsRequest
-	36,  // 82: nbsandbox.v1.FunctionService.GetFunction:input_type -> nbsandbox.v1.GetFunctionRequest
-	37,  // 83: nbsandbox.v1.FunctionService.DeleteFunction:input_type -> nbsandbox.v1.DeleteFunctionRequest
-	39,  // 84: nbsandbox.v1.FunctionService.PublishFunction:input_type -> nbsandbox.v1.PublishFunctionRequest
-	40,  // 85: nbsandbox.v1.FunctionService.GetFunctionVersion:input_type -> nbsandbox.v1.GetFunctionVersionRequest
-	41,  // 86: nbsandbox.v1.FunctionService.GetFunctionContract:input_type -> nbsandbox.v1.GetFunctionContractRequest
-	42,  // 87: nbsandbox.v1.FunctionService.InvokeFunction:input_type -> nbsandbox.v1.InvokeFunctionRequest
-	42,  // 88: nbsandbox.v1.FunctionService.InvokeFunctionStream:input_type -> nbsandbox.v1.InvokeFunctionRequest
-	57,  // 89: nbsandbox.v1.RunService.GetRuntime:input_type -> nbsandbox.v1.GetRuntimeRequest
-	58,  // 90: nbsandbox.v1.RunService.GetCompletions:input_type -> nbsandbox.v1.GetCompletionsRequest
-	61,  // 91: nbsandbox.v1.RunService.CreateRun:input_type -> nbsandbox.v1.CreateRunRequest
-	62,  // 92: nbsandbox.v1.RunService.ListRuns:input_type -> nbsandbox.v1.ListRunsRequest
-	64,  // 93: nbsandbox.v1.RunService.GetRun:input_type -> nbsandbox.v1.GetRunRequest
-	65,  // 94: nbsandbox.v1.RunService.CancelRun:input_type -> nbsandbox.v1.CancelRunRequest
-	66,  // 95: nbsandbox.v1.RunService.GetRunResult:input_type -> nbsandbox.v1.GetRunResultRequest
-	67,  // 96: nbsandbox.v1.RunService.DeleteRun:input_type -> nbsandbox.v1.DeleteRunRequest
-	69,  // 97: nbsandbox.v1.RunService.GetRunNotebook:input_type -> nbsandbox.v1.GetRunFileRequest
-	69,  // 98: nbsandbox.v1.RunService.GetRunHTML:input_type -> nbsandbox.v1.GetRunFileRequest
-	69,  // 99: nbsandbox.v1.RunService.GetRunLog:input_type -> nbsandbox.v1.GetRunFileRequest
-	70,  // 100: nbsandbox.v1.RunService.ListArtifacts:input_type -> nbsandbox.v1.ListArtifactsRequest
-	72,  // 101: nbsandbox.v1.RunService.GetArtifact:input_type -> nbsandbox.v1.GetArtifactRequest
-	73,  // 102: nbsandbox.v1.RunService.PromoteArtifact:input_type -> nbsandbox.v1.PromoteArtifactRequest
-	74,  // 103: nbsandbox.v1.RunService.FollowRunLog:input_type -> nbsandbox.v1.FollowRunLogRequest
-	80,  // 104: nbsandbox.v1.RunService.FollowRunResult:input_type -> nbsandbox.v1.FollowRunResultRequest
-	78,  // 105: nbsandbox.v1.RunService.FollowRunEvents:input_type -> nbsandbox.v1.FollowRunEventsRequest
-	79,  // 106: nbsandbox.v1.RunService.FollowSpaceEvents:input_type -> nbsandbox.v1.FollowSpaceEventsRequest
-	0,   // 107: nbsandbox.v1.SpaceService.CreateSpace:output_type -> nbsandbox.v1.Space
-	4,   // 108: nbsandbox.v1.SpaceService.ListSpaces:output_type -> nbsandbox.v1.ListSpacesResponse
-	0,   // 109: nbsandbox.v1.SpaceService.GetSpace:output_type -> nbsandbox.v1.Space
-	0,   // 110: nbsandbox.v1.SpaceService.UpdateSpace:output_type -> nbsandbox.v1.Space
-	8,   // 111: nbsandbox.v1.SpaceService.DeleteSpace:output_type -> nbsandbox.v1.DeleteSpaceResponse
-	12,  // 112: nbsandbox.v1.SpaceService.UploadFiles:output_type -> nbsandbox.v1.UploadFilesResponse
-	14,  // 113: nbsandbox.v1.SpaceService.ListFiles:output_type -> nbsandbox.v1.ListFilesResponse
-	16,  // 114: nbsandbox.v1.SpaceService.GetFile:output_type -> nbsandbox.v1.FileChunk
-	19,  // 115: nbsandbox.v1.SpaceService.PutFile:output_type -> nbsandbox.v1.PutFileResponse
-	9,   // 116: nbsandbox.v1.SpaceService.MoveFile:output_type -> nbsandbox.v1.File
-	22,  // 117: nbsandbox.v1.SpaceService.DeleteFile:output_type -> nbsandbox.v1.DeleteFileResponse
-	9,   // 118: nbsandbox.v1.SpaceService.CreateFolder:output_type -> nbsandbox.v1.File
-	26,  // 119: nbsandbox.v1.AdminService.AdminListSpaces:output_type -> nbsandbox.v1.AdminListSpacesResponse
-	24,  // 120: nbsandbox.v1.AdminService.AdminUpdateSpace:output_type -> nbsandbox.v1.AdminSpace
-	29,  // 121: nbsandbox.v1.AdminService.AdminDeleteSpace:output_type -> nbsandbox.v1.AdminDeleteSpaceResponse
-	35,  // 122: nbsandbox.v1.FunctionService.ListFunctions:output_type -> nbsandbox.v1.ListFunctionsResponse
-	30,  // 123: nbsandbox.v1.FunctionService.GetFunction:output_type -> nbsandbox.v1.Function
-	38,  // 124: nbsandbox.v1.FunctionService.DeleteFunction:output_type -> nbsandbox.v1.DeleteFunctionResponse
-	31,  // 125: nbsandbox.v1.FunctionService.PublishFunction:output_type -> nbsandbox.v1.FunctionVersion
-	31,  // 126: nbsandbox.v1.FunctionService.GetFunctionVersion:output_type -> nbsandbox.v1.FunctionVersion
-	32,  // 127: nbsandbox.v1.FunctionService.GetFunctionContract:output_type -> nbsandbox.v1.Contract
-	52,  // 128: nbsandbox.v1.FunctionService.InvokeFunction:output_type -> nbsandbox.v1.RunOrResult
-	81,  // 129: nbsandbox.v1.FunctionService.InvokeFunctionStream:output_type -> nbsandbox.v1.ResultEvent
-	53,  // 130: nbsandbox.v1.RunService.GetRuntime:output_type -> nbsandbox.v1.Runtime
-	59,  // 131: nbsandbox.v1.RunService.GetCompletions:output_type -> nbsandbox.v1.Completions
-	43,  // 132: nbsandbox.v1.RunService.CreateRun:output_type -> nbsandbox.v1.Run
-	63,  // 133: nbsandbox.v1.RunService.ListRuns:output_type -> nbsandbox.v1.ListRunsResponse
-	43,  // 134: nbsandbox.v1.RunService.GetRun:output_type -> nbsandbox.v1.Run
-	43,  // 135: nbsandbox.v1.RunService.CancelRun:output_type -> nbsandbox.v1.Run
-	52,  // 136: nbsandbox.v1.RunService.GetRunResult:output_type -> nbsandbox.v1.RunOrResult
-	68,  // 137: nbsandbox.v1.RunService.DeleteRun:output_type -> nbsandbox.v1.DeleteRunResponse
-	16,  // 138: nbsandbox.v1.RunService.GetRunNotebook:output_type -> nbsandbox.v1.FileChunk
-	16,  // 139: nbsandbox.v1.RunService.GetRunHTML:output_type -> nbsandbox.v1.FileChunk
-	16,  // 140: nbsandbox.v1.RunService.GetRunLog:output_type -> nbsandbox.v1.FileChunk
-	71,  // 141: nbsandbox.v1.RunService.ListArtifacts:output_type -> nbsandbox.v1.ListArtifactsResponse
-	16,  // 142: nbsandbox.v1.RunService.GetArtifact:output_type -> nbsandbox.v1.FileChunk
-	9,   // 143: nbsandbox.v1.RunService.PromoteArtifact:output_type -> nbsandbox.v1.File
-	75,  // 144: nbsandbox.v1.RunService.FollowRunLog:output_type -> nbsandbox.v1.LogEvent
-	81,  // 145: nbsandbox.v1.RunService.FollowRunResult:output_type -> nbsandbox.v1.ResultEvent
-	83,  // 146: nbsandbox.v1.RunService.FollowRunEvents:output_type -> nbsandbox.v1.RunEvent
-	83,  // 147: nbsandbox.v1.RunService.FollowSpaceEvents:output_type -> nbsandbox.v1.RunEvent
-	107, // [107:148] is the sub-list for method output_type
-	66,  // [66:107] is the sub-list for method input_type
-	66,  // [66:66] is the sub-list for extension type_name
-	66,  // [66:66] is the sub-list for extension extendee
-	0,   // [0:66] is the sub-list for field type_name
+	53,  // 15: nbsandbox.v1.AdminRun.run:type_name -> nbsandbox.v1.Run
+	30,  // 16: nbsandbox.v1.AdminListRunsResponse.items:type_name -> nbsandbox.v1.AdminRun
+	96,  // 17: nbsandbox.v1.DrainState.since:type_name -> google.protobuf.Timestamp
+	96,  // 18: nbsandbox.v1.AuditEvent.at:type_name -> google.protobuf.Timestamp
+	96,  // 19: nbsandbox.v1.AdminListAuditRequest.since:type_name -> google.protobuf.Timestamp
+	96,  // 20: nbsandbox.v1.AdminListAuditRequest.until:type_name -> google.protobuf.Timestamp
+	37,  // 21: nbsandbox.v1.AdminListAuditResponse.items:type_name -> nbsandbox.v1.AuditEvent
+	96,  // 22: nbsandbox.v1.Function.created_at:type_name -> google.protobuf.Timestamp
+	96,  // 23: nbsandbox.v1.Function.updated_at:type_name -> google.protobuf.Timestamp
+	41,  // 24: nbsandbox.v1.Function.versions:type_name -> nbsandbox.v1.FunctionVersion
+	96,  // 25: nbsandbox.v1.FunctionVersion.created_at:type_name -> google.protobuf.Timestamp
+	42,  // 26: nbsandbox.v1.FunctionVersion.contract:type_name -> nbsandbox.v1.Contract
+	97,  // 27: nbsandbox.v1.Contract.input:type_name -> google.protobuf.Value
+	97,  // 28: nbsandbox.v1.Contract.output:type_name -> google.protobuf.Value
+	97,  // 29: nbsandbox.v1.Contract.item:type_name -> google.protobuf.Value
+	97,  // 30: nbsandbox.v1.ContractSpec.input:type_name -> google.protobuf.Value
+	97,  // 31: nbsandbox.v1.ContractSpec.output:type_name -> google.protobuf.Value
+	40,  // 32: nbsandbox.v1.ListFunctionsResponse.items:type_name -> nbsandbox.v1.Function
+	43,  // 33: nbsandbox.v1.PublishFunctionRequest.contract:type_name -> nbsandbox.v1.ContractSpec
+	97,  // 34: nbsandbox.v1.InvokeFunctionRequest.parameters:type_name -> google.protobuf.Value
+	97,  // 35: nbsandbox.v1.Run.parameters:type_name -> google.protobuf.Value
+	54,  // 36: nbsandbox.v1.Run.dependency_warnings:type_name -> nbsandbox.v1.DependencyWarning
+	96,  // 37: nbsandbox.v1.Run.created_at:type_name -> google.protobuf.Timestamp
+	96,  // 38: nbsandbox.v1.Run.started_at:type_name -> google.protobuf.Timestamp
+	96,  // 39: nbsandbox.v1.Run.finished_at:type_name -> google.protobuf.Timestamp
+	55,  // 40: nbsandbox.v1.Run.result:type_name -> nbsandbox.v1.RunRecord
+	97,  // 41: nbsandbox.v1.RunRecord.parameters:type_name -> google.protobuf.Value
+	56,  // 42: nbsandbox.v1.RunRecord.error:type_name -> nbsandbox.v1.CellError
+	97,  // 43: nbsandbox.v1.RunRecord.output:type_name -> google.protobuf.Value
+	54,  // 44: nbsandbox.v1.RunRecord.dependency_warnings:type_name -> nbsandbox.v1.DependencyWarning
+	57,  // 45: nbsandbox.v1.RunRecord.usage:type_name -> nbsandbox.v1.RunUsage
+	58,  // 46: nbsandbox.v1.RunRecord.limits:type_name -> nbsandbox.v1.RunLimits
+	59,  // 47: nbsandbox.v1.RunRecord.image:type_name -> nbsandbox.v1.RunImage
+	96,  // 48: nbsandbox.v1.RunRecord.created_at:type_name -> google.protobuf.Timestamp
+	96,  // 49: nbsandbox.v1.RunRecord.started_at:type_name -> google.protobuf.Timestamp
+	96,  // 50: nbsandbox.v1.RunRecord.finished_at:type_name -> google.protobuf.Timestamp
+	94,  // 51: nbsandbox.v1.RunUsage.phases_seconds:type_name -> nbsandbox.v1.RunUsage.PhasesSecondsEntry
+	97,  // 52: nbsandbox.v1.Result.output:type_name -> google.protobuf.Value
+	61,  // 53: nbsandbox.v1.Result.error:type_name -> nbsandbox.v1.ResultError
+	60,  // 54: nbsandbox.v1.RunOrResult.result:type_name -> nbsandbox.v1.Result
+	53,  // 55: nbsandbox.v1.RunOrResult.run:type_name -> nbsandbox.v1.Run
+	64,  // 56: nbsandbox.v1.Runtime.image:type_name -> nbsandbox.v1.RuntimeImage
+	95,  // 57: nbsandbox.v1.Runtime.packages:type_name -> nbsandbox.v1.Runtime.PackagesEntry
+	65,  // 58: nbsandbox.v1.Runtime.limits:type_name -> nbsandbox.v1.RuntimeLimits
+	66,  // 59: nbsandbox.v1.Runtime.docker:type_name -> nbsandbox.v1.RuntimeDocker
+	70,  // 60: nbsandbox.v1.Runtime.completions:type_name -> nbsandbox.v1.RuntimeCompletions
+	97,  // 61: nbsandbox.v1.CreateRunRequest.parameters:type_name -> google.protobuf.Value
+	96,  // 62: nbsandbox.v1.ListRunsRequest.created_after:type_name -> google.protobuf.Timestamp
+	96,  // 63: nbsandbox.v1.ListRunsRequest.created_before:type_name -> google.protobuf.Timestamp
+	53,  // 64: nbsandbox.v1.ListRunsResponse.items:type_name -> nbsandbox.v1.Run
+	9,   // 65: nbsandbox.v1.ListArtifactsResponse.items:type_name -> nbsandbox.v1.File
+	86,  // 66: nbsandbox.v1.LogEvent.line:type_name -> nbsandbox.v1.LogLine
+	87,  // 67: nbsandbox.v1.LogEvent.end:type_name -> nbsandbox.v1.LogEnd
+	92,  // 68: nbsandbox.v1.ResultEvent.item:type_name -> nbsandbox.v1.ResultItem
+	93,  // 69: nbsandbox.v1.ResultEvent.progress:type_name -> nbsandbox.v1.RunEvent
+	60,  // 70: nbsandbox.v1.ResultEvent.result:type_name -> nbsandbox.v1.Result
+	97,  // 71: nbsandbox.v1.ResultItem.item:type_name -> google.protobuf.Value
+	60,  // 72: nbsandbox.v1.RunEvent.result:type_name -> nbsandbox.v1.Result
+	2,   // 73: nbsandbox.v1.SpaceService.CreateSpace:input_type -> nbsandbox.v1.CreateSpaceRequest
+	3,   // 74: nbsandbox.v1.SpaceService.ListSpaces:input_type -> nbsandbox.v1.ListSpacesRequest
+	5,   // 75: nbsandbox.v1.SpaceService.GetSpace:input_type -> nbsandbox.v1.GetSpaceRequest
+	6,   // 76: nbsandbox.v1.SpaceService.UpdateSpace:input_type -> nbsandbox.v1.UpdateSpaceRequest
+	7,   // 77: nbsandbox.v1.SpaceService.DeleteSpace:input_type -> nbsandbox.v1.DeleteSpaceRequest
+	10,  // 78: nbsandbox.v1.SpaceService.UploadFiles:input_type -> nbsandbox.v1.UploadFilesRequest
+	13,  // 79: nbsandbox.v1.SpaceService.ListFiles:input_type -> nbsandbox.v1.ListFilesRequest
+	15,  // 80: nbsandbox.v1.SpaceService.GetFile:input_type -> nbsandbox.v1.GetFileRequest
+	17,  // 81: nbsandbox.v1.SpaceService.PutFile:input_type -> nbsandbox.v1.PutFileRequest
+	20,  // 82: nbsandbox.v1.SpaceService.MoveFile:input_type -> nbsandbox.v1.MoveFileRequest
+	21,  // 83: nbsandbox.v1.SpaceService.DeleteFile:input_type -> nbsandbox.v1.DeleteFileRequest
+	23,  // 84: nbsandbox.v1.SpaceService.CreateFolder:input_type -> nbsandbox.v1.CreateFolderRequest
+	25,  // 85: nbsandbox.v1.AdminService.AdminListSpaces:input_type -> nbsandbox.v1.AdminListSpacesRequest
+	27,  // 86: nbsandbox.v1.AdminService.AdminUpdateSpace:input_type -> nbsandbox.v1.AdminUpdateSpaceRequest
+	28,  // 87: nbsandbox.v1.AdminService.AdminDeleteSpace:input_type -> nbsandbox.v1.AdminDeleteSpaceRequest
+	31,  // 88: nbsandbox.v1.AdminService.AdminListRuns:input_type -> nbsandbox.v1.AdminListRunsRequest
+	33,  // 89: nbsandbox.v1.AdminService.AdminCancelRun:input_type -> nbsandbox.v1.AdminCancelRunRequest
+	35,  // 90: nbsandbox.v1.AdminService.AdminGetDrain:input_type -> nbsandbox.v1.AdminGetDrainRequest
+	36,  // 91: nbsandbox.v1.AdminService.AdminSetDrain:input_type -> nbsandbox.v1.AdminSetDrainRequest
+	38,  // 92: nbsandbox.v1.AdminService.AdminListAudit:input_type -> nbsandbox.v1.AdminListAuditRequest
+	44,  // 93: nbsandbox.v1.FunctionService.ListFunctions:input_type -> nbsandbox.v1.ListFunctionsRequest
+	46,  // 94: nbsandbox.v1.FunctionService.GetFunction:input_type -> nbsandbox.v1.GetFunctionRequest
+	47,  // 95: nbsandbox.v1.FunctionService.DeleteFunction:input_type -> nbsandbox.v1.DeleteFunctionRequest
+	49,  // 96: nbsandbox.v1.FunctionService.PublishFunction:input_type -> nbsandbox.v1.PublishFunctionRequest
+	50,  // 97: nbsandbox.v1.FunctionService.GetFunctionVersion:input_type -> nbsandbox.v1.GetFunctionVersionRequest
+	51,  // 98: nbsandbox.v1.FunctionService.GetFunctionContract:input_type -> nbsandbox.v1.GetFunctionContractRequest
+	52,  // 99: nbsandbox.v1.FunctionService.InvokeFunction:input_type -> nbsandbox.v1.InvokeFunctionRequest
+	52,  // 100: nbsandbox.v1.FunctionService.InvokeFunctionStream:input_type -> nbsandbox.v1.InvokeFunctionRequest
+	67,  // 101: nbsandbox.v1.RunService.GetRuntime:input_type -> nbsandbox.v1.GetRuntimeRequest
+	68,  // 102: nbsandbox.v1.RunService.GetCompletions:input_type -> nbsandbox.v1.GetCompletionsRequest
+	71,  // 103: nbsandbox.v1.RunService.CreateRun:input_type -> nbsandbox.v1.CreateRunRequest
+	72,  // 104: nbsandbox.v1.RunService.ListRuns:input_type -> nbsandbox.v1.ListRunsRequest
+	74,  // 105: nbsandbox.v1.RunService.GetRun:input_type -> nbsandbox.v1.GetRunRequest
+	75,  // 106: nbsandbox.v1.RunService.CancelRun:input_type -> nbsandbox.v1.CancelRunRequest
+	76,  // 107: nbsandbox.v1.RunService.GetRunResult:input_type -> nbsandbox.v1.GetRunResultRequest
+	77,  // 108: nbsandbox.v1.RunService.DeleteRun:input_type -> nbsandbox.v1.DeleteRunRequest
+	79,  // 109: nbsandbox.v1.RunService.GetRunNotebook:input_type -> nbsandbox.v1.GetRunFileRequest
+	79,  // 110: nbsandbox.v1.RunService.GetRunHTML:input_type -> nbsandbox.v1.GetRunFileRequest
+	79,  // 111: nbsandbox.v1.RunService.GetRunLog:input_type -> nbsandbox.v1.GetRunFileRequest
+	80,  // 112: nbsandbox.v1.RunService.ListArtifacts:input_type -> nbsandbox.v1.ListArtifactsRequest
+	82,  // 113: nbsandbox.v1.RunService.GetArtifact:input_type -> nbsandbox.v1.GetArtifactRequest
+	83,  // 114: nbsandbox.v1.RunService.PromoteArtifact:input_type -> nbsandbox.v1.PromoteArtifactRequest
+	84,  // 115: nbsandbox.v1.RunService.FollowRunLog:input_type -> nbsandbox.v1.FollowRunLogRequest
+	90,  // 116: nbsandbox.v1.RunService.FollowRunResult:input_type -> nbsandbox.v1.FollowRunResultRequest
+	88,  // 117: nbsandbox.v1.RunService.FollowRunEvents:input_type -> nbsandbox.v1.FollowRunEventsRequest
+	89,  // 118: nbsandbox.v1.RunService.FollowSpaceEvents:input_type -> nbsandbox.v1.FollowSpaceEventsRequest
+	0,   // 119: nbsandbox.v1.SpaceService.CreateSpace:output_type -> nbsandbox.v1.Space
+	4,   // 120: nbsandbox.v1.SpaceService.ListSpaces:output_type -> nbsandbox.v1.ListSpacesResponse
+	0,   // 121: nbsandbox.v1.SpaceService.GetSpace:output_type -> nbsandbox.v1.Space
+	0,   // 122: nbsandbox.v1.SpaceService.UpdateSpace:output_type -> nbsandbox.v1.Space
+	8,   // 123: nbsandbox.v1.SpaceService.DeleteSpace:output_type -> nbsandbox.v1.DeleteSpaceResponse
+	12,  // 124: nbsandbox.v1.SpaceService.UploadFiles:output_type -> nbsandbox.v1.UploadFilesResponse
+	14,  // 125: nbsandbox.v1.SpaceService.ListFiles:output_type -> nbsandbox.v1.ListFilesResponse
+	16,  // 126: nbsandbox.v1.SpaceService.GetFile:output_type -> nbsandbox.v1.FileChunk
+	19,  // 127: nbsandbox.v1.SpaceService.PutFile:output_type -> nbsandbox.v1.PutFileResponse
+	9,   // 128: nbsandbox.v1.SpaceService.MoveFile:output_type -> nbsandbox.v1.File
+	22,  // 129: nbsandbox.v1.SpaceService.DeleteFile:output_type -> nbsandbox.v1.DeleteFileResponse
+	9,   // 130: nbsandbox.v1.SpaceService.CreateFolder:output_type -> nbsandbox.v1.File
+	26,  // 131: nbsandbox.v1.AdminService.AdminListSpaces:output_type -> nbsandbox.v1.AdminListSpacesResponse
+	24,  // 132: nbsandbox.v1.AdminService.AdminUpdateSpace:output_type -> nbsandbox.v1.AdminSpace
+	29,  // 133: nbsandbox.v1.AdminService.AdminDeleteSpace:output_type -> nbsandbox.v1.AdminDeleteSpaceResponse
+	32,  // 134: nbsandbox.v1.AdminService.AdminListRuns:output_type -> nbsandbox.v1.AdminListRunsResponse
+	30,  // 135: nbsandbox.v1.AdminService.AdminCancelRun:output_type -> nbsandbox.v1.AdminRun
+	34,  // 136: nbsandbox.v1.AdminService.AdminGetDrain:output_type -> nbsandbox.v1.DrainState
+	34,  // 137: nbsandbox.v1.AdminService.AdminSetDrain:output_type -> nbsandbox.v1.DrainState
+	39,  // 138: nbsandbox.v1.AdminService.AdminListAudit:output_type -> nbsandbox.v1.AdminListAuditResponse
+	45,  // 139: nbsandbox.v1.FunctionService.ListFunctions:output_type -> nbsandbox.v1.ListFunctionsResponse
+	40,  // 140: nbsandbox.v1.FunctionService.GetFunction:output_type -> nbsandbox.v1.Function
+	48,  // 141: nbsandbox.v1.FunctionService.DeleteFunction:output_type -> nbsandbox.v1.DeleteFunctionResponse
+	41,  // 142: nbsandbox.v1.FunctionService.PublishFunction:output_type -> nbsandbox.v1.FunctionVersion
+	41,  // 143: nbsandbox.v1.FunctionService.GetFunctionVersion:output_type -> nbsandbox.v1.FunctionVersion
+	42,  // 144: nbsandbox.v1.FunctionService.GetFunctionContract:output_type -> nbsandbox.v1.Contract
+	62,  // 145: nbsandbox.v1.FunctionService.InvokeFunction:output_type -> nbsandbox.v1.RunOrResult
+	91,  // 146: nbsandbox.v1.FunctionService.InvokeFunctionStream:output_type -> nbsandbox.v1.ResultEvent
+	63,  // 147: nbsandbox.v1.RunService.GetRuntime:output_type -> nbsandbox.v1.Runtime
+	69,  // 148: nbsandbox.v1.RunService.GetCompletions:output_type -> nbsandbox.v1.Completions
+	53,  // 149: nbsandbox.v1.RunService.CreateRun:output_type -> nbsandbox.v1.Run
+	73,  // 150: nbsandbox.v1.RunService.ListRuns:output_type -> nbsandbox.v1.ListRunsResponse
+	53,  // 151: nbsandbox.v1.RunService.GetRun:output_type -> nbsandbox.v1.Run
+	53,  // 152: nbsandbox.v1.RunService.CancelRun:output_type -> nbsandbox.v1.Run
+	62,  // 153: nbsandbox.v1.RunService.GetRunResult:output_type -> nbsandbox.v1.RunOrResult
+	78,  // 154: nbsandbox.v1.RunService.DeleteRun:output_type -> nbsandbox.v1.DeleteRunResponse
+	16,  // 155: nbsandbox.v1.RunService.GetRunNotebook:output_type -> nbsandbox.v1.FileChunk
+	16,  // 156: nbsandbox.v1.RunService.GetRunHTML:output_type -> nbsandbox.v1.FileChunk
+	16,  // 157: nbsandbox.v1.RunService.GetRunLog:output_type -> nbsandbox.v1.FileChunk
+	81,  // 158: nbsandbox.v1.RunService.ListArtifacts:output_type -> nbsandbox.v1.ListArtifactsResponse
+	16,  // 159: nbsandbox.v1.RunService.GetArtifact:output_type -> nbsandbox.v1.FileChunk
+	9,   // 160: nbsandbox.v1.RunService.PromoteArtifact:output_type -> nbsandbox.v1.File
+	85,  // 161: nbsandbox.v1.RunService.FollowRunLog:output_type -> nbsandbox.v1.LogEvent
+	91,  // 162: nbsandbox.v1.RunService.FollowRunResult:output_type -> nbsandbox.v1.ResultEvent
+	93,  // 163: nbsandbox.v1.RunService.FollowRunEvents:output_type -> nbsandbox.v1.RunEvent
+	93,  // 164: nbsandbox.v1.RunService.FollowSpaceEvents:output_type -> nbsandbox.v1.RunEvent
+	119, // [119:165] is the sub-list for method output_type
+	73,  // [73:119] is the sub-list for method input_type
+	73,  // [73:73] is the sub-list for extension type_name
+	73,  // [73:73] is the sub-list for extension extendee
+	0,   // [0:73] is the sub-list for field type_name
 }
 
 func init() { file_nbsandbox_v1_nbsandbox_proto_init() }
@@ -6553,34 +7321,34 @@ func file_nbsandbox_v1_nbsandbox_proto_init() {
 		(*PutFileRequest_Target)(nil),
 		(*PutFileRequest_Data)(nil),
 	}
-	file_nbsandbox_v1_nbsandbox_proto_msgTypes[44].OneofWrappers = []any{}
-	file_nbsandbox_v1_nbsandbox_proto_msgTypes[45].OneofWrappers = []any{}
-	file_nbsandbox_v1_nbsandbox_proto_msgTypes[46].OneofWrappers = []any{}
-	file_nbsandbox_v1_nbsandbox_proto_msgTypes[47].OneofWrappers = []any{}
-	file_nbsandbox_v1_nbsandbox_proto_msgTypes[50].OneofWrappers = []any{}
-	file_nbsandbox_v1_nbsandbox_proto_msgTypes[51].OneofWrappers = []any{}
-	file_nbsandbox_v1_nbsandbox_proto_msgTypes[52].OneofWrappers = []any{
+	file_nbsandbox_v1_nbsandbox_proto_msgTypes[54].OneofWrappers = []any{}
+	file_nbsandbox_v1_nbsandbox_proto_msgTypes[55].OneofWrappers = []any{}
+	file_nbsandbox_v1_nbsandbox_proto_msgTypes[56].OneofWrappers = []any{}
+	file_nbsandbox_v1_nbsandbox_proto_msgTypes[57].OneofWrappers = []any{}
+	file_nbsandbox_v1_nbsandbox_proto_msgTypes[60].OneofWrappers = []any{}
+	file_nbsandbox_v1_nbsandbox_proto_msgTypes[61].OneofWrappers = []any{}
+	file_nbsandbox_v1_nbsandbox_proto_msgTypes[62].OneofWrappers = []any{
 		(*RunOrResult_Result)(nil),
 		(*RunOrResult_Run)(nil),
 	}
-	file_nbsandbox_v1_nbsandbox_proto_msgTypes[75].OneofWrappers = []any{
+	file_nbsandbox_v1_nbsandbox_proto_msgTypes[85].OneofWrappers = []any{
 		(*LogEvent_Line)(nil),
 		(*LogEvent_End)(nil),
 	}
-	file_nbsandbox_v1_nbsandbox_proto_msgTypes[81].OneofWrappers = []any{
+	file_nbsandbox_v1_nbsandbox_proto_msgTypes[91].OneofWrappers = []any{
 		(*ResultEvent_Item)(nil),
 		(*ResultEvent_Progress)(nil),
 		(*ResultEvent_Result)(nil),
 	}
-	file_nbsandbox_v1_nbsandbox_proto_msgTypes[82].OneofWrappers = []any{}
-	file_nbsandbox_v1_nbsandbox_proto_msgTypes[83].OneofWrappers = []any{}
+	file_nbsandbox_v1_nbsandbox_proto_msgTypes[92].OneofWrappers = []any{}
+	file_nbsandbox_v1_nbsandbox_proto_msgTypes[93].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nbsandbox_v1_nbsandbox_proto_rawDesc), len(file_nbsandbox_v1_nbsandbox_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   86,
+			NumMessages:   96,
 			NumExtensions: 0,
 			NumServices:   4,
 		},

@@ -11,6 +11,10 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 - The API's error codes gain `too_many_requests`, and every authenticated operation documents its `429` response.
 - **Signing in to the web UI:** with `ui.auth: oidc`, people sign in with the identity provider (authorization code with PKCE) and are the same caller as through the API; with `ui.auth: basic`, with a `users.yaml` password. Sessions are server-side (tokens never reach the browser), end after 1 h idle or 12 h, follow revocation at the provider, and sign out of the provider too. The Compose stack serves the UI at the domain's root with `NBSANDBOX_UI_ENABLED=true`; the Helm chart with `ui.enabled` ([auth.md](docs/auth.md#signing-in-to-the-web-ui)).
 
+- **Audit log:** every change, download and administrative operation (refused ones included) and every web UI sign-in and sign-out is recorded with who, what, when, how it ended and from where, in REST, gRPC and the UI alike. Administrators read it with `GET /v1/admin/audit` (gRPC `AdminListAudit`); each row also goes to the service log. Kept 90 days (`audit.retention`) ([operations.md](docs/operations.md#audit-log)).
+- **Admin operations:** list every owner's runs (`GET /v1/admin/runs`), stop any run (`POST /v1/admin/runs/{run_id}/cancel`), and drain the workers before maintenance (`PUT /v1/admin/drain`: no queued run starts, running ones finish, new ones queue). Also in gRPC's `AdminService` ([auth.md](docs/auth.md#administration)).
+- Metric `nbsandbox_audit_failures_total`.
+
 ### Changed
 
 - **The web UI without sign-in (`ui.auth: none`, the default) refuses to listen beyond loopback**; it used to start with a warning. To serve the UI to a network, set `ui.auth` to `oidc` or `basic`. A container whose port is published only on the host's loopback can set `ui.no_login_beyond_loopback: true` (the dev Compose stack does).
