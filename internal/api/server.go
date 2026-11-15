@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/azbyluthfan/nbsandbox/internal/audit"
 	"github.com/azbyluthfan/nbsandbox/internal/auth"
 	"github.com/azbyluthfan/nbsandbox/internal/completions"
 	"github.com/azbyluthfan/nbsandbox/internal/obs"
@@ -47,6 +48,8 @@ type Deps struct {
 	// Completions opens a stored completion index (gzipped JSON); nil:
 	// none is served.
 	Completions func(ctx context.Context, ref completions.Ref) (io.ReadCloser, error)
+	// Audit records who did what (nil: nothing is recorded).
+	Audit *audit.Recorder
 	// Shutdown is closed when the server starts shutting down: open log
 	// streams send a final event and end.
 	Shutdown <-chan struct{}
@@ -95,8 +98,41 @@ func wrapRoute(rt Route, d Deps) http.Handler {
 	}
 	if rt.Auth {
 		h = requireScope(rt.Scope(), h)
+		h = auditRoute(rt, d, h) // outside the scope check: refusals are recorded too
 	}
 	return limitBody(rt.MaxBody, h)
+}
+
+// auditRoute records an audited operation once it has finished: who, what
+// (from the path, or what the handler noted), and the status it ended with.
+func auditRoute(rt Route, d Deps, next http.Handler) http.Handler {
+	if !d.Audit.Audited(rt.Op) {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := audit.WithNote(r.Context())
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rec, r.WithContext(ctx))
+		d.Audit.Record(ctx, audit.Entry{Action: string(rt.Op), SpaceID: r.PathValue("id"), Target: pathTarget(r), Status: rec.status})
+	})
+}
+
+// pathTarget is what the request's path names within the space: a file, a
+// run (and its artifact), or a function (and its version).
+func pathTarget(r *http.Request) string {
+	run, p, name, v := r.PathValue("run_id"), r.PathValue("path"), r.PathValue("name"), r.PathValue("version")
+	switch {
+	case run != "" && p != "":
+		return run + "/" + p
+	case run != "":
+		return run
+	case p != "":
+		return p
+	case name != "" && v != "":
+		return name + "@" + v
+	default:
+		return name
+	}
 }
 
 // requireScope refuses a caller whose token lacks the route's scope (403),
@@ -250,4 +286,13 @@ func newRequestID() string {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// clip keeps an audit detail under 1 KiB.
+func clip(s string) string {
+	const maxDetail = 1024
+	if len(s) <= maxDetail {
+		return s
+	}
+	return s[:maxDetail-3] + "..."
 }

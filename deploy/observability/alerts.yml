@@ -37,3 +37,9 @@ groups:
         annotations:
           summary: Many runs hit the memory limit; check limits.memory and the notebooks
           runbook: docs/operations.md#capacity
+      - alert: NbsandboxAuditFailures
+        expr: increase(nbsandbox_audit_failures_total[15m]) > 0
+        labels: {severity: ticket}
+        annotations:
+          summary: Audit log rows could not be written (the database?); they are in the service log as errors
+          runbook: docs/operations.md#audit-log

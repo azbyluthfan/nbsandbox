@@ -67,6 +67,13 @@ func (a *API) routes() []Route {
 		{Method: "GET", Pattern: "/v1/admin/spaces", Handler: a.adminListSpaces, Auth: true, Op: auth.OpAdminListSpaces},
 		{Method: "PATCH", Pattern: "/v1/admin/spaces/{id}", Handler: a.adminUpdateSpace, Auth: true, Op: auth.OpAdminUpdateSpace, AnySpace: true},
 		{Method: "DELETE", Pattern: "/v1/admin/spaces/{id}", Handler: a.adminDeleteSpace, Auth: true, Op: auth.OpAdminDeleteSpace, AnySpace: true},
+		// Every owner's runs (metadata only), stopping any of them, draining
+		// the workers before maintenance, and the audit log.
+		{Method: "GET", Pattern: "/v1/admin/runs", Handler: a.adminListRuns, Auth: true, Op: auth.OpAdminListRuns},
+		{Method: "POST", Pattern: "/v1/admin/runs/{run_id}/cancel", Handler: a.adminCancelRun, Auth: true, Op: auth.OpAdminCancelRun, RunScoped: true},
+		{Method: "GET", Pattern: "/v1/admin/drain", Handler: a.adminGetDrain, Auth: true, Op: auth.OpAdminGetDrain},
+		{Method: "PUT", Pattern: "/v1/admin/drain", Handler: a.adminSetDrain, Auth: true, Op: auth.OpAdminSetDrain},
+		{Method: "GET", Pattern: "/v1/admin/audit", Handler: a.adminListAudit, Auth: true, Op: auth.OpAdminListAudit},
 
 		// Runtime.
 		{Method: "GET", Pattern: "/v1/runtime", Handler: a.getRuntime, Auth: true, Op: auth.OpGetRuntime},

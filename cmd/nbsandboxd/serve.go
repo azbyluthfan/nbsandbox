@@ -21,6 +21,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/azbyluthfan/nbsandbox/internal/api"
+	"github.com/azbyluthfan/nbsandbox/internal/audit"
 	"github.com/azbyluthfan/nbsandbox/internal/auth"
 	"github.com/azbyluthfan/nbsandbox/internal/blob"
 	"github.com/azbyluthfan/nbsandbox/internal/blob/azstore"
@@ -239,8 +240,11 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 	// so they don't hold up the HTTP shutdown.
 	shuttingDown := make(chan struct{})
 	health := obs.NewHealth(3*time.Second, checks...)
+	recorder := audit.New(audit.Config{Enabled: cfg.Audit.Enabled, Retention: cfg.Audit.Retention, Downloads: cfg.Audit.Downloads},
+		db, logger, metrics.AuditFailures)
+	go recorder.Run(ctx, cfg.Runs.CleanupEvery)
 	deps := api.Deps{
-		Auth: authn, Users: users, Health: health, Metrics: metrics, Logger: logger, Spaces: spaceSvc,
+		Auth: authn, Users: users, Health: health, Metrics: metrics, Logger: logger, Spaces: spaceSvc, Audit: recorder,
 		MaxUpload:  int64(cfg.Uploads.MaxSpace) + 1<<20, // quota plus multipart overhead
 		MaxRunBody: int64(cfg.Runs.MaxParameters) + 64<<10,
 		Runs:       mgr,
@@ -287,7 +291,7 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 	}
 	handler := withGRPC(api.NewHandler(deps), grpcapi.Handler(grpcapi.Deps{
 		Auth: authn, Spaces: spaceSvc, Runs: mgr, Runtime: runtime, Logger: logger, Shutdown: shuttingDown,
-		Completions: deps.Completions,
+		Completions: deps.Completions, Audit: recorder,
 	}))
 	if !cfg.Serves() {
 		handler = workerHandler(health, metrics)
@@ -300,7 +304,7 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 	var uiSrv *http.Server
 	if cfg.UI.Enabled && cfg.Serves() {
 		sessions, err := uiauth.New(cfg.UI.SignIn(), uiauth.Deps{
-			Store: db, Verifier: authn.OIDC, Log: logger,
+			Store: db, Verifier: authn.OIDC, Log: logger, Audit: recorder,
 			Basic: &auth.Authenticator{Users: users, Limiter: limiter, LimitByAddress: cfg.Auth.ByAddress(),
 				TrustedProxies: authn.TrustedProxies, Log: logger},
 		})

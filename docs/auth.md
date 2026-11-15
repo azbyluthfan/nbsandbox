@@ -135,8 +135,12 @@ An operator holding `nbsandbox.admin` (an app role on a service account, or a ba
 | `GET /v1/admin/spaces?owner=` | every owner's spaces, with the owner, newest first |
 | `PATCH /v1/admin/spaces/{id}` `{"owner": "..."}` | give a space to another caller ID: someone whose ID changed (an issuer or tenant move), or whose work a colleague takes over |
 | `DELETE /v1/admin/spaces/{id}` | delete a space of someone removed from the provider |
+| `GET /v1/admin/runs?status=&owner=&space=` | every owner's runs, with the owner (metadata only: no results or outputs) |
+| `POST /v1/admin/runs/{run_id}/cancel` `{"reason": "..."}` | stop any run; its owner sees who and why |
+| `GET` / `PUT /v1/admin/drain` `{"draining": true, "reason": "..."}` | drain the workers before maintenance: no queued run starts, running ones finish, new ones queue ([operations.md](operations.md#upgrade)) |
+| `GET /v1/admin/audit?actor=&space=&action=&since=&until=` | the audit log ([operations.md](operations.md#audit-log)) |
 
-Each change is logged with the administrator's ID.
+The same operations are in gRPC's `AdminService`. Every one of them, reads included, is in the audit log with the administrator's ID.
 
 ### The calling application
 

@@ -1,6 +1,6 @@
 # Plan: audit log and admin operations
 
-**Status (2026-11-15):** being built.
+**Status (2026-11-15):** built as below.
 
 ## Today
 

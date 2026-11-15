@@ -19,6 +19,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/azbyluthfan/nbsandbox/internal/audit"
 	"github.com/azbyluthfan/nbsandbox/internal/auth"
 	"github.com/azbyluthfan/nbsandbox/internal/auth/authtest"
 	"github.com/azbyluthfan/nbsandbox/internal/blob"
@@ -96,7 +97,8 @@ func newEnvWithIDP(t *testing.T, idp *authtest.IDP) testEnv {
 	if idp != nil {
 		authn.OIDC = idp.Verifier(t)
 	}
-	deps := Deps{Auth: authn, Users: us, Health: health, Metrics: m, Logger: logger, Spaces: svc, MaxUpload: testMaxSpace + 64<<10,
+	rec := audit.New(audit.Config{Enabled: true, Retention: time.Hour, Downloads: true}, db, logger, m.AuditFailures)
+	deps := Deps{Auth: authn, Users: us, Health: health, Metrics: m, Logger: logger, Spaces: svc, MaxUpload: testMaxSpace + 64<<10, Audit: rec,
 		Runs: mgr, Shutdown: shutdown, StreamHeartbeat: 50 * time.Millisecond, Runtime: func() (RuntimeInfo, error) {
 			var ri RuntimeInfo
 			ri.Image.Ref, ri.PythonVersion, ri.Packages, ri.Runtime = "nbsandbox-runner:test", "3.13.18", map[string]string{"pandas": "3.1.1"}, "runc"

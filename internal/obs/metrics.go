@@ -24,6 +24,7 @@ type Metrics struct {
 	ActiveLogStreams  prometheus.Gauge
 	DockerUp          prometheus.Gauge
 	HTTPRequestsTotal *prometheus.CounterVec // by route pattern and status code
+	AuditFailures     prometheus.Counter     // audit rows that couldn't be written
 }
 
 // NewMetrics creates the registry with Go and process collectors.
@@ -65,12 +66,16 @@ func NewMetrics() *Metrics {
 			Name: "nbsandbox_http_requests_total",
 			Help: "HTTP requests by route pattern and status code.",
 		}, []string{"route", "code"}),
+		AuditFailures: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "nbsandbox_audit_failures_total",
+			Help: "Audit log rows that couldn't be written (each is also logged as an error).",
+		}),
 	}
 	reg.MustRegister(
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		m.RunsTotal, m.RunDuration, m.RunPhase, m.QueueLength, m.ActiveRuns,
-		m.ActiveLogStreams, m.DockerUp, m.HTTPRequestsTotal,
+		m.ActiveLogStreams, m.DockerUp, m.HTTPRequestsTotal, m.AuditFailures,
 	)
 	return m
 }

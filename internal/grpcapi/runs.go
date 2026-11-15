@@ -15,6 +15,7 @@ import (
 
 	pb "github.com/azbyluthfan/nbsandbox/gen/nbsandbox/v1"
 	"github.com/azbyluthfan/nbsandbox/internal/api"
+	"github.com/azbyluthfan/nbsandbox/internal/audit"
 	"github.com/azbyluthfan/nbsandbox/internal/completions"
 	"github.com/azbyluthfan/nbsandbox/internal/isolation"
 	"github.com/azbyluthfan/nbsandbox/internal/runs"
@@ -97,6 +98,8 @@ func (s *server) CreateRun(ctx context.Context, req *connect.Request[pb.CreateRu
 	if err != nil {
 		return nil, s.toErr(err)
 	}
+	audit.SetTarget(ctx, v.ID)
+	audit.SetDetail(ctx, "notebook "+m.Notebook)
 	out, err := s.run(v)
 	if err != nil {
 		return nil, s.toErr(err)

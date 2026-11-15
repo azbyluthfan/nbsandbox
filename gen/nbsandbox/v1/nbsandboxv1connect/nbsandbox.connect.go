@@ -86,6 +86,21 @@ const (
 	// AdminServiceAdminDeleteSpaceProcedure is the fully-qualified name of the AdminService's
 	// AdminDeleteSpace RPC.
 	AdminServiceAdminDeleteSpaceProcedure = "/nbsandbox.v1.AdminService/AdminDeleteSpace"
+	// AdminServiceAdminListRunsProcedure is the fully-qualified name of the AdminService's
+	// AdminListRuns RPC.
+	AdminServiceAdminListRunsProcedure = "/nbsandbox.v1.AdminService/AdminListRuns"
+	// AdminServiceAdminCancelRunProcedure is the fully-qualified name of the AdminService's
+	// AdminCancelRun RPC.
+	AdminServiceAdminCancelRunProcedure = "/nbsandbox.v1.AdminService/AdminCancelRun"
+	// AdminServiceAdminGetDrainProcedure is the fully-qualified name of the AdminService's
+	// AdminGetDrain RPC.
+	AdminServiceAdminGetDrainProcedure = "/nbsandbox.v1.AdminService/AdminGetDrain"
+	// AdminServiceAdminSetDrainProcedure is the fully-qualified name of the AdminService's
+	// AdminSetDrain RPC.
+	AdminServiceAdminSetDrainProcedure = "/nbsandbox.v1.AdminService/AdminSetDrain"
+	// AdminServiceAdminListAuditProcedure is the fully-qualified name of the AdminService's
+	// AdminListAudit RPC.
+	AdminServiceAdminListAuditProcedure = "/nbsandbox.v1.AdminService/AdminListAudit"
 	// FunctionServiceListFunctionsProcedure is the fully-qualified name of the FunctionService's
 	// ListFunctions RPC.
 	FunctionServiceListFunctionsProcedure = "/nbsandbox.v1.FunctionService/ListFunctions"
@@ -526,6 +541,15 @@ type AdminServiceClient interface {
 	AdminListSpaces(context.Context, *connect.Request[v1.AdminListSpacesRequest]) (*connect.Response[v1.AdminListSpacesResponse], error)
 	AdminUpdateSpace(context.Context, *connect.Request[v1.AdminUpdateSpaceRequest]) (*connect.Response[v1.AdminSpace], error)
 	AdminDeleteSpace(context.Context, *connect.Request[v1.AdminDeleteSpaceRequest]) (*connect.Response[v1.AdminDeleteSpaceResponse], error)
+	// Every owner's runs, newest first (metadata only: no results).
+	AdminListRuns(context.Context, *connect.Request[v1.AdminListRunsRequest]) (*connect.Response[v1.AdminListRunsResponse], error)
+	// Stops any owner's run; cancelled_by is the administrator.
+	AdminCancelRun(context.Context, *connect.Request[v1.AdminCancelRunRequest]) (*connect.Response[v1.AdminRun], error)
+	// Draining: while on, no worker starts a queued run; running runs finish.
+	AdminGetDrain(context.Context, *connect.Request[v1.AdminGetDrainRequest]) (*connect.Response[v1.DrainState], error)
+	AdminSetDrain(context.Context, *connect.Request[v1.AdminSetDrainRequest]) (*connect.Response[v1.DrainState], error)
+	// The audit log, newest first.
+	AdminListAudit(context.Context, *connect.Request[v1.AdminListAuditRequest]) (*connect.Response[v1.AdminListAuditResponse], error)
 }
 
 // NewAdminServiceClient constructs a client for the nbsandbox.v1.AdminService service. By default,
@@ -557,6 +581,36 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(adminServiceMethods.ByName("AdminDeleteSpace")),
 			connect.WithClientOptions(opts...),
 		),
+		adminListRuns: connect.NewClient[v1.AdminListRunsRequest, v1.AdminListRunsResponse](
+			httpClient,
+			baseURL+AdminServiceAdminListRunsProcedure,
+			connect.WithSchema(adminServiceMethods.ByName("AdminListRuns")),
+			connect.WithClientOptions(opts...),
+		),
+		adminCancelRun: connect.NewClient[v1.AdminCancelRunRequest, v1.AdminRun](
+			httpClient,
+			baseURL+AdminServiceAdminCancelRunProcedure,
+			connect.WithSchema(adminServiceMethods.ByName("AdminCancelRun")),
+			connect.WithClientOptions(opts...),
+		),
+		adminGetDrain: connect.NewClient[v1.AdminGetDrainRequest, v1.DrainState](
+			httpClient,
+			baseURL+AdminServiceAdminGetDrainProcedure,
+			connect.WithSchema(adminServiceMethods.ByName("AdminGetDrain")),
+			connect.WithClientOptions(opts...),
+		),
+		adminSetDrain: connect.NewClient[v1.AdminSetDrainRequest, v1.DrainState](
+			httpClient,
+			baseURL+AdminServiceAdminSetDrainProcedure,
+			connect.WithSchema(adminServiceMethods.ByName("AdminSetDrain")),
+			connect.WithClientOptions(opts...),
+		),
+		adminListAudit: connect.NewClient[v1.AdminListAuditRequest, v1.AdminListAuditResponse](
+			httpClient,
+			baseURL+AdminServiceAdminListAuditProcedure,
+			connect.WithSchema(adminServiceMethods.ByName("AdminListAudit")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -565,6 +619,11 @@ type adminServiceClient struct {
 	adminListSpaces  *connect.Client[v1.AdminListSpacesRequest, v1.AdminListSpacesResponse]
 	adminUpdateSpace *connect.Client[v1.AdminUpdateSpaceRequest, v1.AdminSpace]
 	adminDeleteSpace *connect.Client[v1.AdminDeleteSpaceRequest, v1.AdminDeleteSpaceResponse]
+	adminListRuns    *connect.Client[v1.AdminListRunsRequest, v1.AdminListRunsResponse]
+	adminCancelRun   *connect.Client[v1.AdminCancelRunRequest, v1.AdminRun]
+	adminGetDrain    *connect.Client[v1.AdminGetDrainRequest, v1.DrainState]
+	adminSetDrain    *connect.Client[v1.AdminSetDrainRequest, v1.DrainState]
+	adminListAudit   *connect.Client[v1.AdminListAuditRequest, v1.AdminListAuditResponse]
 }
 
 // AdminListSpaces calls nbsandbox.v1.AdminService.AdminListSpaces.
@@ -582,11 +641,45 @@ func (c *adminServiceClient) AdminDeleteSpace(ctx context.Context, req *connect.
 	return c.adminDeleteSpace.CallUnary(ctx, req)
 }
 
+// AdminListRuns calls nbsandbox.v1.AdminService.AdminListRuns.
+func (c *adminServiceClient) AdminListRuns(ctx context.Context, req *connect.Request[v1.AdminListRunsRequest]) (*connect.Response[v1.AdminListRunsResponse], error) {
+	return c.adminListRuns.CallUnary(ctx, req)
+}
+
+// AdminCancelRun calls nbsandbox.v1.AdminService.AdminCancelRun.
+func (c *adminServiceClient) AdminCancelRun(ctx context.Context, req *connect.Request[v1.AdminCancelRunRequest]) (*connect.Response[v1.AdminRun], error) {
+	return c.adminCancelRun.CallUnary(ctx, req)
+}
+
+// AdminGetDrain calls nbsandbox.v1.AdminService.AdminGetDrain.
+func (c *adminServiceClient) AdminGetDrain(ctx context.Context, req *connect.Request[v1.AdminGetDrainRequest]) (*connect.Response[v1.DrainState], error) {
+	return c.adminGetDrain.CallUnary(ctx, req)
+}
+
+// AdminSetDrain calls nbsandbox.v1.AdminService.AdminSetDrain.
+func (c *adminServiceClient) AdminSetDrain(ctx context.Context, req *connect.Request[v1.AdminSetDrainRequest]) (*connect.Response[v1.DrainState], error) {
+	return c.adminSetDrain.CallUnary(ctx, req)
+}
+
+// AdminListAudit calls nbsandbox.v1.AdminService.AdminListAudit.
+func (c *adminServiceClient) AdminListAudit(ctx context.Context, req *connect.Request[v1.AdminListAuditRequest]) (*connect.Response[v1.AdminListAuditResponse], error) {
+	return c.adminListAudit.CallUnary(ctx, req)
+}
+
 // AdminServiceHandler is an implementation of the nbsandbox.v1.AdminService service.
 type AdminServiceHandler interface {
 	AdminListSpaces(context.Context, *connect.Request[v1.AdminListSpacesRequest]) (*connect.Response[v1.AdminListSpacesResponse], error)
 	AdminUpdateSpace(context.Context, *connect.Request[v1.AdminUpdateSpaceRequest]) (*connect.Response[v1.AdminSpace], error)
 	AdminDeleteSpace(context.Context, *connect.Request[v1.AdminDeleteSpaceRequest]) (*connect.Response[v1.AdminDeleteSpaceResponse], error)
+	// Every owner's runs, newest first (metadata only: no results).
+	AdminListRuns(context.Context, *connect.Request[v1.AdminListRunsRequest]) (*connect.Response[v1.AdminListRunsResponse], error)
+	// Stops any owner's run; cancelled_by is the administrator.
+	AdminCancelRun(context.Context, *connect.Request[v1.AdminCancelRunRequest]) (*connect.Response[v1.AdminRun], error)
+	// Draining: while on, no worker starts a queued run; running runs finish.
+	AdminGetDrain(context.Context, *connect.Request[v1.AdminGetDrainRequest]) (*connect.Response[v1.DrainState], error)
+	AdminSetDrain(context.Context, *connect.Request[v1.AdminSetDrainRequest]) (*connect.Response[v1.DrainState], error)
+	// The audit log, newest first.
+	AdminListAudit(context.Context, *connect.Request[v1.AdminListAuditRequest]) (*connect.Response[v1.AdminListAuditResponse], error)
 }
 
 // NewAdminServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -614,6 +707,36 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(adminServiceMethods.ByName("AdminDeleteSpace")),
 		connect.WithHandlerOptions(opts...),
 	)
+	adminServiceAdminListRunsHandler := connect.NewUnaryHandler(
+		AdminServiceAdminListRunsProcedure,
+		svc.AdminListRuns,
+		connect.WithSchema(adminServiceMethods.ByName("AdminListRuns")),
+		connect.WithHandlerOptions(opts...),
+	)
+	adminServiceAdminCancelRunHandler := connect.NewUnaryHandler(
+		AdminServiceAdminCancelRunProcedure,
+		svc.AdminCancelRun,
+		connect.WithSchema(adminServiceMethods.ByName("AdminCancelRun")),
+		connect.WithHandlerOptions(opts...),
+	)
+	adminServiceAdminGetDrainHandler := connect.NewUnaryHandler(
+		AdminServiceAdminGetDrainProcedure,
+		svc.AdminGetDrain,
+		connect.WithSchema(adminServiceMethods.ByName("AdminGetDrain")),
+		connect.WithHandlerOptions(opts...),
+	)
+	adminServiceAdminSetDrainHandler := connect.NewUnaryHandler(
+		AdminServiceAdminSetDrainProcedure,
+		svc.AdminSetDrain,
+		connect.WithSchema(adminServiceMethods.ByName("AdminSetDrain")),
+		connect.WithHandlerOptions(opts...),
+	)
+	adminServiceAdminListAuditHandler := connect.NewUnaryHandler(
+		AdminServiceAdminListAuditProcedure,
+		svc.AdminListAudit,
+		connect.WithSchema(adminServiceMethods.ByName("AdminListAudit")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/nbsandbox.v1.AdminService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AdminServiceAdminListSpacesProcedure:
@@ -622,6 +745,16 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 			adminServiceAdminUpdateSpaceHandler.ServeHTTP(w, r)
 		case AdminServiceAdminDeleteSpaceProcedure:
 			adminServiceAdminDeleteSpaceHandler.ServeHTTP(w, r)
+		case AdminServiceAdminListRunsProcedure:
+			adminServiceAdminListRunsHandler.ServeHTTP(w, r)
+		case AdminServiceAdminCancelRunProcedure:
+			adminServiceAdminCancelRunHandler.ServeHTTP(w, r)
+		case AdminServiceAdminGetDrainProcedure:
+			adminServiceAdminGetDrainHandler.ServeHTTP(w, r)
+		case AdminServiceAdminSetDrainProcedure:
+			adminServiceAdminSetDrainHandler.ServeHTTP(w, r)
+		case AdminServiceAdminListAuditProcedure:
+			adminServiceAdminListAuditHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -641,6 +774,26 @@ func (UnimplementedAdminServiceHandler) AdminUpdateSpace(context.Context, *conne
 
 func (UnimplementedAdminServiceHandler) AdminDeleteSpace(context.Context, *connect.Request[v1.AdminDeleteSpaceRequest]) (*connect.Response[v1.AdminDeleteSpaceResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.AdminService.AdminDeleteSpace is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) AdminListRuns(context.Context, *connect.Request[v1.AdminListRunsRequest]) (*connect.Response[v1.AdminListRunsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.AdminService.AdminListRuns is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) AdminCancelRun(context.Context, *connect.Request[v1.AdminCancelRunRequest]) (*connect.Response[v1.AdminRun], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.AdminService.AdminCancelRun is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) AdminGetDrain(context.Context, *connect.Request[v1.AdminGetDrainRequest]) (*connect.Response[v1.DrainState], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.AdminService.AdminGetDrain is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) AdminSetDrain(context.Context, *connect.Request[v1.AdminSetDrainRequest]) (*connect.Response[v1.DrainState], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.AdminService.AdminSetDrain is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) AdminListAudit(context.Context, *connect.Request[v1.AdminListAuditRequest]) (*connect.Response[v1.AdminListAuditResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.AdminService.AdminListAudit is not implemented"))
 }
 
 // FunctionServiceClient is a client for the nbsandbox.v1.FunctionService service.

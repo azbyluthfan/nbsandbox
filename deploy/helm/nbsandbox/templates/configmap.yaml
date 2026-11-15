@@ -35,6 +35,10 @@ data:
       lease: {{ .Values.runs.lease | quote }}
     functions:
       require_schemas: {{ .Values.functions.requireSchemas }}
+    audit:
+      enabled: {{ .Values.audit.enabled }}
+      retention: {{ .Values.audit.retention | quote }}
+      downloads: {{ .Values.audit.downloads }}
     {{- if .Values.ui.enabled }}
     ui:
       enabled: true

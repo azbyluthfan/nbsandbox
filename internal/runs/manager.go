@@ -437,6 +437,12 @@ func (m *Manager) Cancel(ctx context.Context, owner, spaceID, runID, by, reason 
 	if err != nil {
 		return View{}, err
 	}
+	return m.cancel(ctx, r, by, reason)
+}
+
+// cancel cancels the run r (whose owner the caller has checked).
+func (m *Manager) cancel(ctx context.Context, r store.Run, by, reason string) (View, error) {
+	owner, spaceID, runID := r.Owner, r.SpaceID, r.ID
 	if r.Terminal() {
 		return View{}, ErrAlreadyFinished
 	}

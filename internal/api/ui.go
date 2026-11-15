@@ -6,6 +6,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/azbyluthfan/nbsandbox/internal/audit"
 	"github.com/azbyluthfan/nbsandbox/internal/auth"
 	"github.com/azbyluthfan/nbsandbox/internal/uiauth"
 )
@@ -55,6 +56,7 @@ func NewUIHandler(d Deps, static http.Handler, sessions *uiauth.Service) http.Ha
 	mux.Handle("/", static)
 
 	var h http.Handler = mux
+	h = uiContext(d, h)
 	h = recoverPanics(h)
 	h = observe(d, h)
 	return h
@@ -69,5 +71,19 @@ func actAs(users *auth.Users, next http.Handler) http.Handler {
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(auth.WithUser(r.Context(), u)))
+	})
+}
+
+// uiContext marks requests as the web UI's for the audit log, with the
+// client's address (through trusted proxies, as on the API's port).
+func uiContext(d Deps, next http.Handler) http.Handler {
+	var trusted *auth.TrustedProxies
+	if d.Auth != nil {
+		trusted = d.Auth.TrustedProxies
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := audit.WithVia(r.Context(), "ui")
+		ctx = auth.WithClientAddr(ctx, auth.ClientIP(ctx, r.RemoteAddr, r.Header, trusted))
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

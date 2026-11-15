@@ -19,6 +19,28 @@ compose() { sudo docker compose -f deploy/docker-compose.yml --env-file deploy/.
   ```
   `deploy/observability/alerts.yml` alerts on nbsandboxd being down, Docker unreachable, a queue backlog, platform errors, and waves of out-of-memory runs. `deploy/observability/grafana-dashboard.json` is an example dashboard: import it into Grafana with a Prometheus data source. `nbsandbox_run_phase_seconds` breaks each run's time down by phase (queued, prepare, container start, kernel start, execute, render, teardown, record); a run's own breakdown is in its result's `usage.phases_seconds`.
 - **Logs:** `compose logs -f nbsandboxd` gives JSON lines. Every run line carries `run_id` and `space_id`; credentials and parameter values are never logged.
+- **Audit log failures:** `nbsandbox_audit_failures_total` counts audit rows that couldn't be written (each is also logged as an error). It should stay at 0.
+
+## Audit log
+
+nbsandboxd records who did what, when, and how it ended:
+- **every change:** spaces, files, folders, functions, invocations, runs, promoted artifacts;
+- **every download:** files, and a run's notebook, HTML, artifacts and log (`audit.downloads`);
+- **every administrative operation,** reading the audit log included;
+- **web UI sign-ins and sign-outs.**
+
+Refused attempts are recorded too (a `403`, or a `404` on someone else's space), so probing shows up. Listings and live streams are not recorded. Neither are requests without valid credentials: the service log has those, with the reason.
+
+Each row has the time, the caller ID, how they signed in (`basic` or `oidc`), the token's application, the transport (`rest`, `grpc` or `ui`), the operation, the space, what it acted on (a path, a run, `function@version`), a detail (a created run's notebook, a move's destination, a new owner), the HTTP status (gRPC codes mapped), and the client's address.
+
+```bash
+curl -su root "https://$HOST/v1/admin/audit?actor=alice&since=2026-11-01T00:00:00Z" | jq '.items[] | [.at, .action, .space_id, .target, .status] | @tsv'
+curl -su root "https://$HOST/v1/admin/audit?space=<space id>&action=DeleteFile"
+```
+
+Filters: `actor`, `space`, `action`, `since`, `until` (RFC 3339); newest first, with `limit` and `cursor`. gRPC: `AdminService.AdminListAudit`. Each row also goes to the service log as a JSON line with `"msg":"audit"`, for a log shipper (Loki, Elasticsearch, a SIEM) that keeps it longer.
+
+Rows are kept for `audit.retention` (90 days by default) and removed by the hourly cleanup. Turn recording off with `audit.enabled: false`; the rows already kept stay readable until they expire. A row that can't be written never fails the request: it is logged as an error and counted (`nbsandbox_audit_failures_total`).
 
 ## Backup
 
@@ -65,8 +87,13 @@ Runs that were active when the backup was taken end as `interrupted` when nbsand
 
 1. Read the release notes and [CHANGELOG.md](../CHANGELOG.md).
 2. **Back up first** (see above).
-3. Check out the new release and update `NBSANDBOX_IMAGE` and `NBSANDBOX_RUNNER_IMAGE` in `deploy/.env`.
-4. Pull and restart:
+3. **Optional: drain**, so no run is interrupted: no queued run starts, running ones finish, and new runs still queue. Wait until `running_runs` is 0. The drain is stored in the database, so it holds across the restart; resume afterwards (step 7). A long drain may set off the queue-backlog alert.
+   ```bash
+   curl -su root -X PUT "https://$HOST/v1/admin/drain" -H 'Content-Type: application/json' -d '{"draining":true,"reason":"upgrade to 0.2.0"}'
+   curl -su root "https://$HOST/v1/admin/drain"     # {"draining":true, ..., "queued_runs":3,"running_runs":0}
+   ```
+4. Check out the new release and update `NBSANDBOX_IMAGE` and `NBSANDBOX_RUNNER_IMAGE` in `deploy/.env`.
+5. Pull and restart:
    ```bash
    sudo docker pull <new nbsandboxd and runner images>
    compose up -d --wait
@@ -74,7 +101,8 @@ Runs that were active when the backup was taken end as `interrupted` when nbsand
    - **Database migrations** run automatically at startup, inside a transaction each.
    - **Active runs:** nbsandboxd is stopped gracefully (`shutdown_grace`, 60 s by default). Runs still active after that end as `interrupted`, and queued runs stay queued and start after the upgrade.
    - **A new runner image** applies to runs started after the restart. Runs never switch images half-way.
-5. If the new nbsandboxd reports `runner_image` as not ready, the runner image's status format isn't supported by this nbsandboxd. Use the runner image from the same release.
+6. If the new nbsandboxd reports `runner_image` as not ready, the runner image's status format isn't supported by this nbsandboxd. Use the runner image from the same release.
+7. **If you drained, resume:** `curl -su root -X PUT "https://$HOST/v1/admin/drain" -H 'Content-Type: application/json' -d '{"draining":false}'`. The queued runs start.
 
 ## Runner image
 
@@ -118,6 +146,11 @@ Retention (`runs.retention`, 30 days) deletes old runs automatically. Raise `run
 - **Symptom:** `/readyz` says `data_dir: only N MiB free`; uploads or runs fail.
 - **Check:** `df -h /srv/nbsandbox` (working copies of active runs) and `sudo docker system df -v | grep -E 'nbsandbox_(objects|pgdata)'` (the object store and the database). `GET /v1/admin/spaces` lists every owner's spaces; `GET /v1/spaces/{id}` shows a space's usage to its owner.
 - **Fix:** lower `runs.retention` (old runs and their outputs go, and contents nothing refers to any more are removed an hour later), ask users to delete old runs or spaces, or grow the disk. Docker images can be pruned with `docker image prune` (not the runner image in use).
+
+### A runaway run
+
+- **Find it:** `GET /v1/admin/runs?status=running` lists every owner's running runs, with the owner and start time (metadata only: administrators don't see results or outputs).
+- **Stop it:** `POST /v1/admin/runs/{run_id}/cancel` with `{"reason": "..."}`. The owner sees `cancelled_by` (the administrator) and the reason on the run. The cancel is in the audit log.
 
 ### Queue backlog
 - **Symptom:** alert `NbsandboxQueueBacklog`.
