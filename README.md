@@ -102,7 +102,7 @@ Read [docs/security/threat-model.md](docs/security/threat-model.md) before deplo
 | [examples/](examples/) | Complete clients (Python, Go) that run a notebook and call a function |
 | [docs/deployment.md](docs/deployment.md), [docs/kubernetes.md](docs/kubernetes.md), [docs/scaling.md](docs/scaling.md), [docs/gvisor.md](docs/gvisor.md) | Installing it |
 | [docs/operations.md](docs/operations.md) | Running it: monitoring, backups, upgrades, runbooks |
-| [docs/isolation-report.md](docs/isolation-report.md), [docs/isolation-report-linux.md](docs/isolation-report-linux.md), [docs/isolation-report-kubernetes.md](docs/isolation-report-kubernetes.md) | What the isolation tests found |
+| [docs/isolation-report.md](docs/isolation-report.md), [docs/isolation-report-linux.md](docs/isolation-report-linux.md), [docs/isolation-report-kubernetes.md](docs/isolation-report-kubernetes.md) | What the isolation tests found; [docs/check-deployment.md](docs/check-deployment.md) produces the same report for your own deployment |
 | [docs/security/threat-model.md](docs/security/threat-model.md), [docs/security/review.md](docs/security/review.md) | What nbsandbox protects against, and the latest security review |
 | [docs/perf.md](docs/perf.md) | Performance measurements and soak tests |
 | [docs/releasing.md](docs/releasing.md), [CHANGELOG.md](CHANGELOG.md), [ROADMAP.md](ROADMAP.md) | Versions and what's next |

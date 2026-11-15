@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Command nbsandbox-report renders docs/isolation-report.md from the findings
-// the integration tests write.
+// the integration tests write, or checks a running deployment through its
+// API and writes that deployment's report.
 //
 //	nbsandbox-report -in bin/findings -out docs/isolation-report.md [-require]
+//	nbsandbox-report check -url https://nbsandbox.example.com -user-a alice -user-b bob
 package main
 
 import (
@@ -17,6 +19,9 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "check" {
+		os.Exit(runCheckCommand(os.Args[2:]))
+	}
 	in := flag.String("in", "bin/findings", "findings directory (<runtime>/<ID>.json)")
 	out := flag.String("out", "docs/isolation-report.md", "report file")
 	require := flag.Bool("require", false, "fail if a required test is missing or failed")

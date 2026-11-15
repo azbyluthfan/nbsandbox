@@ -126,6 +126,8 @@ sudo NBSANDBOX_DATA_DIR=/srv/nbsandbox-test NBSANDBOX_PORT=18080 NBSANDBOX_UI_PO
 sudo NBSANDBOX_DATA_DIR=/srv/nbsandbox-test make down
 ```
 
+To check the running production deployment itself, through its API and without a second stack, use [`nbsandbox-report check`](check-deployment.md) with two user accounts. It covers the isolation, resource and failure checks; the tests that restart services stay in `make report`.
+
 ## Next
 
 - **Operations:** monitoring, backups, upgrades and runbooks are in [operations.md](operations.md).

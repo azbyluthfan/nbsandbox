@@ -9,9 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -186,33 +184,6 @@ func TestDeleteSpace(t *testing.T) {
 	assertNoRunContainers(t)
 }
 
-// Cancel during a long-running cell.
-func TestCancelRunning(t *testing.T) {
-	sp := space(t, "alice")
-	upload(t, "alice", sp, "", map[string]string{"long.ipynb": ""})
-	run := startRun(t, "alice", sp, "long.ipynb", nil)
-	waitLog(t, "alice", sp, run.ID, "tick 3", time.Minute)
-	start := time.Now()
-	if r := call(t, "POST", "/v1/spaces/"+sp+"/runs/"+run.ID+"/cancel", "alice", nil, nil); r.Code != http.StatusAccepted {
-		t.Fatalf("cancel: %d %s", r.Code, r.Body)
-	}
-	run = waitRun(t, "alice", sp, run.ID, 30*time.Second)
-	took := time.Since(start)
-	gone := len(runContainers(t)) == 0
-	// On Kubernetes, signalling the runner and copying its outputs out each
-	// go through pods/exec, and the kubelet reports the stop a little late.
-	margin := 5 * time.Second
-	if onKubernetes {
-		margin = 15 * time.Second
-	}
-	ok := run.Status == "cancelled" && run.Result != nil && run.Result.Partial && gone && took < 5*time.Second+margin
-	finding(t, "cancel-running", "cancel during a long cell", fmt.Sprintf("container gone within grace + %s; cancelled; partial output", margin),
-		fmt.Sprintf("%s in %.1fs, partial %v, container gone %v", run.Status, took.Seconds(), run.Result != nil && run.Result.Partial, gone), ok)
-	if !ok {
-		t.Fatalf("run %+v", run)
-	}
-}
-
 // Cancel a queued run.
 func TestCancelQueued(t *testing.T) {
 	var busy []string
@@ -241,91 +212,6 @@ func TestCancelQueued(t *testing.T) {
 	}
 }
 
-// Cancel at the moment of completion, repeatedly. The
-// 200-round version runs as a unit test with exact timing control
-// (internal/runs TestCancelCompletionRace); here a few rounds with real
-// containers check the API, result.json and the log agree.
-func TestCancelAtCompletion(t *testing.T) {
-	sp := space(t, "alice")
-	upload(t, "alice", sp, "", map[string]string{"smoke.ipynb": ""})
-	counts := map[string]int{}
-	consistent := true
-	for i := 0; i < 5; i++ {
-		run := startRun(t, "alice", sp, "smoke.ipynb", nil)
-		waitLog(t, "alice", sp, run.ID, "artifacts written", time.Minute) // the last cell
-		call(t, "POST", "/v1/spaces/"+sp+"/runs/"+run.ID+"/cancel", "alice", nil, nil)
-		run = waitRun(t, "alice", sp, run.ID, time.Minute)
-		log := string(call(t, "GET", "/v1/spaces/"+sp+"/runs/"+run.ID+"/log", "alice", nil, nil).Body)
-		if run.Result == nil || run.Result.Status != run.Status || !strings.Contains(log, "run finished: "+run.Status) {
-			consistent = false
-			t.Errorf("round %d: api %s, result %+v, log tail %q", i, run.Status, run.Result, log[max(0, len(log)-80):])
-		}
-		counts[run.Status]++
-	}
-	finding(t, "cancel-at-completion", "cancel right as the last cell finishes (5 rounds; 200 in the unit test)",
-		"exactly one terminal status, the same in API, result.json and log", fmt.Sprintf("%v, consistent %v", counts, consistent), consistent)
-}
-
-// The caller disconnects right after submitting.
-func TestCallerDisconnects(t *testing.T) {
-	sp := space(t, "alice")
-	upload(t, "alice", sp, "", map[string]string{"smoke.ipynb": ""})
-	u, _ := url.Parse(baseURL)
-	conn, err := net.Dial("tcp", u.Host)
-	if err != nil {
-		t.Fatal(err)
-	}
-	body := `{"notebook":"smoke.ipynb"}`
-	req, _ := http.NewRequest("POST", baseURL+"/v1/spaces/"+sp+"/runs", strings.NewReader(body))
-	req.SetBasicAuth("alice", passwords["alice"])
-	req.Header.Set("Content-Type", "application/json")
-	_ = req.Write(conn)
-	_ = conn.Close() // gone before reading the answer
-	var list struct{ Items []Run }
-	deadline := time.Now().Add(30 * time.Second)
-	for len(list.Items) == 0 && time.Now().Before(deadline) {
-		time.Sleep(200 * time.Millisecond)
-		call(t, "GET", "/v1/spaces/"+sp+"/runs", "alice", nil, nil).json(t, &list)
-	}
-	if len(list.Items) == 0 {
-		t.Fatal("run was never created")
-	}
-	run := waitRun(t, "alice", sp, list.Items[0].ID, 2*time.Minute)
-	finding(t, "caller-disconnect", "caller disconnects right after submitting", "run completes normally", run.Status, run.Status == "succeeded")
-	if run.Status != "succeeded" {
-		t.Fatalf("run %+v", run)
-	}
-}
-
-func singleRun(t *testing.T, notebook string) Run {
-	t.Helper()
-	sp := space(t, "alice")
-	upload(t, "alice", sp, "", map[string]string{notebook: ""})
-	return waitRun(t, "alice", sp, startRun(t, "alice", sp, notebook, nil).ID, 2*time.Minute)
-}
-
-// A crash in a C extension.
-func TestKernelCrash(t *testing.T) {
-	run := singleRun(t, "crash.ipynb")
-	ok := run.Status == "kernel_died" && run.Fault == "notebook"
-	finding(t, "kernel-crash", "crash in a C extension (ctypes)", "kernel_died", run.Status, ok)
-	if !ok {
-		t.Fatalf("run %+v", run)
-	}
-}
-
-// An exception in cell 3.
-func TestExceptionInCell3(t *testing.T) {
-	run := singleRun(t, "fail_cell3.ipynb")
-	e := run.Result.Error
-	ok := run.Status == "failed" && e != nil && e.CellIndex != nil && *e.CellIndex == 3 && e.ExceptionType == "ValueError" &&
-		strings.Contains(e.Message, "boom in cell 3")
-	finding(t, "cell-exception", "exception raised in cell 3", "failed, cell 3, ValueError", fmt.Sprintf("%s %+v", run.Status, e), ok)
-	if !ok {
-		t.Fatalf("run %+v", run)
-	}
-}
-
 // Docker (the socket proxy) goes away mid-run.
 func TestDockerProxyStopsMidRun(t *testing.T) {
 	needCompose(t)
@@ -349,17 +235,6 @@ func TestDockerProxyStopsMidRun(t *testing.T) {
 		(submitWhileDown == http.StatusServiceUnavailable || submitWhileDown == http.StatusConflict)
 	finding(t, "docker-lost-mid-run", "Docker proxy stopped mid-run", "platform_error or interrupted, never a notebook fault; container cleaned up",
 		fmt.Sprintf("%s (%s, fault %s); readyz down %v; submit while down %d", run.Status, run.ErrorKind, run.Fault, notReady, submitWhileDown), ok)
-	if !ok {
-		t.Fatalf("run %+v", run)
-	}
-}
-
-// HTML rendering fails on a successful run.
-func TestRenderFails(t *testing.T) {
-	run := singleRun(t, "render_fail.ipynb")
-	ok := run.Status == "succeeded" && run.Result != nil && !run.Result.Rendered
-	finding(t, "render-failure", "HTML rendering fails on a successful run", "succeeded, rendered false",
-		fmt.Sprintf("%s, rendered %v", run.Status, run.Result != nil && run.Result.Rendered), ok)
 	if !ok {
 		t.Fatalf("run %+v", run)
 	}

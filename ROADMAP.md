@@ -15,10 +15,13 @@ The first release covers what was planned as v0.1 to v0.4, plus scaling out and 
 - **Local web editor:** completion and documentation from the runner image's packages.
 - **Isolation reports** for Docker, Linux with `runc` and gVisor, and Kubernetes with both runtimes.
 
+## Since v0.1.0 (not released yet)
+
+- **Check your deployment:** `nbsandbox-report check` produces the isolation report for any running deployment, Docker or Kubernetes ([check-deployment.md](docs/check-deployment.md)). Kubernetes 1.34 to 1.37 are supported, the ends tested weekly.
+
 ## Next
 
 - **Authentication against real identity providers.** Token checking, scopes and on-behalf-of calls are built and unit-tested against a local issuer; next, end-to-end tests with Entra ID and Keycloak, and a guide for each.
-- **"Check this cluster".** A command that runs the network probe and the isolation checks inside a target Kubernetes cluster and writes its own report, so every deployment, not only kind, has evidence. With it, decide which Kubernetes versions are supported.
 - **Sandboxes on real clusters.** Run the suite under GKE Sandbox (gVisor) and AKS Pod Sandboxing (Kata), and add a GKE Terraform example beside the AKS one.
 - **Fast starts (≤ 1 s).** Today a run spends about 3–5 s (about a second more under gVisor) before its first cell, almost all of it starting a fresh container and Python kernel. Cut it while keeping a fresh container per run:
   - skip work at start (render HTML after the result, lighter imports, run nbclient directly instead of papermill);

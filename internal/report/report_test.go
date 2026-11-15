@@ -75,3 +75,29 @@ func TestRedact(t *testing.T) {
 	}
 	Redact(runs, "", "~") // nothing to replace
 }
+
+func TestCheckedDeployment(t *testing.T) {
+	r := Run{Runtime: "runc", Findings: map[string]Finding{},
+		Facts: Facts{Backend: "kubernetes", Checked: "https://nbsandbox.example.com", Cluster: "Kubernetes v1.33.1; NetworkPolicies in nbsandbox-runs: deny-all",
+			NotChecked:       map[string]string{"cancel-queued": "needs every run slot busy"},
+			NbsandboxRuntime: map[string]any{"docker": map[string]any{"version": "v1.33.1", "operating_system": "Kubernetes linux/amd64"}}}}
+	for _, id := range Required {
+		if id != "cancel-queued" && id != "docker-lost-mid-run" {
+			r.Findings[id] = Finding{ID: id, Pass: true, Observed: "ok"}
+		}
+	}
+	if m := r.Missing(); len(m) != 0 {
+		t.Fatalf("missing %v: not-checked and not-on-Kubernetes findings don't count", m)
+	}
+	var b strings.Builder
+	if err := RenderFor(&b, []Run{r}, time.Now(), "nbsandbox-report check"); err != nil {
+		t.Fatal(err)
+	}
+	out := b.String()
+	for _, want := range []string{"# nbsandbox Isolation Report: https://nbsandbox.example.com", "checks run through the deployment's API",
+		"**this deployment**, checked through its API", "Cluster: Kubernetes v1.33.1", "## Not checked here (runc)", "**cancel-queued**: needs every run slot busy"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("report lacks %q", want)
+		}
+	}
+}
