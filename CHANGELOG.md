@@ -4,6 +4,10 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+### Security
+
+- **tornado 6.6.1 in the runner image** (was 6.6): an incomplete fix for an open redirect in tornado's `RedirectHandler` ([GHSA-pw9p-v7r6-gx4p](https://github.com/advisories/GHSA-pw9p-v7r6-gx4p) and its follow-up). The runner doesn't serve HTTP (tornado is there for the Jupyter kernel, and runs have no network), so it wasn't reachable; updated anyway.
+
 ### Changed
 
 - **Faster results: rendering `output.html` takes about 0.1 s instead of 1 s.** The runner renders with nbconvert's library, warmed up in the background while the kernel starts, instead of starting a new `python -m nbconvert` (same HTML, same 5-minute limit; a failure still leaves `rendered: false`). A small call on Docker: 2.9 s → 2.5 s ([docs/perf.md](docs/perf.md#starting-a-run)).
