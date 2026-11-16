@@ -74,12 +74,12 @@ variable "pod_sandboxing" {
 
 variable "nbsandbox_image" {
   type    = string
-  default = "ghcr.io/azbyluthfan/nbsandboxd:0.2.0"
+  default = "ghcr.io/azbyluthfan/nbsandboxd:0.2.1"
 }
 
 variable "runner_image" {
   type    = string
-  default = "ghcr.io/azbyluthfan/nbsandbox-runner:0.2.0"
+  default = "ghcr.io/azbyluthfan/nbsandbox-runner:0.2.1"
 }
 
 variable "api_replicas" {

@@ -4,6 +4,16 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-16
+
+### Fixed
+
+- **The published runner images work with the Docker backend.** Every runner image on GHCR up to 0.2.0 (`ghcr.io/azbyluthfan/nbsandbox-runner:0.1.0` to `0.2.0`) had a broken `io.nbsandbox.manifest` label: the release workflow passed it through an input that is parsed as CSV, which stripped quotes inside the JSON. nbsandboxd refused those images (`/readyz`: `runner image manifest is not valid JSON`), so a deployment that pulled the published runner image never became ready. Images built with `make runner-image`, and the Kubernetes backend (which reads the manifest from the image itself), weren't affected. The release workflow now sets the label directly and checks it on the published image for both platforms.
+
+### Upgrading from 0.2.0
+
+- Nothing to change besides the version: use the 0.2.1 images (nbsandboxd, the runner and the builder) and chart. The code is the same as 0.2.0.
+
 ## [0.2.0] - 2026-11-15
 
 ### Upgrading from 0.1.2

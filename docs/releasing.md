@@ -34,17 +34,17 @@ Before v1.0, a minor version may change behaviour; changes are listed in the cha
    ```
 8. **The release workflow** (`.github/workflows/release.yml`) then:
    - runs `make report`: the full integration suite. The release stops if a required test is missing or failing;
-   - builds and pushes multi-arch (amd64, arm64) images for nbsandboxd and the runner, with SBOMs and provenance, and signs them with cosign (keyless);
+   - builds and pushes multi-arch (amd64, arm64) images for nbsandboxd, the runner and its builder, with SBOMs and provenance, checks the published runner image's manifest label for both platforms (`scripts/check-runner-label.py`), and signs them with cosign (keyless);
    - packages the Helm chart and pushes it to `oci://ghcr.io/azbyluthfan/charts`, signed with cosign;
    - builds the binaries with GoReleaser, with checksums, SBOMs and a signed checksum file;
    - creates the GitHub release with the changelog and **this commit's isolation report** attached.
-9. **Check the release:** verify the signatures (the same for `nbsandbox-runner` and `charts/nbsandbox`):
+9. **Check the release:** verify the signatures (the same for `nbsandbox-runner`, `nbsandbox-runner-builder` and `charts/nbsandbox`):
    ```bash
    cosign verify ghcr.io/azbyluthfan/nbsandboxd:X.Y.Z \
      --certificate-identity-regexp 'https://github.com/azbyluthfan/nbsandbox/' \
      --certificate-oidc-issuer https://token.actions.githubusercontent.com
    ```
-   Then deploy to a test host following [deployment.md](deployment.md).
+   Then deploy to a test host following [deployment.md](deployment.md), with the published images: the tests before it all use images built from source, so this is the only check of what users pull.
 
 ## Security fixes
 
