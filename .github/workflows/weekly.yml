@@ -10,7 +10,10 @@
 #     gVisor RuntimeClass: the isolation report;
 #   - every fuzz target for a few minutes;
 #   - a security scan (govulncheck, and Trivy on the three images), which reports
-#     newly published advisories even in weeks without commits.
+#     newly published advisories even in weeks without commits;
+#   - the latest release as published: deployed from GHCR as
+#     docs/deployment.md does, with notebooks run through it (every other job
+#     builds the images from source).
 # A failure opens an issue. Also runs from the Actions tab ("Run workflow"),
 # e.g. before a release.
 
@@ -153,6 +156,17 @@ jobs:
               image --quiet --severity HIGH,CRITICAL --ignore-unfixed --ignorefile /.trivyignore --exit-code 1 "$image"
           done
 
+  published:
+    name: Latest release as published (GHCR images, deployment guide)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0 # the release tags
+      - name: Deploy the newest release's published images and run notebooks
+        run: scripts/check-published.sh
+
   keycloak:
     name: Keycloak (end-to-end auth)
     runs-on: ubuntu-24.04
@@ -178,7 +192,7 @@ jobs:
         run: docker compose -f deploy/docker-compose.dev.yml -f deploy/docker-compose.keycloak.yml logs --no-color | tail -300
 
   report-failure:
-    needs: [docker, kubernetes, keycloak, fuzz, security]
+    needs: [docker, kubernetes, keycloak, fuzz, security, published]
     if: failure()
     runs-on: ubuntu-24.04
     steps:

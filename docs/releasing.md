@@ -44,7 +44,11 @@ Before v1.0, a minor version may change behaviour; changes are listed in the cha
      --certificate-identity-regexp 'https://github.com/azbyluthfan/nbsandbox/' \
      --certificate-oidc-issuer https://token.actions.githubusercontent.com
    ```
-   Then deploy to a test host following [deployment.md](deployment.md), with the published images: the tests before it all use images built from source, so this is the only check of what users pull.
+   Then check the published release itself: the tests before it all use images built from source, so this is the only check of what users pull. On any Docker host:
+   ```bash
+   scripts/check-published.sh X.Y.Z
+   ```
+   It deploys that release from its tag with the images on GHCR, as [deployment.md](deployment.md) does (pulled without a login, so they must be public), and runs the smoke notebook and a package set build through Caddy. The weekly workflow repeats it for the newest release.
 
 ## Security fixes
 
