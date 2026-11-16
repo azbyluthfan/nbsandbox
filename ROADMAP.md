@@ -39,6 +39,10 @@ Security and operations for real deployments, and a space's own packages. The [C
 - **Audit log and admin operations:** who did what, when and from where, for every change, download and administrative operation; administrators list and stop any run, and drain the workers before maintenance ([operations.md](docs/operations.md#audit-log)).
 - **Web UI login:** the editor is usable beyond one's own machine. Users sign in with the identity provider (or `users.yaml`) and are the same caller as through the API; server-side sessions; served at the domain's root by Caddy or the Ingress ([auth.md](docs/auth.md#signing-in-to-the-web-ui)).
 
+## Released in v0.2.1
+
+A patch release: the runner images published on GHCR up to 0.2.0 had a broken manifest label, so nbsandboxd's Docker backend refused them; 0.2.1 fixes the release workflow and checks the published label. A weekly job now deploys the newest release from its published images, as [deployment.md](docs/deployment.md) does, and runs notebooks through it (`scripts/check-published.sh`).
+
 ## Next
 
 - **Interactive mode.** Designed and agreed: run cells live in the editor, with autocomplete, signatures and docs from the live kernel (`df.` lists the columns). A kernel per notebook in a long-lived container with a run's isolation (no network), reached over its stdio and proxied as Jupyter messages over a WebSocket. Docker first, Kubernetes after.

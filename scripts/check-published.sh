@@ -44,7 +44,7 @@ compose() { docker compose -p "$PROJECT" -f "$SRC/deploy/docker-compose.yml" --e
 
 cleanup() {
 	status=$?
-	if [ $status -ne 0 ] && [ -f "$SRC/deploy/.env" ]; then
+	if [ $status -ne 0 ] && [ -f "$SRC/deploy/.env" ] && [ -n "$(compose ps -aq 2>/dev/null)" ]; then
 		step "FAILED: the stack's logs"
 		compose logs --no-color 2>&1 | tail -150 || true
 		step "FAILED: nbsandboxd's readiness checks"
@@ -60,6 +60,7 @@ trap cleanup EXIT
 step "Release v$VERSION, from its tag"
 git worktree add -q --detach "$SRC" "v$VERSION"
 mkdir -p "$WORK/srv" "$WORK/etc"
+chmod 700 "$WORK/srv" # as the provisioning script makes it; preflight checks it on Linux
 
 step "Published images (anonymous pulls: they must be public)"
 # An empty Docker config has no registry logins; keep the current daemon.
