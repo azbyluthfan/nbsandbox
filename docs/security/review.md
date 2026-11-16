@@ -2,6 +2,10 @@
 
 **2026-11-08, before the first v0.x release.** What was checked, what was found, and what was done about each finding. Repeat it before each release (the commands are at the end). The [threat model](threat-model.md) describes what nbsandbox protects against; this page is the evidence that it was checked.
 
+## v0.2.1 (2026-11-16)
+
+A release workflow fix only (the runner image's manifest label); the code, the dependencies and the pinned base images are those of 0.2.0, so the v0.2.0 review below applies.
+
 ## The review for v0.2.0 (2026-11-15)
 
 | Area | Result |
