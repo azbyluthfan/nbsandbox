@@ -62,7 +62,7 @@ The smoke notebook on Docker Desktop: about 3.7 s of container time, about 300 M
 
 ## Soak tests
 
-A soak runs a mix of notebooks for a long time (succeeding, failing, crashing the kernel, streaming, cancelled) and fails on steady growth of goroutines, open files, memory, disk or leftover containers; cleanup timers are shortened so every cleanup path runs many times. `make soak` (45 minutes; 3 hours before a release), `make soak-cluster` and `make soak-k8s` sample every process.
+A soak runs a mix of notebooks for a long time (succeeding, failing, crashing the kernel, streaming, cancelled) and fails on steady growth of goroutines, open files, memory, disk or leftover containers; cleanup timers are shortened so every cleanup path runs many times. `make soak` (45 minutes, weekly; a 12 h soak before a minor or major release, [releasing.md](releasing.md)), `make soak-cluster` and `make soak-k8s` sample every process.
 
 | Date | Stack | Duration | Runs | Result |
 |---|---|---|---|---|
@@ -70,3 +70,4 @@ A soak runs a mix of notebooks for a long time (succeeding, failing, crashing th
 | 2026-11-08 | One process, Docker Desktop | 45 min, 4 spaces at once | 1,676 | passed: goroutines −8.0/h, open files −3.0/h, memory +0.8 MiB/h; every cleanup check passed |
 | 2026-11-08 | Two API processes and two workers, Docker Compose | 45 min | 1,792 | passed: worst trends goroutines +0.4/h, open files +0.7/h, memory +1.3 MiB/h |
 | 2026-11-08 | Kubernetes in kind (Cilium), two API processes and two workers | 45 min | 70 (run Pods reserve their memory, so two at a time) | passed: worst trends goroutines +4.1/h, open files +1.3/h, memory −34.6 MiB/h; few runs for a leak check, so rerun it on a real cluster |
+| 2026-11-15/16 (v0.2.0) | One process, Docker Desktop (4 CPUs, 3 GB) | 12 h, 4 spaces at once | 25,060 | passed: worst trends goroutines +0.0/h, open files −0.0/h, memory −2.6 MiB/h; at the end 31 goroutines, 21 open files, 54 MiB, no containers left; stored data flat at 174 MiB (not judged: the test judges data only past the retention plus two cleanups) |
