@@ -4,6 +4,10 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+### Fixed
+
+- **Kubernetes: a run could stay `running` for good,** past its time limit and any cancel, with its Pod left behind. Copying a run's files into its Pod ignored the run's end, and an exec into the Pod could block forever while client-go closed a stalled connection. Both now end with the run (abandoning a stuck exec), so the run stops and its Pod is removed. Seen once under the weekly CPU-fairness check.
+
 ### Added
 
 - **A check of the published release** (`scripts/check-published.sh`): deploys a release from GHCR as `docs/deployment.md` does and runs notebooks through it. Weekly for the newest release, and part of the release checklist.

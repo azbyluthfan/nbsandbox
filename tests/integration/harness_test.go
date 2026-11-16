@@ -413,7 +413,20 @@ func runContainers(t *testing.T) []string {
 	return strings.Split(out, "\n")
 }
 
-// assertNoRunContainers checks, after every test, that no run container is left.
+// removeRunContainers force-removes what runContainers listed.
+func removeRunContainers(t *testing.T, left []string) {
+	t.Helper()
+	for _, c := range left {
+		if onKubernetes {
+			kubectl(t, "-n", "nbsandbox-runs", "delete", c, "--grace-period=0", "--force", "--ignore-not-found")
+			continue
+		}
+		docker(t, "rm", "-f", strings.Fields(c)[0]) // "name status"
+	}
+}
+
+// assertNoRunContainers checks, after every test, that no run container is
+// left; one that is fails that test and is removed.
 func assertNoRunContainers(t *testing.T) {
 	t.Helper()
 	deadline := time.Now().Add(20 * time.Second)
@@ -423,7 +436,8 @@ func assertNoRunContainers(t *testing.T) {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Errorf("no-containers-left: run containers left behind: %v", left)
+			t.Errorf("no-containers-left: run containers left behind: %v (removed now, so later tests aren't blamed)", left)
+			removeRunContainers(t, left)
 			return
 		}
 		time.Sleep(500 * time.Millisecond)

@@ -15,6 +15,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -97,6 +98,10 @@ func (b *Backend) Run(ctx context.Context, spec isolation.RunSpec, out isolation
 	}
 	if err := b.copyIn(ctx, name, spec); err != nil {
 		remove()
+		if ctx.Err() != nil {
+			res.Stopped = true
+			return res, nil
+		}
 		return res, fmt.Errorf("%w: copy the run's files in: %w", isolation.ErrStart, err)
 	}
 	// Events (items, progress, cells) come back while the run works. The
@@ -330,18 +335,94 @@ func (b *Backend) exec(ctx context.Context, name, container string, cmd []string
 	if err != nil {
 		return err
 	}
-	var stderr bytes.Buffer
-	err = ex.StreamWithContext(ctx, remotecommand.StreamOptions{Stdin: stdin, Stdout: stdout, Stderr: &stderr})
-	if err != nil && stderr.Len() > 0 {
-		return fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
+	stderr := &gate{w: &bytes.Buffer{}}
+	opts := remotecommand.StreamOptions{Stdin: stdin, Stderr: stderr}
+	var out *gate
+	if stdout != nil {
+		out = &gate{w: stdout}
+		opts.Stdout = out
+	}
+	err = streamOrAbandon(ctx, func(ctx context.Context) error { return ex.StreamWithContext(ctx, opts) }, func() {
+		// Nothing more reaches the caller's writers once exec returns.
+		stderr.close()
+		if out != nil {
+			out.close()
+		}
+	})
+	if msg := strings.TrimSpace(stderr.String()); err != nil && msg != "" {
+		return fmt.Errorf("%w: %s", err, msg)
 	}
 	return err
 }
 
+// streamOrAbandon runs stream and returns its error, or ctx's as soon as ctx
+// ends, whatever stream is doing. client-go's SPDY executor returns on
+// cancel, but then closes its connection, and the close writes frames under
+// the lock a stalled stdin write holds (a Pod that stopped reading, a
+// connection that went quiet): it can block for good, and the run with it,
+// past its time limit and any cancel. An abandoned stream ends when its
+// connection does; abandon is called before returning, so it writes nowhere.
+func streamOrAbandon(ctx context.Context, stream func(context.Context) error, abandon func()) error {
+	errc := make(chan error, 1)
+	go func() { errc <- stream(ctx) }()
+	select {
+	case err := <-errc:
+		return err
+	case <-ctx.Done():
+		select {
+		case err := <-errc:
+			return err
+		case <-time.After(abandonAfter):
+			abandon()
+			return ctx.Err()
+		}
+	}
+}
+
+// abandonAfter is how long a stream gets to end by itself once its context
+// has: long enough for client-go to tear down a healthy connection.
+var abandonAfter = 5 * time.Second
+
+// gate passes writes to w until it is closed, then drops them: a stream
+// abandoned by streamOrAbandon may still deliver output, and its caller has
+// moved on.
+type gate struct {
+	mu     sync.Mutex
+	w      io.Writer
+	closed bool
+}
+
+func (g *gate) Write(p []byte) (int, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.closed {
+		return len(p), nil
+	}
+	return g.w.Write(p)
+}
+
+func (g *gate) close() {
+	g.mu.Lock()
+	g.closed = true
+	g.mu.Unlock()
+}
+
+// String returns what was written, for a gate over a bytes.Buffer.
+func (g *gate) String() string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if b, ok := g.w.(*bytes.Buffer); ok {
+		return b.String()
+	}
+	return ""
+}
+
 // copyIn puts the space's files and the run's folder into the Pod through
 // the files container, then lets the runner start.
+// It ends with the run's context: a run stopped (cancelled, out of time)
+// while its files go in has nothing to keep.
 func (b *Backend) copyIn(ctx context.Context, name string, spec isolation.RunSpec) error {
-	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Minute)
+	cctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	for _, d := range []struct{ local, remote string }{{spec.SpaceDir, "/space"}, {spec.RunDir, "/run"}} {
 		pr, pw := io.Pipe()
