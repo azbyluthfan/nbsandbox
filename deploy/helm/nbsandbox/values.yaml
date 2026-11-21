@@ -122,6 +122,19 @@ ui:
     scopes: []              # default: openid, profile and the nbsandbox scopes
                             # (Entra ID: api://<nbsandbox client id>/nbsandbox.read, ...)
 
+# Interactive sessions (docs/sessions.md): a notebook's live kernel, in a
+# Pod in the runs namespace with a run's isolation. API pods reach the worker
+# holding a session on its port 8091, with a shared secret: create a Secret
+# with key "secret" (a long random value) and name it here. Without it,
+# sessions stay off.
+sessions:
+  enabled: true
+  secretName: ""
+  idle: 30m                 # ends after no cell ran and no browser was connected this long
+  max: 8h                   # and this long after it started, in any case
+  perUser: 2
+  perWorker: 4              # per worker pod, beside runs.concurrency
+
 # The audit log (docs/operations.md#audit-log).
 audit:
   enabled: true

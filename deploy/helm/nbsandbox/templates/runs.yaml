@@ -44,6 +44,9 @@ rules:
     resources: [pods/exec]   # copying the run's files in and out, stopping the runner
     verbs: [create, get]
   - apiGroups: [""]
+    resources: [pods/attach] # an interactive session's stdio (its Jupyter messages)
+    verbs: [create, get]
+  - apiGroups: [""]
     resources: [namespaces]
     verbs: [get]
 ---

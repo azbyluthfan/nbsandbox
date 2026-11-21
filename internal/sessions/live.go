@@ -268,6 +268,11 @@ func (l *live) sync(ctx context.Context) ([]store.Conflict, error) {
 	}
 	l.syncing.Lock()
 	defer l.syncing.Unlock()
+	if err := l.pull(ctx); err != nil {
+		l.m.d.Log.Warn("copy a session's files back", "session_id", l.s.ID, "error", err)
+		l.notice(fmt.Sprintf("the session's file changes could not be copied back: %v", err))
+		return nil, err
+	}
 	conflicts, skipped, err := l.m.d.Spaces.Sync(ctx, l.s.SpaceID, l.s.ID)
 	if err != nil {
 		l.m.d.Log.Warn("write a session's changes back", "session_id", l.s.ID, "error", err)
@@ -290,6 +295,16 @@ func first(xs []string, n int) []string {
 		return append(xs[:n:n], fmt.Sprintf("and %d more", len(xs)-n))
 	}
 	return xs
+}
+
+// pull brings the session's /space to its working copy here, when the
+// backend keeps it elsewhere (Kubernetes); Docker mounts the working copy.
+func (l *live) pull(ctx context.Context) error {
+	p, ok := l.m.d.Backend.(isolation.SessionFilePuller)
+	if !ok {
+		return nil
+	}
+	return p.PullSessionFiles(ctx, l.s.ID, l.m.d.Spaces.WorkPath(l.s.SpaceID, l.s.ID))
 }
 
 // notice tells the clients something about the session (not the kernel).
@@ -328,11 +343,27 @@ func (l *live) end(ctx context.Context, reason, by string) {
 	conn := l.conn
 	l.mu.Unlock()
 	_ = conn.Close()
+	// A read-write session's files: from where the backend keeps them
+	// (before its container goes), then written back once nothing changes
+	// them any more.
+	pulled := true
+	if l.s.Mode == store.SessionReadWrite {
+		l.syncing.Lock()
+		if err := l.pull(ctx); err != nil {
+			pulled = false
+			l.m.d.Log.Warn("copy an ending session's files back", "session_id", l.s.ID, "error", err)
+		}
+		l.syncing.Unlock()
+	}
 	if err := l.m.d.Backend.StopSession(ctx, l.s.ID); err != nil {
 		l.m.d.Log.Warn("stop a session's container", "session_id", l.s.ID, "error", err)
 	}
-	if l.s.Mode == store.SessionReadWrite {
-		_, _ = l.sync(ctx)
+	if l.s.Mode == store.SessionReadWrite && pulled {
+		l.syncing.Lock()
+		if _, _, err := l.m.d.Spaces.Sync(ctx, l.s.SpaceID, l.s.ID); err != nil {
+			l.m.d.Log.Warn("write an ending session's changes back", "session_id", l.s.ID, "error", err)
+		}
+		l.syncing.Unlock()
 	}
 	l.m.d.Spaces.Discard(l.s.SpaceID, l.s.ID)
 	if _, err := l.m.d.DB.EndSession(ctx, l.s.ID, reason, by, l.m.d.Now()); err != nil {

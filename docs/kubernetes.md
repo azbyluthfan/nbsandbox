@@ -72,6 +72,10 @@ If anything answers, the worker refuses runs and reports it on `/readyz` (`runti
 
 The probe checks the network only. To check the whole isolation of your cluster (filesystem, processes, memory, privileges, limits) and get a report for it, run [`nbsandbox-report check`](check-deployment.md) against the deployment.
 
+## Interactive sessions
+
+A session ([sessions.md](sessions.md)) is a Pod like a run's, in the runs namespace under the same deny-all policy, labelled `nbsandbox.session`, with the session bridge as its main process. The worker reaches it through `pods/attach` (its standard input and output), copies the space's files in when it starts, and copies `/space` back out before each write-back of a read-write session. Sessions need `sessions.secretName` (a Secret with key `secret`), since API and worker Pods are separate processes; without it they stay off. Custom packages aren't available in sessions on Kubernetes yet, as for runs.
+
 ## Install with Helm
 
 The chart is in [deploy/helm/nbsandbox](../deploy/helm/nbsandbox). It doesn't install PostgreSQL or object storage: bring a managed database and storage account, or your own.
@@ -79,6 +83,8 @@ The chart is in [deploy/helm/nbsandbox](../deploy/helm/nbsandbox). It doesn't in
 ```bash
 kubectl create namespace nbsandbox
 kubectl -n nbsandbox create secret generic nbsandbox-db --from-literal=database-url='postgres://…?sslmode=require'
+# For interactive sessions (sessions.secretName: nbsandbox-sessions in my-values.yaml):
+kubectl -n nbsandbox create secret generic nbsandbox-sessions --from-literal=secret="$(openssl rand -hex 32)"
 helm upgrade --install nbsandbox oci://ghcr.io/azbyluthfan/charts/nbsandbox --version 0.2.1 -n nbsandbox -f my-values.yaml
 ```
 
@@ -86,7 +92,7 @@ Releases publish the chart signed, on GHCR ([releasing.md](releasing.md) shows h
 
 What it creates:
 - **API Deployment and Service:** no Kubernetes permissions.
-- **Worker Deployment:** a Role allowing only Pods, Pod logs and `pods/exec`, only in the runs namespace.
+- **Worker Deployment:** a Role allowing only Pods, Pod logs, `pods/exec` and `pods/attach` (interactive sessions), only in the runs namespace. Workers serve their sessions to API Pods on port 8091, at their Pod IP, with the shared `sessions.secret`.
 - **The runs namespace:** the `restricted` Pod Security Standard and the deny-all NetworkPolicy.
 - **PodDisruptionBudgets**, and an optional Ingress (only `/v1/` and the gRPC services; health and metrics stay internal).
 

@@ -140,17 +140,28 @@ func (k *kernelConn) complete(code string) []string {
 	return out
 }
 
+// assertNoSessionContainer checks a session's container (or Pod) is gone.
 func assertNoSessionContainer(t *testing.T, id string) {
 	t.Helper()
+	list := func() string {
+		if onKubernetes {
+			return kubectl(t, "-n", "nbsandbox-runs", "get", "pods", "-l", "nbsandbox.session="+id, "-o", "name")
+		}
+		return docker(t, "ps", "-a", "--filter", "label=nbsandbox.session="+id, "--format", "{{.Names}}")
+	}
 	deadline := time.Now().Add(30 * time.Second)
 	for {
-		out := docker(t, "ps", "-a", "--filter", "label=nbsandbox.session="+id, "--format", "{{.Names}}")
+		out := list()
 		if out == "" {
 			return
 		}
 		if time.Now().After(deadline) {
 			t.Errorf("session container left behind: %s", out)
-			docker(t, "rm", "-f", out)
+			if onKubernetes {
+				kubectl(t, "-n", "nbsandbox-runs", "delete", out, "--grace-period=0", "--force", "--ignore-not-found")
+			} else {
+				docker(t, "rm", "-f", out)
+			}
 			return
 		}
 		time.Sleep(500 * time.Millisecond)

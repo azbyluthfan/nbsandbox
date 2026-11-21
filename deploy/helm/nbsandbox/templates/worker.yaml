@@ -33,12 +33,14 @@ spec:
         - name: nbsandboxd
           image: {{ include "nbsandbox.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          ports: [{ name: http, containerPort: 8080 }]
+          ports: [{ name: http, containerPort: 8080 }, { name: sessions, containerPort: 8091 }]
           env:
             - { name: NBSANDBOX_ROLE, value: worker }
             # The network probe checks run Pods can't reach the worker or its node's kubelet.
             - { name: NBSANDBOX_POD_IP, valueFrom: { fieldRef: { fieldPath: status.podIP } } }
             - { name: NBSANDBOX_NODE_IP, valueFrom: { fieldRef: { fieldPath: status.hostIP } } }
+            # Where API pods reach this worker's interactive sessions.
+            - { name: NBSANDBOX_SESSIONS_ADDRESS, value: "$(NBSANDBOX_POD_IP):8091" }
             {{- include "nbsandbox.env" . | nindent 12 }}
           securityContext: {{- include "nbsandbox.containerSecurity" . | nindent 12 }}
           resources: {{- toYaml .Values.worker.resources | nindent 12 }}

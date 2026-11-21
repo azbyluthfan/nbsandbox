@@ -199,7 +199,8 @@ func (m *Manager) hold(ctx context.Context, l *live, ready chan<- error) {
 			_ = l.control("kernel_info_request", nil) // learn its state again (an answer comes on shell)
 			continue
 		}
-		l.end(ctx, fmt.Sprintf("the session's container stopped (%v)", err), "")
+		m.d.Log.Info("a session's container stopped", "session_id", l.s.ID, "error", err)
+		l.end(ctx, "the session's container stopped (out of memory, or killed)", "")
 		return
 	}
 }
@@ -229,7 +230,21 @@ func (m *Manager) housekeep(ctx context.Context) {
 		held = append(held, l)
 	}
 	m.mu.Unlock()
+	// A container that stopped (killed out of memory, say) ends its session
+	// even if its connection didn't notice (a Pod attach can stay open).
+	running := map[string]bool{}
+	if list, err := m.d.Backend.Sessions(ctx); err == nil {
+		for _, c := range list {
+			running[c.SessionID] = c.Running
+		}
+	} else {
+		running = nil
+	}
 	for _, l := range held {
+		if running != nil && !running[l.s.ID] {
+			l.end(ctx, "the session's container stopped (out of memory, or killed)", "")
+			continue
+		}
 		switch q := l.quiet(); {
 		case now.Sub(l.s.CreatedAt) >= m.cfg.Max:
 			l.end(ctx, fmt.Sprintf("it reached the maximum length (%s)", m.cfg.Max), "")
