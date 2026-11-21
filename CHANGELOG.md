@@ -25,6 +25,7 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
   - **Limits:** a session ends after 30 minutes with no cell running and nobody connected, or 8 hours after it started; 2 per user, 4 per worker (`sessions.*`).
   - **Docker, Kubernetes and clusters:** sessions survive a restart of nbsandboxd (re-attached). With API and worker processes, API nodes relay to the worker holding a session, authenticated with `sessions.secret`.
   - **Isolation report:** a new section, "Interactive sessions": no network, the same isolation as a run, the memory limit, read-only sessions, re-attaching.
+- **`nbsandbox-report check` checks interactive sessions** through the API: no network, the same isolation as a run, read-only sessions, the memory limit ([docs/check-deployment.md](docs/check-deployment.md)).
 - **A check of the published release** (`scripts/check-published.sh`): deploys a release from GHCR as `docs/deployment.md` does and runs notebooks through it. Weekly for the newest release, and part of the release checklist.
 
 ## [0.2.1] - 2026-11-16

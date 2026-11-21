@@ -114,6 +114,9 @@ func (d *deployment) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	case req.Method == "DELETE" && len(p) == 3:
 		d.deleted++
 		w.WriteHeader(204)
+	case len(p) >= 4 && p[3] == "sessions":
+		// This fake deployment has interactive sessions turned off.
+		http.Error(w, `{"error":{"code":"not_found","message":"interactive sessions are turned off on this nbsandbox"}}`, http.StatusNotFound)
 	case req.Method == "POST" && len(p) == 4 && p[3] == "files":
 		w.WriteHeader(201)
 	case req.Method == "POST" && len(p) == 4 && p[3] == "runs":
