@@ -500,19 +500,25 @@ func soakSession(t *testing.T, user, sp string, n int) {
 			t.Fatalf("session %d (%s): %s: %q, want %q", n, mode, what, got, want)
 		}
 	}
+	k.step = "first cell (pandas)"
 	k.run("import pandas as pd\ndf = pd.DataFrame({'region': ['a', 'b', 'a'], 'amount': [1.0, 2.0, 3.0]})")
+	k.step = "second cell (variables)"
 	out, _ := k.run("print(df.groupby('region')['amount'].sum().to_dict())")
 	expect("a cell using the last one's variables", out, "{'a': 4.0, 'b': 2.0}\n")
+	k.step = "completion"
 	if cols := strings.Join(k.complete(`df["`), ","); !strings.Contains(cols, "amount") || !strings.Contains(cols, "region") {
 		t.Fatalf("session %d: completion of df[\": %s", n, cols)
 	}
 	if n%4 == 1 { // disconnect and come back: the variables are still there
 		_ = k.c.Close()
+		k.step = "reattach"
 		k = dialSession(t, user, sp, s.ID)
+		k.step = "cell after reattaching"
 		out, _ = k.run("print(len(df))")
 		expect("after reattaching", out, "3\n")
 	}
 	if n%5 == 3 { // a cell that never ends, interrupted
+		k.step = "endless cell, then interrupt"
 		id := k.send("shell", "execute_request", map[string]any{"code": "import time\nwhile True: time.sleep(0.1)", "silent": false})
 		k.next(func(m kmsg) bool {
 			return m.Parent["msg_id"] == id && m.typ() == "status" && m.Content["execution_state"] == "busy"
@@ -528,6 +534,7 @@ func soakSession(t *testing.T, user, sp string, n int) {
 		expect("after an interrupt", out, "after\n")
 	}
 	if n%7 == 5 { // restart: the variables go, the session stays
+		k.step = "restart"
 		if r := call(t, "POST", base+"/restart", user, nil, nil); r.Code != http.StatusAccepted {
 			t.Fatalf("session %d: restart: %d %s", n, r.Code, r.Body)
 		}
@@ -536,6 +543,7 @@ func soakSession(t *testing.T, user, sp string, n int) {
 		expect("after a restart", out, "False\n")
 	}
 	file := fmt.Sprintf("session-%d.txt", n)
+	k.step = "last cell, then end"
 	if mode == "read-write" {
 		k.run(fmt.Sprintf("open(%q, 'w').write('cycle %d')", file, n))
 	}
