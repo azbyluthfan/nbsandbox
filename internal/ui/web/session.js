@@ -10,6 +10,50 @@
 
 const enc = encodeURIComponent;
 
+// Python, run silently in the kernel for the variables panel: the user's
+// variables (not modules, functions, classes, or IPython's own), each
+// summarised (type, shape or length, a DataFrame's columns, the start of
+// its repr) with any failure left blank, as JSON. The reply reads it back
+// through user_expressions; its helper names start with "_", so they are
+// never listed.
+const VARIABLES_CODE = `def _nbsandbox_variables():
+    import json
+    ip = get_ipython()
+    out = []
+    for k, v in sorted(ip.user_ns.items()):
+        if k.startswith("_") or k in ip.user_ns_hidden or k in ("In", "Out", "exit", "quit", "get_ipython"):
+            continue
+        t = type(v).__name__
+        if t in ("module", "function", "builtin_function_or_method", "type", "method"):
+            continue
+        e = {"name": k, "type": t, "shape": "", "columns": [], "value": ""}
+        try:
+            if hasattr(v, "shape") and not isinstance(v, (bool, int, float, complex)):
+                e["shape"] = " x ".join(str(n) for n in v.shape)
+            elif hasattr(v, "__len__") and not isinstance(v, (str, bytes)):
+                e["shape"] = str(len(v))
+        except Exception:
+            pass
+        try:
+            cols = getattr(v, "columns", None)
+            if cols is not None:
+                e["columns"] = [str(c) for c in list(cols)[:30]]
+        except Exception:
+            pass
+        try:
+            e["value"] = repr(v)[:100]
+        except Exception:
+            pass
+        out.append(e)
+        if len(out) >= 200:
+            break
+    return json.dumps(out)
+class _NbsandboxJSON(str):
+    def __repr__(self):
+        return str(self)
+_nbsandbox_vars = _NbsandboxJSON(_nbsandbox_variables())
+del _nbsandbox_variables, _NbsandboxJSON`;
+
 function msgId() {
   const b = new Uint8Array(8);
   crypto.getRandomValues(b);
@@ -197,11 +241,32 @@ export class KernelSession {
         entry.finished = true;
         this.pending.delete(id);
         on.done && on.done(reply || { status: "ok" });
+        if (this.onExecuted) setTimeout(() => this.onExecuted(), 0); // after the state update
       } else if (msg.channel === "iopub" && t !== "status") on.output && on.output(msg);
     };
     entry.fail = (why) => on.error && on.error(why);
     this.pending.set(id, entry);
     return id;
+  }
+
+  /**
+   * The kernel's variables, for the variables panel: [{name, type, shape,
+   * columns, value}], from one silent request (no output, no execution
+   * count), or null if the kernel can't say now.
+   */
+  async variables(deadlineMs = 3000) {
+    if (!this.ready || this.busy) return null;
+    const reply = await this.request("execute_request", {
+      code: VARIABLES_CODE, silent: true, store_history: false, allow_stdin: false, stop_on_error: false,
+      user_expressions: { v: "_nbsandbox_vars" },
+    }, deadlineMs);
+    const v = reply && reply.user_expressions && reply.user_expressions.v;
+    if (!v || v.status !== "ok" || !v.data || typeof v.data["text/plain"] !== "string") return null;
+    try {
+      return JSON.parse(v.data["text/plain"]);
+    } catch {
+      return null;
+    }
   }
 
   /** A shell request answered by one reply, or null after deadlineMs. */
