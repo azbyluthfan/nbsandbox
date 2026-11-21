@@ -67,6 +67,7 @@ var Sections = []Section{
 	{"Cancellation and errors", []string{"cancel-running", "cancel-queued", "cancel-at-completion", "caller-disconnect", "kernel-crash", "cell-exception", "docker-lost-mid-run", "render-failure"}},
 	{"Functional and lifecycle", []string{"parameters-and-artifacts", "runtime-info", "queue-concurrency", "restart-mid-run", "graceful-shutdown", "delete-space"}},
 	{"Log and event streaming", []string{"live-lines", "resume", "join-mid-run", "replay-after-finish", "slow-viewer", "through-proxy", "streamed-output"}},
+	{"Interactive sessions", []string{"session-network", "session-isolation", "session-memory-limit", "session-read-only", "session-reattach"}},
 	{"Web UI", []string{"web-ui"}},
 	{"Notebook functions", []string{"function-invoke", "function-immutable", "function-errors", "read-only-invocation",
 		"parallel-invocations", "status-stream", "start-latency"}},
@@ -76,7 +77,8 @@ var Sections = []Section{
 
 // Required is what the report must contain to count as complete.
 var Required = []string{"space-paths", "canary-search", "proc-list", "memory-secret", "shared-memory", "socket-env-network", "privileges", "cross-user-api", "neighbour-unaffected", "memory-limit", "cpu-fairness", "process-limit", "time-limit", "tmp-limit", "endless-output",
-	"cancel-running", "cancel-queued", "cancel-at-completion", "caller-disconnect", "kernel-crash", "cell-exception", "docker-lost-mid-run", "render-failure"}
+	"cancel-running", "cancel-queued", "cancel-at-completion", "caller-disconnect", "kernel-crash", "cell-exception", "docker-lost-mid-run", "render-failure",
+	"session-network", "session-isolation", "session-memory-limit", "session-read-only"}
 
 // Load reads <dir>/<runtime>/*.json.
 func Load(dir string) ([]Run, error) {

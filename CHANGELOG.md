@@ -4,12 +4,27 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+### Upgrading
+
+- **Database migrations 11 and 12** run at startup: interactive sessions, and where API nodes reach a worker's sessions.
+- **The Docker socket proxy must allow attach** (`POST /containers/{id}/attach`) for interactive sessions: the Compose files in `deploy/` do. A proxy configured by hand needs it added, or set `sessions.enabled: false`.
+- **Kubernetes:** the workers' Role needs `pods/attach` in the runs namespace (the Helm chart adds it).
+- **With API and worker processes,** sessions need `sessions.secret` (`NBSANDBOX_SESSIONS_SECRET`; Helm: `sessions.secretName`), the same on every process, and API nodes able to reach the workers' port 8091. Without it, sessions stay off there, and nbsandboxd says so at startup.
+- **The web UI's page policy** allows `frame-src data:`, for a session's HTML outputs.
+
 ### Fixed
 
 - **Kubernetes: a run could stay `running` for good,** past its time limit and any cancel, with its Pod left behind. Copying a run's files into its Pod ignored the run's end, and an exec into the Pod could block forever while client-go closed a stalled connection. Both now end with the run (abandoning a stuck exec), so the run stops and its Pod is removed. Seen once under the weekly CPU-fairness check.
 
 ### Added
 
+- **Interactive sessions** ([docs/sessions.md](docs/sessions.md)): a notebook's live kernel, with a run's isolation (no network, the run limits, the runtime, the space's package set). Run cells one by one and keep the variables, as in Jupyter.
+  - **In the web editor:** a session bar on each notebook (start, Run all, Interrupt, Restart, Save files, End); run a cell with its button, Shift-Enter or Ctrl-Enter; outputs stream in, tables and charts included, and are saved with the notebook. Completion merges the live kernel's answers (`df.` lists a DataFrame's columns, `df["` its column names) with the static index, with a 300 ms deadline; docs on hover and for the highlighted item, and a signature line after `(`.
+  - **Through the API:** `POST/GET /v1/spaces/{id}/sessions`, `GET/DELETE …/sessions/{session_id}`, `POST …/interrupt`, `…/restart`, `…/sync`, and `GET …/channel`, a WebSocket of Jupyter messages (filtered both ways). gRPC: `SessionService`, the channel as a bidirectional stream. Administrators: `GET /v1/admin/sessions`, `POST /v1/admin/sessions/{session_id}/end`.
+  - **Files:** a read-write session holds the space's write lock with writing runs, and its changes are written back every 5 minutes, on request and at the end, with the runs' conflict rules. Otherwise a session is read-only.
+  - **Limits:** a session ends after 30 minutes with no cell running and nobody connected, or 8 hours after it started; 2 per user, 4 per worker (`sessions.*`).
+  - **Docker, Kubernetes and clusters:** sessions survive a restart of nbsandboxd (re-attached). With API and worker processes, API nodes relay to the worker holding a session, authenticated with `sessions.secret`.
+  - **Isolation report:** a new section, "Interactive sessions": no network, the same isolation as a run, the memory limit, read-only sessions, re-attaching.
 - **A check of the published release** (`scripts/check-published.sh`): deploys a release from GHCR as `docs/deployment.md` does and runs notebooks through it. Weekly for the newest release, and part of the release checklist.
 
 ## [0.2.1] - 2026-11-16
