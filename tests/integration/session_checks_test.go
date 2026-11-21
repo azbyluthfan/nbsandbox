@@ -66,7 +66,7 @@ for root, dirs, files in os.walk('/'):
     if root == '/':
         dirs[:] = [d for d in dirs if d not in ('proc', 'sys', 'dev')]
     found += [os.path.join(root, f) for f in files if f == 'secret.txt']
-env = sorted(k for k in os.environ if k.startswith('NBSANDBOX_') and k not in ('NBSANDBOX_SESSION', 'NBSANDBOX_SESSION_ID', 'NBSANDBOX_SESSION_MAX_MESSAGE', 'NBSANDBOX_RUN_DIR', 'NBSANDBOX_OUTPUT_DIR'))
+env = sorted(k for k in os.environ if k.startswith('NBSANDBOX_') and k not in ('NBSANDBOX_SESSION', 'NBSANDBOX_SESSION_ID', 'NBSANDBOX_SESSION_MAX_MESSAGE', 'NBSANDBOX_RUN_DIR', 'NBSANDBOX_OUTPUT_DIR', 'NBSANDBOX_NPROC'))
 print(os.getuid(), cap, rofs, sorted(os.listdir('/space')), found, env)`)
 	out = strings.TrimSpace(out)
 	ok := strings.HasPrefix(out, "1000 0000000000000000 read-only") && strings.Contains(out, "'mine.txt'") &&

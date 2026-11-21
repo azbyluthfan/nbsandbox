@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"path"
 	"strings"
 	"sync"
@@ -271,16 +272,27 @@ func (m *Manager) EndSpace(ctx context.Context, spaceID, by string) error {
 	return nil
 }
 
-// end ends a session: here if this process holds it (its container is
-// stopped and its changes written back first); otherwise its record is
-// ended, and the worker holding it stops it when it next looks.
+// end ends a session: its container stopped and its changes written back,
+// then its record ended. Here if this process holds it; otherwise by the
+// worker holding it, asked to (so the answer comes once the changes are
+// in). If that worker can't be reached, the record is ended, and the
+// worker stops the session when it next looks.
 func (m *Manager) end(ctx context.Context, s store.Session, reason, by string) (store.Session, error) {
 	if !s.Open() {
 		return s, nil
 	}
 	if l := m.get(s.ID); l != nil {
 		l.end(ctx, reason, by)
-	} else if _, err := m.d.DB.EndSession(ctx, s.ID, reason, by, m.d.Now()); err != nil {
+		return m.d.DB.GetSession(ctx, s.ID)
+	}
+	if s.Worker != "" {
+		_, err := m.remoteAction(ctx, s, "end", url.Values{"reason": {reason}, "by": {by}})
+		if err == nil {
+			return m.d.DB.GetSession(ctx, s.ID)
+		}
+		m.d.Log.Warn("ask the worker holding a session to end it; ending its record", "session_id", s.ID, "worker", s.Worker, "error", err)
+	}
+	if _, err := m.d.DB.EndSession(ctx, s.ID, reason, by, m.d.Now()); err != nil {
 		return store.Session{}, err
 	} else if err := m.d.DB.Notify(ctx, store.ChanSessions, s.ID); err != nil {
 		m.d.Log.Warn("tell the workers a session ended", "session_id", s.ID, "error", err)
@@ -335,7 +347,7 @@ func (m *Manager) SyncFiles(ctx context.Context, owner, spaceID, id string) ([]s
 	if l != nil {
 		return l.sync(ctx)
 	}
-	body, err := m.remoteAction(ctx, s, "sync")
+	body, err := m.remoteAction(ctx, s, "sync", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -355,7 +367,7 @@ func (m *Manager) act(ctx context.Context, owner, spaceID, id, action string, he
 	if l != nil {
 		return here(l)
 	}
-	_, err = m.remoteAction(ctx, s, action)
+	_, err = m.remoteAction(ctx, s, action, nil)
 	return err
 }
 
