@@ -35,6 +35,7 @@ import (
 	"github.com/azbyluthfan/nbsandbox/internal/obs"
 	"github.com/azbyluthfan/nbsandbox/internal/packages"
 	"github.com/azbyluthfan/nbsandbox/internal/runs"
+	"github.com/azbyluthfan/nbsandbox/internal/sessions"
 	"github.com/azbyluthfan/nbsandbox/internal/spaces"
 	"github.com/azbyluthfan/nbsandbox/internal/store"
 	"github.com/azbyluthfan/nbsandbox/internal/ui"
@@ -220,6 +221,24 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 		WorkerID: id, NoExecute: !cfg.Executes(), SharedWorkers: cfg.Role != config.RoleAll, Lease: cfg.Runs.Lease,
 		RequireSchemas: cfg.Functions.RequireSchemas,
 	}, runDeps)
+	// Interactive sessions: held by workers whose backend runs them.
+	var sessBackend isolation.SessionBackend
+	if sb, ok := backend.(isolation.SessionBackend); ok && cfg.Executes() {
+		sessBackend = sb
+	}
+	sess := sessions.New(sessions.Config{
+		Enabled: cfg.Sessions.Enabled, Image: cfg.Docker.Image, Runtime: runtimeLabel(cfg), Limits: limits,
+		Idle: cfg.Sessions.Idle, Max: cfg.Sessions.Max, WriteBack: cfg.Sessions.WriteBack, Retention: cfg.Sessions.Retention,
+		PerUser: cfg.Sessions.PerUser, PerWorker: cfg.Sessions.PerWorker, MaxMessage: int64(cfg.Sessions.MaxMessage),
+		WorkerID: id, NoExecute: !cfg.Executes(),
+	}, sessions.Deps{
+		DB: db, Spaces: spaceSvc, Backend: sessBackend, Log: logger,
+		Packages: sessionPackages(pkgs, spaceSvc, runDeps.ImageID),
+		Draining: func() bool {
+			d, err := db.GetDrain(context.WithoutCancel(ctx))
+			return err == nil && d.Draining
+		},
+	})
 	if err := spaceSvc.CheckConsistency(ctx); err != nil {
 		return err
 	}
@@ -227,6 +246,14 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 		return err
 	}
 	go pkgs.Run(ctx) // builds only on a worker with package sets on
+	if err := sess.Start(ctx); err != nil {
+		return err
+	}
+	if sess.Holds() {
+		go db.Listen(context.WithoutCancel(ctx), logger, func(string, string) { sess.Wake() }, store.ChanSessions)
+		logger.Info("interactive sessions", "idle", cfg.Sessions.Idle, "max", cfg.Sessions.Max,
+			"per_user", cfg.Sessions.PerUser, "per_worker", cfg.Sessions.PerWorker)
+	}
 	// The background work outlives the signal: it stops only after the
 	// graceful shutdown below, so it doesn't inherit ctx's cancellation.
 	bg := context.WithoutCancel(ctx)
@@ -368,6 +395,7 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 		}
 	}
 	mgr.Shutdown(cfg.ShutdownGrace)
+	sess.Shutdown(shutdownCtx) // sessions keep running; the next start re-attaches
 	stopSup()
 	if published != nil {
 		<-published

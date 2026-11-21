@@ -48,7 +48,7 @@ RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/
  && groupadd --gid 1000 nbsandbox \
  && useradd --uid 1000 --gid 1000 --no-create-home --home-dir /tmp --shell /usr/sbin/nologin nbsandbox
 
-COPY nbsandbox_runner.py export_manifest.py kernel_startup.py /opt/nbsandbox/
+COPY nbsandbox_runner.py export_manifest.py kernel_startup.py session_bridge.py /opt/nbsandbox/
 # The nbsandbox module notebooks import (nbsandbox.output, nbsandbox.parameters),
 # on every Python's path through a .pth file.
 COPY nbsandbox/ /opt/nbsandbox/lib/nbsandbox/

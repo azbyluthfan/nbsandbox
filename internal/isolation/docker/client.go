@@ -40,6 +40,16 @@ type Client interface {
 	ContainerRemove(ctx context.Context, id string) error
 	// ContainerList lists containers (running or not) carrying label.
 	ContainerList(ctx context.Context, label string) ([]ContainerSummary, error)
+	// ContainerAttach attaches to a container's stdin, stdout and stderr
+	// (an interactive session's): stdout and stderr come multiplexed.
+	ContainerAttach(ctx context.Context, id string) (Attached, error)
+}
+
+// Attached is an attach's connection: write to stdin, read the multiplexed
+// stdout and stderr; Close ends the attach, not the container.
+type Attached struct {
+	Conn   io.WriteCloser
+	Reader io.Reader
 }
 
 // ContainerState is what nbsandboxd needs from a container inspect.
@@ -179,6 +189,14 @@ func (m *mobyClient) ContainerList(ctx context.Context, label string) ([]Contain
 		out = append(out, ContainerSummary{ID: c.ID, Labels: c.Labels, Running: c.State == container.StateRunning})
 	}
 	return out, nil
+}
+
+func (m *mobyClient) ContainerAttach(ctx context.Context, id string) (Attached, error) {
+	res, err := m.c.ContainerAttach(ctx, id, client.ContainerAttachOptions{Stream: true, Stdin: true, Stdout: true, Stderr: true})
+	if err != nil {
+		return Attached{}, err
+	}
+	return Attached{Conn: res.Conn, Reader: res.Reader}, nil
 }
 
 // IsNotFound reports whether err means the container or image doesn't exist.

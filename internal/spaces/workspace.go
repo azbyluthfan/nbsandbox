@@ -125,6 +125,19 @@ func (s *Service) copyOut(ctx context.Context, root *os.Root, r store.FileRow) e
 // (see Conflict). If the changes would exceed the quota, nothing is applied
 // (store.ErrQuota is returned).
 func (s *Service) Checkin(ctx context.Context, spaceID, runID string, token int64) (conflicts []store.Conflict, skipped []string, err error) {
+	return s.checkin(ctx, spaceID, runID, token, false)
+}
+
+// Sync writes an interactive session's changes back as Checkin does, while
+// the session goes on: what was written becomes the working copy's new
+// starting point, so the next Sync writes only what changed after this one.
+// If nothing could be applied (store.ErrQuota, or any error), the starting
+// point stays, and the next Sync tries again.
+func (s *Service) Sync(ctx context.Context, spaceID, sessionID string) (conflicts []store.Conflict, skipped []string, err error) {
+	return s.checkin(ctx, spaceID, sessionID, 0, true)
+}
+
+func (s *Service) checkin(ctx context.Context, spaceID, runID string, token int64, rebase bool) (conflicts []store.Conflict, skipped []string, err error) {
 	b, err := os.ReadFile(s.checkoutMeta(spaceID, runID))
 	if err != nil {
 		return nil, nil, fmt.Errorf("working copy record: %w", err)
@@ -140,6 +153,7 @@ func (s *Service) Checkin(ctx context.Context, spaceID, runID string, token int6
 	defer func() { _ = root.Close() }()
 
 	seenFiles, seenFolders := map[string]bool{}, map[string]bool{}
+	next := checkout{Files: map[string]string{}} // the working copy as found: the next starting point
 	var writes []store.FileWrite
 	var newFolders []string
 	var staged []*staged
@@ -162,6 +176,7 @@ func (s *Service) Checkin(ctx context.Context, spaceID, runID string, token int6
 		switch {
 		case d.IsDir():
 			seenFolders[p] = true
+			next.Folders = append(next.Folders, p)
 			if !hasString(co.Folders, p) {
 				newFolders = append(newFolders, p)
 			}
@@ -171,6 +186,7 @@ func (s *Service) Checkin(ctx context.Context, spaceID, runID string, token int6
 			if err != nil {
 				return err
 			}
+			next.Files[p] = sum
 			if co.Files[p] == sum {
 				return nil // unchanged
 			}
@@ -218,6 +234,12 @@ func (s *Service) Checkin(ctx context.Context, spaceID, runID string, token int6
 	}
 	conflicts, err = s.db.ApplyRunChanges(ctx, spaceID, writes, deletes, newFolders, runID[:8], s.now(), s.fileQuota(ctx, spaceID), lease(runID, token))
 	s.forgetUsage(spaceID)
+	if err == nil && rebase {
+		b, _ := json.Marshal(next)
+		if werr := os.WriteFile(s.checkoutMeta(spaceID, runID), b, 0o600); werr != nil {
+			return conflicts, skipped, fmt.Errorf("record the working copy: %w", werr)
+		}
+	}
 	return conflicts, skipped, err
 }
 

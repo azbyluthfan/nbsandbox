@@ -38,6 +38,9 @@ func (noContainers) ContainerRemove(context.Context, string) error { return nil 
 func (noContainers) ContainerList(context.Context, string) ([]ContainerSummary, error) {
 	return nil, nil
 }
+func (noContainers) ContainerAttach(context.Context, string) (Attached, error) {
+	return Attached{}, errors.New("not implemented")
+}
 
 // fakeDocker scripts one container's life for backend tests.
 type fakeDocker struct {
@@ -50,6 +53,7 @@ type fakeDocker struct {
 	inspect             ContainerState
 	inspectErr          error
 	stopExits           bool // a stop makes the container exit with 143
+	attach              func(id string) (Attached, error)
 	containers          []ContainerSummary
 
 	calls         []string
@@ -150,6 +154,16 @@ func (f *fakeDocker) ContainerRemove(ctx context.Context, _ string) error {
 func (f *fakeDocker) ContainerList(ctx context.Context, _ string) ([]ContainerSummary, error) {
 	f.record(ctx, "list")
 	return f.containers, nil
+}
+
+func (f *fakeDocker) ContainerAttach(ctx context.Context, id string) (Attached, error) {
+	f.record(ctx, "attach")
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.attach == nil {
+		return Attached{}, errors.New("not attachable")
+	}
+	return f.attach(id)
 }
 
 func (f *fakeDocker) callList() []string {

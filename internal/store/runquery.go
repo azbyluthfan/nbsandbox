@@ -258,6 +258,20 @@ func (db *DB) submitRun(ctx context.Context, r NewRun, idem *Idempotency, ev *Ev
 	if r.ParametersJSON == "" {
 		r.ParametersJSON = "{}"
 	}
+	if !r.ReadOnlySpace {
+		// A read-write session holds the space's write lock too (see
+		// OpenSession, which takes the same row lock).
+		if err := lockSpace(ctx, tx, r.SpaceID); err != nil {
+			return "", false, 0, err
+		}
+		open, err := writingSessionOpen(ctx, tx, r.SpaceID)
+		if err != nil {
+			return "", false, 0, err
+		}
+		if open {
+			return "", false, 0, ErrWritingSession
+		}
+	}
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO runs(id, space_id, owner, notebook, parameters_json, dependency_warnings, status, created_at,
 		                 function, version, notebook_sha256, output_schema, output_mode, client_app, writes_space, package_key)
