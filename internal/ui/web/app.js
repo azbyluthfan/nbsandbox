@@ -556,9 +556,14 @@ async function startRun(path, parameters, readOnly, button) {
       // some: open it so the parameters can be filled in.
       toast(`${path.split("/").pop()} needs parameters: ${e.message.replace(/^parameters don't match the notebook's input contract: /, "").replace("(the whole value): ", "")}. Fill them in next to Run.`, "info");
       go(state.user, state.space, "f", path);
+    } else if (e instanceof ApiError && e.status === 409 && /session/.test(e.message)) {
+      // A read-write interactive session holds the space's write lock.
+      toast("A notebook's interactive session can change this space's files, so a run that can change them can't start now. " +
+        "Tick Read-only to run beside it, or end the session first.", "info");
     } else if (e instanceof ApiError && e.status === 409) {
       const active = state.runs.find((r) => ACTIVE.has(r.status) && !r.read_only_space);
-      toast("This space already has a run that can change its files" + (active ? ": opening it." : "."), "info");
+      toast("This space already has a run that can change its files" +
+        (active ? ": opening it." : ". Tick Read-only to run beside it, or wait for it to finish."), "info");
       if (active) go(state.user, state.space, "r", active.id);
     } else toast(e.message);
   } finally {
