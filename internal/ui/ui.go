@@ -19,10 +19,12 @@ import (
 var webFS embed.FS
 
 // ContentSecurityPolicy for the UI's files: scripts and styles from this
-// origin only, notebook images as data: URLs, no frames, nothing else. The
-// rendered notebook opens in its own tab under its own sandbox CSP.
+// origin only, notebook images as data: URLs, nothing else. The only frames
+// are a session's HTML outputs, as data: documents (sandboxed, without
+// scripts, with a policy of their own that allows no network). The rendered
+// notebook of a run opens in its own tab under its own sandbox CSP.
 const ContentSecurityPolicy = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; " +
-	"connect-src 'self'; frame-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+	"connect-src 'self'; frame-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 
 // pageCSP is the policy for the page itself: as above, plus styles that
 // carry this response's nonce. The editor (CodeMirror) adds its base styles

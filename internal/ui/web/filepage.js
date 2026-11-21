@@ -21,8 +21,9 @@ const CHECK_EVERY_MS = 30000;
 /**
  * Opens path in main. ctx: {api, space, path, file, modules, onSaved(path),
  * headActions(path) -> [elements] (next to Download),
- * extraActions(path) -> [elements] (below the header), onMoved(newPath)}.
- * Returns {dirty(), stop()}.
+ * extraActions(path) -> [elements] (below the header), onMoved(newPath),
+ * kernel(), startKernel(): a notebook's interactive session}.
+ * Returns {dirty(), notebook(), stop()}.
  */
 export function openFilePage(main, ctx) {
   const { api, space, path, file } = ctx;
@@ -95,7 +96,7 @@ export function openFilePage(main, ctx) {
     version = got.version;
     const kind = kindOf(path);
     if (kind === "notebook") {
-      doc = new NotebookEditor(body, decode(got.bytes), { modules: ctx.modules, onChange: showState });
+      doc = new NotebookEditor(body, decode(got.bytes), { modules: ctx.modules, onChange: showState, kernel: ctx.kernel, startKernel: ctx.startKernel });
     } else if (kind === "table" && !ctx.editTables) {
       body.append(
         el("p", {}, el("button", { type: "button", class: "secondary", onclick: () => { ctx.editTables = true; load(); } }, "Edit as text")),
@@ -202,6 +203,7 @@ export function openFilePage(main, ctx) {
 
   return {
     dirty,
+    notebook: () => (doc instanceof NotebookEditor ? doc : null),
     stop() {
       stopped = true;
       clearInterval(timer);

@@ -215,3 +215,151 @@ export function hoverSource(context) {
     };
   };
 }
+
+// ---------- the live kernel (an interactive session) ----------
+
+// Completion kinds IPython reports (_jupyter_types_experimental), as
+// CodeMirror's option types.
+const KERNEL_TYPE = {
+  function: "function", builtin_function_or_method: "function", method: "method", class: "class", type: "class",
+  module: "namespace", instance: "variable", statement: "variable", keyword: "keyword", path: "text", dict_key: "property",
+  param: "variable", property: "property",
+};
+
+/** Characters before pos in code, in code points (Jupyter counts those). */
+function codePoints(text) {
+  let n = 0;
+  for (const _ of text) n++;
+  return n;
+}
+
+/** The UTF-16 offset of the code-point offset cp in text. */
+function utf16At(text, cp) {
+  let i = 0;
+  let n = 0;
+  for (const ch of text) {
+    if (n === cp) return i;
+    i += ch.length;
+    n++;
+  }
+  return i;
+}
+
+/**
+ * Completion from the kernel merged with the static source, as JupyterLab
+ * merges its providers: the static options at once, the kernel's when they
+ * arrive within the deadline (a late answer is dropped), the kernel's first
+ * (it knows the real objects: `df.` lists the DataFrame's columns), without
+ * duplicates. kernel() returns the KernelSession, or null without one.
+ */
+export function mergedCompletionSource(context, kernel) {
+  const staticSource = completionSource(context);
+  return async (cx) => {
+    const st = staticSource(cx);
+    const k = kernel && kernel();
+    if (!k || !k.ready || k.busy) return st;
+    const line = cx.state.doc.lineAt(cx.pos);
+    const before = line.text.slice(0, cx.pos - line.from);
+    // Only where something is being typed: after a name, a dot, or an
+    // opening quote of a key (df[" lists columns), or when asked.
+    if (!cx.explicit && !/[\w.]$|\[["']$|\[["'][^"']*$/.test(before)) return st;
+    const text = cx.state.doc.toString();
+    const reply = await k.complete(text, codePoints(text.slice(0, cx.pos)));
+    if (cx.aborted || !reply || reply.status !== "ok" || !Array.isArray(reply.matches)) return st;
+    const from = utf16At(text, reply.cursor_start);
+    const types = new Map(((reply.metadata || {})._jupyter_types_experimental || []).map((t) => [t.text, t]));
+    const seen = new Set();
+    const options = [];
+    for (const m of reply.matches) {
+      if (typeof m !== "string" || seen.has(m)) continue;
+      seen.add(m);
+      const t = types.get(m);
+      const o = { label: m, displayLabel: m.replace(/^\./, ""), type: (t && KERNEL_TYPE[t.type]) || "variable", boost: 1 };
+      if (t && t.signature) o.detail = t.signature.length > 40 ? t.signature.slice(0, 37) + "..." : t.signature;
+      o.info = () => kernelDoc(k, text, utf16At(text, reply.cursor_start) + m.length, m);
+      options.push(o);
+    }
+    if (st && st.from === from) {
+      for (const o of st.options) if (!seen.has(o.label)) options.push(o);
+    }
+    if (options.length === 0) return st;
+    return { from, options, validFor: /^[\w.]*$/ };
+  };
+}
+
+// Terminal colour codes in IPython's docs.
+const ANSI = /\u001b\[[0-9;]*[A-Za-z]/g;
+
+/** The kernel's docs for name, for the highlighted completion (fetched only then). */
+async function kernelDoc(k, text, end, name) {
+  const code = text.slice(0, end - name.length) + name.replace(/^\./, ".");
+  const reply = await k.inspect(code, codePoints(code));
+  const plain = reply && reply.found && reply.data && reply.data["text/plain"];
+  if (!plain) return null;
+  return el("pre", { class: "cm-doc kernel-doc" }, clipDoc(plain.replace(ANSI, "")));
+}
+
+function clipDoc(s) {
+  return s.length > 4000 ? s.slice(0, 4000) + "\n…" : s;
+}
+
+/**
+ * Hover docs from the kernel when there is a session (the real object),
+ * else from the static index.
+ */
+export function mergedHoverSource(context, kernel) {
+  const staticHover = hoverSource(context);
+  return async (view, pos, side) => {
+    const k = kernel && kernel();
+    if (!k || !k.ready || k.busy) return staticHover(view, pos, side);
+    const line = view.state.doc.lineAt(pos);
+    let end = pos - line.from;
+    while (end < line.text.length && /\w/.test(line.text[end])) end++;
+    let start = pos - line.from;
+    while (start > 0 && /[\w.]/.test(line.text[start - 1])) start--;
+    if (start === end) return null;
+    const text = view.state.doc.toString();
+    const reply = await k.inspect(text, codePoints(text.slice(0, line.from + end)));
+    const plain = reply && reply.found && reply.data && reply.data["text/plain"];
+    if (!plain) return staticHover(view, pos, side);
+    return {
+      pos: line.from + start,
+      end: line.from + end,
+      above: true,
+      create: () => ({ dom: el("pre", { class: "cm-doc cm-hover-doc kernel-doc" }, clipDoc(plain.replace(ANSI, ""))) }),
+    };
+  };
+}
+
+/** The signature of the call the cursor is in (after "("), from the kernel. */
+export async function signatureAt(k, text, pos) {
+  if (!k || !k.ready || k.busy) return "";
+  // The callee: the name before the innermost open parenthesis.
+  let depth = 0;
+  let i = pos - 1;
+  for (; i >= 0; i--) {
+    const c = text[i];
+    if (c === ")") depth++;
+    else if (c === "(") {
+      if (depth === 0) break;
+      depth--;
+    } else if (c === "\n" && depth === 0 && i < pos - 400) return "";
+  }
+  if (i < 0) return "";
+  let j = i;
+  while (j > 0 && /[\w.]/.test(text[j - 1])) j--;
+  if (j === i) return "";
+  const callee = text.slice(0, i);
+  const reply = await k.inspect(callee, codePoints(callee));
+  const plain = reply && reply.found && reply.data && reply.data["text/plain"];
+  if (!plain) return "";
+  const clean = plain.replace(ANSI, "");
+  // IPython: "Signature:" (or "Init signature:") then the signature, over
+  // several lines for long ones, up to the next "Name:" heading.
+  const sig = /^(?:Init signature|Signature):([\s\S]*?)(?=^[A-Z][\w ]*:|$(?![\s\S]))/m.exec(clean);
+  const doc = /^Docstring:\s*\n?([^\n]*)/m.exec(clean);
+  let signature = sig ? sig[1].replace(/\s+/g, " ").replace(/\(\s+/g, "(").replace(/\s+\)/g, ")").trim() : text.slice(j, i) + "(…)";
+  if (signature.length > 300) signature = signature.slice(0, 297) + "…";
+  const summary = doc && doc[1].trim() && doc[1].trim() !== "<no docstring>" ? doc[1].trim() : "";
+  return [signature, summary].filter(Boolean).join("  —  ");
+}

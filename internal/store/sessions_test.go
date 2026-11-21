@@ -153,3 +153,25 @@ func TestSessionLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestAdoptSession(t *testing.T) {
+	ctx := context.Background()
+	db := openTest(t)
+	seedSpace(t, db, "s1")
+	if _, _, err := db.OpenSession(ctx, newSession("x1", "s1", "a.ipynb", SessionReadOnly), 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := db.ClaimSession(ctx, "old", 0); !ok || err != nil {
+		t.Fatal(ok, err)
+	}
+	s, err := db.AdoptSession(ctx, "x1", "new")
+	if err != nil || s.Worker != "new" {
+		t.Fatalf("%+v %v", s, err)
+	}
+	if _, err := db.EndSession(ctx, "x1", "done", "", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.AdoptSession(ctx, "x1", "other"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("adopting an ended session: %v", err)
+	}
+}

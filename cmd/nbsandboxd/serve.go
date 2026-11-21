@@ -230,7 +230,7 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 		Enabled: cfg.Sessions.Enabled, Image: cfg.Docker.Image, Runtime: runtimeLabel(cfg), Limits: limits,
 		Idle: cfg.Sessions.Idle, Max: cfg.Sessions.Max, WriteBack: cfg.Sessions.WriteBack, Retention: cfg.Sessions.Retention,
 		PerUser: cfg.Sessions.PerUser, PerWorker: cfg.Sessions.PerWorker, MaxMessage: int64(cfg.Sessions.MaxMessage),
-		WorkerID: id, NoExecute: !cfg.Executes(),
+		WorkerID: id, NoExecute: !cfg.Executes(), Shared: cfg.Role != config.RoleAll,
 	}, sessions.Deps{
 		DB: db, Spaces: spaceSvc, Backend: sessBackend, Log: logger,
 		Packages: sessionPackages(pkgs, spaceSvc, runDeps.ImageID),

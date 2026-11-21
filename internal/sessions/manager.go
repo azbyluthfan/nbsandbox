@@ -42,6 +42,9 @@ type Config struct {
 	WorkerID       string
 	// NoExecute: this process doesn't hold sessions (an API node).
 	NoExecute bool
+	// Shared: other workers share the database (API and worker
+	// processes); a session another live worker holds is left alone.
+	Shared bool
 	// Tick is how often sessions are checked (idle, maximum, write-back,
 	// ended elsewhere); 10s if zero.
 	Tick time.Duration
@@ -57,6 +60,7 @@ type DB interface {
 	MarkSessionReady(ctx context.Context, id string) (bool, error)
 	EndSession(ctx context.Context, id, reason, by string, at time.Time) (bool, error)
 	GetSession(ctx context.Context, id string) (store.Session, error)
+	AdoptSession(ctx context.Context, id, worker string) (store.Session, error)
 	OpenSessions(ctx context.Context, f store.SessionFilter) ([]store.Session, error)
 	DeleteEndedSessionsBefore(ctx context.Context, t time.Time) (int64, error)
 	Notify(ctx context.Context, channel, payload string) error
@@ -85,8 +89,11 @@ type Deps struct {
 	Packages func(ctx context.Context, spaceID string) (dir, note string, err error)
 	// Draining reports whether workers are drained: no session starts.
 	Draining func() bool
-	Log      *slog.Logger
-	Now      func() time.Time
+	// Workers lists the live workers (with Shared): who else holds
+	// sessions, and where API nodes reach them.
+	Workers func(ctx context.Context) ([]store.Worker, error)
+	Log     *slog.Logger
+	Now     func() time.Time
 }
 
 // Errors.

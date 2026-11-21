@@ -199,7 +199,19 @@ def _too_large(msg, size):
     return out
 
 
+def session_folders():
+    """A scratch run folder for the nbsandbox module, as a run has /run (here
+    in /tmp: nothing in it is kept), so notebooks written for runs work in a
+    session: output() and emit() write there and show what they wrote."""
+    run_dir = os.path.join(os.environ.get("TMPDIR", "/tmp"), "nbsandbox-session")
+    os.makedirs(os.path.join(run_dir, "artifacts"), exist_ok=True)
+    os.environ.setdefault("NBSANDBOX_SESSION", "1")
+    os.environ.setdefault("NBSANDBOX_RUN_DIR", run_dir)
+    os.environ.setdefault("NBSANDBOX_OUTPUT_DIR", os.path.join(run_dir, "artifacts"))
+
+
 async def main():
+    session_folders()
     install_kernel_startup()
     loop = asyncio.get_running_loop()
     reader = asyncio.StreamReader(limit=16 << 20)

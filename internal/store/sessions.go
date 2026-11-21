@@ -155,6 +155,18 @@ func (db *DB) ClaimSession(ctx context.Context, worker string, perWorker int) (S
 	return s, err == nil, err
 }
 
+// AdoptSession gives an open session to worker (its container is on that
+// worker's Docker: the worker restarted under another ID, or the one that
+// held it is gone). It returns the session, or ErrNotFound if it has ended.
+func (db *DB) AdoptSession(ctx context.Context, id, worker string) (Session, error) {
+	s, err := scanSession(db.w.QueryRowContext(ctx, "UPDATE sessions SET worker = ? WHERE id = ? AND status <> 'ended' RETURNING "+sessionCols,
+		worker, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Session{}, ErrNotFound
+	}
+	return s, err
+}
+
 // MarkSessionReady moves a starting session to ready. It reports false if it
 // was no longer starting (ended meanwhile).
 func (db *DB) MarkSessionReady(ctx context.Context, id string) (bool, error) {

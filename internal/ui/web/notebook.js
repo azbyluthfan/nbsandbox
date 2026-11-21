@@ -7,10 +7,20 @@
 // JSON Schemas in metadata.nbsandbox.contract). Stored outputs are shown
 // read-only and cleared for a cell once its code changes. Saving writes the
 // notebook back as nbformat 4.
+//
+// With an interactive session (session.js), code cells run in its kernel:
+// the run button, Shift-Enter (run and go to the next cell) or Ctrl/⌘-Enter
+// (run in place). Outputs appear as they come and are kept like Jupyter's:
+// editing the code doesn't clear them, and saving stores them.
 
-import { el, clear, toast } from "./dom.js";
+import { el, clear, toast, icon } from "./dom.js";
 import { createEditor } from "./editor.js";
 import { renderOutput } from "./viewers.js";
+import { signatureAt } from "./complete.js";
+
+// The most a cell's outputs take in the saved notebook (as JSON); later
+// outputs are left out, with a note, as a run's output.ipynb is capped.
+const MAX_CELL_OUTPUT = 1 << 20;
 
 function sourceText(src) {
   return Array.isArray(src) ? src.join("") : src || "";
@@ -23,10 +33,16 @@ function newCellId() {
 }
 
 export class NotebookEditor {
-  constructor(parent, text, { modules, onChange } = {}) {
+  /**
+   * kernel(): the notebook's KernelSession while it has one (or null);
+   * startKernel(): opens one and resolves to it, for a cell run without one.
+   */
+  constructor(parent, text, { modules, onChange, kernel, startKernel } = {}) {
     this.parent = parent;
     this.modules = modules;
     this.onChange = onChange || (() => {});
+    this.kernel = kernel || (() => null);
+    this.startKernel = startKernel || null;
     this.cells = []; // {data, editor, node, outputsNode}
     try {
       this.nb = JSON.parse(text);
@@ -127,15 +143,20 @@ export class NotebookEditor {
 
     const prompt = el("div", { class: "prompt" });
     const showPrompt = () => {
-      clear(prompt).append(isCode() ? `In [${c.data.execution_count == null ? " " : c.data.execution_count}]:` : "");
+      const n = c.running ? "*" : c.data.execution_count == null ? " " : c.data.execution_count;
+      clear(prompt).append(isCode() ? `In [${n}]:` : "");
+      c.node && c.node.classList.toggle("running", !!c.running);
     };
+    c.showPrompt = () => showPrompt();
     c.outputsNode = el("div", { class: "outputs" });
+    c.sigNode = el("div", { class: "sig-help", hidden: true });
     const showOutputs = () => {
       clear(c.outputsNode);
       const outs = (isCode() ? c.data.outputs || [] : []).map(renderOutput).filter(Boolean);
       c.outputsNode.hidden = outs.length === 0;
       c.outputsNode.append(...outs);
     };
+    c.showOutputs = () => showOutputs();
     const editorHost = el("div", { class: "cell-editor" });
     const mkEditor = (text) =>
       createEditor(editorHost, {
@@ -143,10 +164,20 @@ export class NotebookEditor {
         lang: isCode() ? "python" : c.data.cell_type === "markdown" ? "markdown" : "text",
         modules: this.modules,
         context: () => this.code(),
+        kernel: () => this.kernel(),
+        keys: [
+          { key: "Shift-Enter", run: () => (this.runCell(c, true), true) },
+          { key: "Mod-Enter", run: () => (this.runCell(c, false), true) },
+          { key: "Ctrl-Enter", run: () => (this.runCell(c, false), true) }, // Jupyter's, on a Mac too
+          { key: "Escape", run: () => ((c.sigNode.hidden = true), false) },
+        ],
+        onCursor: (state, changed) => this.signature(c, state, changed),
         label: "Cell source",
         hint: isCode() ? "Python code" : "Markdown",
         onChange: () => {
-          if (isCode() && (c.data.outputs || []).length) {
+          // Without a session, outputs belong to an older version of the
+          // code; with one, they stay until the cell runs again (Jupyter).
+          if (isCode() && (c.data.outputs || []).length && !this.kernel()) {
             c.data.outputs = []; // stale once the code changed
             c.data.execution_count = null;
             showOutputs();
@@ -165,15 +196,18 @@ export class NotebookEditor {
         c.data.metadata.tags = tags().filter((x) => x !== "parameters");
       }
       c.editor = mkEditor(text);
-      syncTags();
+      c.syncTags();
       showPrompt();
       showOutputs();
       this.onChange();
     });
 
+    c.runBtn = el("button", { type: "button", class: "small secondary run-cell", title: "Run this cell in the session (Shift-Enter)",
+      "aria-label": "Run cell", onclick: () => this.runCell(c, false) }, icon("play"));
     const tools = el(
       "div",
       { class: "cell-tools" },
+      c.runBtn,
       typeSel,
       paramBtn,
       el("span", { class: "spacer" }),
@@ -181,14 +215,157 @@ export class NotebookEditor {
       el("button", { type: "button", class: "small secondary", title: "Move down", onclick: () => this.move(c, 1) }, "↓"),
       el("button", { type: "button", class: "small secondary", title: "Delete cell", onclick: () => this.remove(c) }, "✕"),
     );
-    c.node = el("div", { class: "cell" }, prompt, el("div", { class: "cell-main" }, tools, editorHost, c.outputsNode), el("div", { class: "cell-add" }, this.addButtons(c)));
-    syncTags();
+    c.node = el("div", { class: "cell" }, prompt, el("div", { class: "cell-main" }, tools, editorHost, c.sigNode, c.outputsNode), el("div", { class: "cell-add" }, this.addButtons(c)));
+    const syncTagsBase = syncTags;
+    c.syncTags = () => {
+      syncTagsBase();
+      c.runBtn.hidden = !isCode();
+    };
+    c.syncTags();
     showPrompt();
     showOutputs();
     const before = this.cells[index];
     this.cells.splice(index, 0, c);
     this.wrap.insertBefore(c.node, before ? before.node : null);
     return c;
+  }
+
+  // ---------- running cells in the session ----------
+
+  /**
+   * Runs a code cell in the session's kernel (opening a session first if
+   * there is none); advance: then focus the next cell, adding one at the end.
+   */
+  async runCell(c, advance) {
+    if (advance) this.focusNext(c);
+    if (c.data.cell_type !== "code") return;
+    let k = this.kernel();
+    if (!k || !k.ready) {
+      if (!this.startKernel) return toast("Start a session to run cells.");
+      try {
+        k = await this.startKernel();
+      } catch (e) {
+        return toast(e.message);
+      }
+      if (!k || !k.ready) return;
+    }
+    const code = c.editor.text;
+    c.sigNode.hidden = true;
+    c.data.outputs = [];
+    c.outputBytes = 0;
+    c.clearNext = false;
+    c.running = true;
+    c.showPrompt();
+    c.showOutputs();
+    try {
+      k.execute(code, {
+        input: (n) => {
+          c.data.execution_count = n;
+        },
+        output: (msg) => this.addOutput(c, msg),
+        done: (reply) => {
+          c.running = false;
+          if (reply && reply.execution_count != null) c.data.execution_count = reply.execution_count;
+          c.showPrompt();
+          this.onChange();
+        },
+        error: (why) => {
+          c.running = false;
+          c.showPrompt();
+          toast(`The cell didn't finish: ${why}.`);
+        },
+      });
+    } catch (e) {
+      c.running = false;
+      c.showPrompt();
+      toast(e.message);
+    }
+  }
+
+  /** Runs every code cell in order, each after the previous one finished. */
+  async runAll() {
+    for (const c of this.cells) {
+      if (c.data.cell_type !== "code") continue;
+      await this.runCell(c, false);
+      await new Promise((resolve) => {
+        const wait = () => (c.running ? setTimeout(wait, 100) : resolve());
+        wait();
+      });
+      if ((c.data.outputs || []).some((o) => o.output_type === "error")) break; // as Jupyter stops on an error
+    }
+  }
+
+  focusNext(c) {
+    const i = this.cells.indexOf(c);
+    let next = this.cells[i + 1];
+    if (!next) {
+      next = this.insertCell({ cell_type: "code", source: "", metadata: {}, outputs: [], execution_count: null }, this.cells.length);
+      this.onChange();
+    }
+    next.editor.focus();
+    next.node.scrollIntoView({ block: "nearest" });
+  }
+
+  // A Jupyter iopub message, as an nbformat output of the cell.
+  addOutput(c, msg) {
+    const t = msg.header.msg_type;
+    const m = msg.content || {};
+    if (t === "clear_output") {
+      if (m.wait) c.clearNext = true;
+      else {
+        c.data.outputs = [];
+        c.outputBytes = 0;
+      }
+      c.showOutputs();
+      return;
+    }
+    let out = null;
+    if (t === "stream") out = { output_type: "stream", name: m.name, text: m.text };
+    else if (t === "display_data" || t === "update_display_data") out = { output_type: "display_data", data: m.data || {}, metadata: m.metadata || {} };
+    else if (t === "execute_result") out = { output_type: "execute_result", data: m.data || {}, metadata: m.metadata || {}, execution_count: m.execution_count };
+    else if (t === "error") out = { output_type: "error", ename: m.ename, evalue: m.evalue, traceback: m.traceback || [] };
+    if (!out) return;
+    if (c.clearNext) {
+      c.data.outputs = [];
+      c.outputBytes = 0;
+      c.clearNext = false;
+    }
+    const outs = c.data.outputs;
+    const last = outs[outs.length - 1];
+    if (out.output_type === "stream" && last && last.output_type === "stream" && last.name === out.name) {
+      last.text += out.text; // one stream output, as Jupyter keeps them
+    } else {
+      const size = JSON.stringify(out).length;
+      if ((c.outputBytes || 0) + size > MAX_CELL_OUTPUT) {
+        if (!c.capped) {
+          c.capped = true;
+          outs.push({ output_type: "stream", name: "stderr", text: "[nbsandbox] more output not shown or saved: over 1 MiB for this cell\n" });
+        }
+      } else {
+        c.outputBytes = (c.outputBytes || 0) + size;
+        outs.push(out);
+      }
+    }
+    c.showOutputs();
+  }
+
+  // After "(": the signature of the call, from the kernel, under the cell.
+  signature(c, state, changed) {
+    const k = this.kernel();
+    if (!k || c.data.cell_type !== "code") return;
+    const pos = state.selection.main.head;
+    const before = state.doc.sliceString(Math.max(0, pos - 1), pos);
+    if (before === ")") {
+      c.sigNode.hidden = true;
+      return;
+    }
+    if (!changed || (before !== "(" && before !== ",")) return;
+    clearTimeout(c.sigTimer);
+    c.sigTimer = setTimeout(async () => {
+      const sig = await signatureAt(k, state.doc.toString(), pos);
+      c.sigNode.textContent = sig;
+      c.sigNode.hidden = !sig;
+    }, 120);
   }
 
   // Buttons that add a cell after `after` (a cell, or -1 for the end).

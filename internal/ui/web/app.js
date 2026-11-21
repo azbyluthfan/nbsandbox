@@ -25,6 +25,7 @@ import { showRun } from "./run.js";
 import { openFilePage } from "./filepage.js";
 import { showFunction, publishDialog } from "./functions.js";
 import { loadCompletions } from "./complete.js";
+import { sessionBar } from "./sessionbar.js";
 
 const $ = (id) => document.getElementById(id);
 const NEW_SPACE = "__new__";
@@ -817,12 +818,22 @@ function openFile(path) {
     "-",
     { label: "Delete", icon: "trash", danger: true, onclick: () => deleteItem(path, false) },
   ])];
-  const extra = () => (notebook ? [runForm(path)] : []);
-  state.page = openFilePage(newPage(), {
+  // A notebook runs interactively in its session, or as a whole in a run.
+  const bar = notebook && file ? sessionBar({ api: state.api, space: state.space, path, notebook: () => page.notebook() }) : null;
+  const extra = () => (notebook ? [bar ? bar.node : null, runForm(path)].filter(Boolean) : []);
+  const page = openFilePage(newPage(), {
     api: state.api, space: state.space, path, file, modules: state.modules, headActions: head, extraActions: extra,
+    kernel: bar ? bar.kernel : undefined, startKernel: bar ? bar.start : undefined,
     onSaved: () => reload(),
     onMoved: (to) => reload().then(() => go(state.user, state.space, "f", to)),
   });
+  state.page = {
+    ...page,
+    stop() {
+      page.stop();
+      if (bar) bar.close(); // the session goes on; it ends by itself once idle
+    },
+  };
 }
 
 function runForm(path) {
