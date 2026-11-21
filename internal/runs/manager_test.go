@@ -485,22 +485,36 @@ func TestPlatformFailuresAreNotNotebookFaults(t *testing.T) {
 
 // Cancel racing completion leaves
 // exactly one terminal status, the same in the database and result.json.
+// finishOrStop is a run that succeeds when finish closes, or is stopped
+// when its context is cancelled. A run already cancelled when it starts
+// never runs, as with a real backend: without this, select would pick at
+// random when both are ready.
+func finishOrStop(finish <-chan struct{}) func(context.Context, isolation.RunSpec, isolation.LineSink) (isolation.RunResult, error) {
+	stopped := func(spec isolation.RunSpec) (isolation.RunResult, error) {
+		writeStatus(spec, "terminated", nil)
+		return isolation.RunResult{Stopped: true, ExitCode: 143}, nil
+	}
+	return func(ctx context.Context, spec isolation.RunSpec, out isolation.LineSink) (isolation.RunResult, error) {
+		if ctx.Err() != nil {
+			return stopped(spec)
+		}
+		select {
+		case <-finish:
+			writeStatus(spec, "succeeded", nil)
+			return isolation.RunResult{}, nil
+		case <-ctx.Done():
+			return stopped(spec)
+		}
+	}
+}
+
 func TestCancelCompletionRace(t *testing.T) {
 	e := newEnv(t)
 	sid := e.space(t, "alice")
 	counts := map[string]int{}
 	for i := 0; i < 200; i++ {
 		finish := make(chan struct{})
-		e.be.behave = func(ctx context.Context, spec isolation.RunSpec, out isolation.LineSink) (isolation.RunResult, error) {
-			select {
-			case <-finish:
-				writeStatus(spec, "succeeded", nil)
-				return isolation.RunResult{}, nil
-			case <-ctx.Done():
-				writeStatus(spec, "terminated", nil)
-				return isolation.RunResult{Stopped: true, ExitCode: 143}, nil
-			}
-		}
+		e.be.behave = finishOrStop(finish)
 		v := e.submit(t, "alice", sid, "")
 		e.wait(t, "alice", sid, v.ID, false)
 		// Random timing on both sides so either can win.
@@ -526,16 +540,7 @@ func TestCancelCompletionRace(t *testing.T) {
 
 	for _, cancelFirst := range []bool{true, false} {
 		finish := make(chan struct{})
-		e.be.behave = func(ctx context.Context, spec isolation.RunSpec, out isolation.LineSink) (isolation.RunResult, error) {
-			select {
-			case <-finish:
-				writeStatus(spec, "succeeded", nil)
-				return isolation.RunResult{}, nil
-			case <-ctx.Done():
-				writeStatus(spec, "terminated", nil)
-				return isolation.RunResult{Stopped: true, ExitCode: 143}, nil
-			}
-		}
+		e.be.behave = finishOrStop(finish)
 		v := e.submit(t, "alice", sid, "")
 		e.wait(t, "alice", sid, v.ID, false)
 		want := StatusCancelled

@@ -103,7 +103,7 @@ func TestSessionMemoryLimit(t *testing.T) {
 	if m.Content["status"] == "ended" {
 		ready := call(t, "GET", "/readyz", "", nil, nil)
 		got = fmt.Sprintf("the session ended after %.0fs (%v); nbsandboxd ready %d", time.Since(start).Seconds(), m.Content["reason"], ready.Code)
-		ok = onKubernetes && ready.Code == http.StatusOK
+		ok = (onKubernetes || runtimeLabel == "runsc") && ready.Code == http.StatusOK // the whole container is killed there
 	} else {
 		k.next(func(m kmsg) bool { return m.Channel == "bridge" && m.Content["status"] == "ready" })
 		back := time.Since(start)
@@ -114,7 +114,7 @@ func TestSessionMemoryLimit(t *testing.T) {
 		ok = strings.TrimSpace(out) == "alive" && ready.Code == http.StatusOK
 	}
 	finding(t, "session-memory-limit", "a session's cell allocates memory without bound",
-		"the kernel is killed at the limit (Docker: started again, the session goes on; Kubernetes: the session ends); nbsandboxd goes on", got, ok)
+		"the kernel is killed at the limit (runc on Docker, gVisor on Kubernetes: started again, the session goes on; gVisor on Docker, Kubernetes otherwise: the whole container, so the session ends, saying why); nbsandboxd goes on", got, ok)
 	if !ok {
 		t.Error(got)
 	}

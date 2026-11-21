@@ -74,7 +74,7 @@ AI agents get sessions as MCP tools (`open_session`, `run_cell`, `complete_code`
 | Sessions a worker holds, beside `runs.concurrency` | 4 | `sessions.per_worker` |
 | One output larger than this is replaced by a notice | 2 MiB | `sessions.max_message` |
 
-A session has a run's resource limits (`limits:` in `settings.yaml`): memory, CPUs, processes, `/tmp`. A cell that uses more memory than the limit kills the kernel. On Docker the session starts a new one (its variables are gone) and goes on; on Kubernetes the whole Pod is killed (the kubelet's `memory.oom.group`), so the session ends, its files written back, and you start a new one. A long cell is never cut off by the idle rule; `sessions.max` still applies. The run time limit (`limits.timeout`) applies to runs, not to cells.
+A session has a run's resource limits (`limits:` in `settings.yaml`): memory, CPUs, processes, `/tmp`. A cell that uses more memory than the limit kills the kernel. Where only the kernel is killed, the session starts a new one (its variables are gone) and goes on: Docker with runc, and Kubernetes with gVisor (which enforces the limit inside its sandbox). Where the whole container is killed, the session ends, saying why, its files written back, and you start a new one: Kubernetes with the default runtime (the kubelet's `memory.oom.group`), and Docker with gVisor (runsc), where the host kills the sandbox that holds the notebook's memory. A long cell is never cut off by the idle rule; `sessions.max` still applies. The run time limit (`limits.timeout`) applies to runs, not to cells.
 
 ## For operators
 
