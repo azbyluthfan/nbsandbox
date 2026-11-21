@@ -2,6 +2,24 @@
 
 **2026-11-08, before the first v0.x release.** What was checked, what was found, and what was done about each finding. Repeat it before each release (the commands are at the end). The [threat model](threat-model.md) describes what nbsandbox protects against; this page is the evidence that it was checked.
 
+## The review for v0.3.0 (2026-11-21)
+
+Interactive sessions are the new surface: a notebook's live kernel, reached over a WebSocket.
+
+| Area | Result |
+|---|---|
+| Go | `govulncheck`: none reached by our code (one in a required module, not called). New direct dependency: `gorilla/websocket` (already in the module graph through client-go) |
+| Runner's Python packages | `pip-audit`: none |
+| Container images | Trivy, HIGH and CRITICAL with a fix: nbsandboxd 0, runner 0, builder 0 (the accepted CVE-2025-47273 still listed in `.trivyignore`). The runner and builder have 50 HIGH in Debian packages with no fix published yet; they are taken up by the weekly rebuild once fixed |
+| Secrets in the source tree | `gitleaks`: four, all known test values: the two from before (a `YOUR_PASSWORD` placeholder, the demo users' published password), and two new fixed test secrets for sessions in a cluster (`internal/config/config_test.go`, `internal/sessions/remote_test.go`). The cluster Compose stack's `nbsandbox-dev-sessions-secret` is a development default, overridable, like its other dev values |
+| The WebSocket channel | The owner check runs before the upgrade; the token needs `nbsandbox.runs`. The UI's CSRF header can't cover a WebSocket (a GET), so the channel checks `Origin` against the host: another site's page is refused (`TestSessionChannelRefusals`). Client messages: at most 1 MiB, one of six types, compacted to one line before they reach the bridge; on an API node they are checked before being relayed |
+| What a session sends back | Everything the bridge sends comes from the user's own code: it can forge messages for its own clients (bridge states, outputs), as `display()` already lets it show anything. nbsandboxd treats it as untrusted: lines over `sessions.max_message` are dropped, it reads only the channel, type and execution state (for the idle rule: a session that claims to be busy still ends at `sessions.max`), and the browser shows HTML only in sandboxed frames with no network |
+| **Found and fixed: a slow viewer's backlog** | A client that stopped reading could be 1,024 messages behind, each up to 2 MiB: one viewer of a session printing large outputs could make nbsandboxd hold about 2 GiB. Each client now has a 32 MiB budget too, and is disconnected past it (it reconnects) (`TestSlowClientIsDisconnectedByBytes`) |
+| **Found and fixed: a session's disk on Docker** | A read-write session's working copy is on the worker's disk, and nothing checked its size while the session ran: a kernel could fill the host's disk. Like a writing run, it is now checked against the space's quota every tick, and the session ends over it, its changes not stored (`TestSessionOverQuotaEnds`). On Kubernetes the Pod's disk limit bounds it |
+| The workers' internal listener (clusters) | Serves only with `sessions.secret` (constant-time compare; `TestInternalHandlerNeedsTheSecret`); without a secret, sessions stay off on API and worker processes. It trusts the API node for ownership, so it belongs on the internal network: plain HTTP, port 8091. On Kubernetes, add a NetworkPolicy allowing only API Pods to reach it if other workloads share the cluster |
+| Attach | Docker: the socket proxy now allows `attach` for any container, as it allowed stop and kill: a compromised nbsandboxd could talk to another container's stdin (it is out of scope, as before). Kubernetes: `pods/attach` only in the runs namespace |
+| Session isolation | A session is a run's container or Pod, with the same settings pinned by the same tests, and passes the report's new checks on Docker and on kind: `session-network`, `session-isolation`, `session-memory-limit`, `session-read-only`, `session-reattach` |
+
 ## v0.2.1 (2026-11-16)
 
 A release workflow fix only (the runner image's manifest label); the code, the dependencies and the pinned base images are those of 0.2.0, so the v0.2.0 review below applies.

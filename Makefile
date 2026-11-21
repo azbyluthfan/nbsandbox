@@ -415,7 +415,7 @@ soak: dev-data ## Soak test (default 45m): leaks judged on trends, cleanup timer
 test-integration: dev-data ## Integration tests against the dev stack (Docker needed; restarts the stack)
 	@$(STOP_KIND)
 	-@$(CLUSTER) stop >/dev/null 2>&1
-	NBSANDBOX_SHUTDOWN_GRACE=5s NBSANDBOX_RUN_TIMEOUT=60s $(COMPOSE) up -d --build
+	NBSANDBOX_SHUTDOWN_GRACE=5s NBSANDBOX_RUN_TIMEOUT=60s NBSANDBOX_SESSIONS_PER_USER=0 $(COMPOSE) up -d --build
 	NBSANDBOX_SHUTDOWN_GRACE=5s NBSANDBOX_RUN_TIMEOUT=60s $(GO) test -tags integration -count=1 -timeout 30m $(TESTFLAGS) ./tests/integration/
 
 KEYCLOAK_COMPOSE := $(COMPOSE) -f deploy/docker-compose.keycloak.yml
