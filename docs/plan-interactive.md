@@ -1,6 +1,6 @@
 # Plan: interactive mode
 
-**Status (2026-11-15):** agreed, with the changes from the research below (Jupyter messages on the channel, a session per notebook, Colab's idle rule, JupyterLab-style completion merging, sandboxed output iframes, a variables panel if time allows). Step 1, the spike, is next.
+**Status (2026-11-21):** agreed, with the changes from the research below. Step 1, the spike, is done (results below); steps 2 to 7 are being built, for **v0.3.0** (the release after 0.2.x; this plan said v0.2.0 before that shipped without it).
 
 ## Today
 
@@ -114,7 +114,7 @@ The browser's WebSocket reaches an API node, but the session runs on a worker:
 | Someone else's session | Owner only; the session ID alone gives nothing; the WebSocket needs the owner's credentials and the UI's origin |
 | A long session keeps old credentials | It has none; the UI session's own expiry still applies to the browser |
 
-## Order of work, and what's in v0.2.0
+## Order of work, and what's in v0.3.0
 
 | | Step |
 |---|---|
@@ -126,7 +126,25 @@ The browser's WebSocket reaches an API node, but the session runs on a worker:
 | 6 | Kubernetes (`pods/attach`) |
 | 7 | Docs, isolation report checks (no network from a session, limits, re-attach) |
 
-Proposed for v0.2.0: **steps 1–4 and 7, with 5 if time allows.** Kubernetes follows, as it did for packages.
+For v0.3.0: **all seven steps.**
+
+## Spike results (step 1, 2026-11-21)
+
+Measured on Docker Desktop (Apple silicon), the runner image, a container with a run's isolation (`--network none`, read-only root, no capabilities, 1 CPU, 2 GiB):
+
+| | Without Jedi | With Jedi |
+|---|---|---|
+| `df.` (a DataFrame's methods and columns) | **5 ms** median, 11 ms max | 36 ms median, 323 ms max |
+| `df["`, `d["` (columns, keys) | 2 ms | 2 ms |
+| `pd.read_`, `np.lin` | 2 ms | 6–9 ms |
+| `inspect` of `pd.read_csv(` (docs and signature) | 34 ms | 30 ms |
+
+- **Jedi off.** It is slower and adds nothing for the cases that matter: columns and keys come from IPython's own completer either way.
+- **A busy kernel doesn't answer** a completion until its cell ends, so the editor needs the static index as a fallback, as planned.
+- **Kernel ready** about 1.5 s after the container starts.
+- **Interrupt** answers in about 10 ms and stops the cell with `KeyboardInterrupt`.
+- **Through the socket proxy:** attaching to a container's stdio (a hijacked HTTP connection) works through wollomatic/socket-proxy with one more allowed call, `POST /containers/{id}/attach`. Detaching and attaching again works, and the container keeps running.
+- **Refused message types** (`history_request` and others) get no reply from the kernel; the bridge answers with a refusal instead.
 
 ## What others do (research, 2026-11-15)
 
@@ -152,7 +170,7 @@ Proposed for v0.2.0: **steps 1–4 and 7, with 5 if time allows.** Kubernetes fo
 
    The spike measures IPython's completer with and without Jedi, since Jedi is the slow part and plain attribute completion already includes DataFrame columns and dict keys.
 5. **Outputs in sandboxed iframes** as Colab does: `sandbox` without `allow-same-origin`, and a CSP inside that blocks the network, so even script outputs (plots) can't reach the UI's cookies or send data out. Text and images are inserted directly.
-6. **A variables panel** (name, type, shape, DataFrame columns) as in Databricks and Deepnote: one silent request to the kernel after each cell. Small and low-risk, but optional for v0.2.0.
+6. **A variables panel** (name, type, shape, DataFrame columns) as in Databricks and Deepnote: one silent request to the kernel after each cell. Small and low-risk, but optional.
 
 ### Not adopting
 
@@ -167,6 +185,6 @@ Proposed for v0.2.0: **steps 1–4 and 7, with 5 if time allows.** Kubernetes fo
 2. **Read-write sessions write files back** like a run (on save, every few minutes, at the end), not continuously.
 3. **Limits:** 30 min idle, 8 h maximum, 2 per user, 4 per worker.
 4. **Outputs are saved** with the notebook (capped), as in Jupyter.
-5. **v0.2.0 scope:** Docker, single process and cluster; Kubernetes after.
+5. **v0.3.0 scope:** Docker, single process and cluster, and Kubernetes.
 6. **Widgets (ipywidgets) and `input()`:** not supported (refused), at least at first.
 7. **From the research:** Jupyter messages on the channel; a session per notebook; Colab's idle rule; JupyterLab-style completion merging; sandboxed iframes for outputs; a variables panel if time allows.
