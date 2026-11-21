@@ -25,6 +25,7 @@ import asyncio
 import datetime
 import json
 import os
+import queue
 import sys
 import uuid
 
@@ -45,6 +46,8 @@ ALLOWED_OUT = {
 # a cell that displays a huge object must not flood nbsandboxd or the browser.
 MAX_MESSAGE = int(os.environ.get("NBSANDBOX_SESSION_MAX_MESSAGE", str(2 << 20)))
 OUTPUT_TYPES = {"stream", "display_data", "update_display_data", "execute_result", "error"}
+# How long a pump waits on one poll of a kernel socket before polling again.
+PUMP_POLL = 1.0
 
 
 def _default(o):
@@ -115,8 +118,26 @@ class Bridge:
             self.restarting = False
 
     async def pump(self, channel, name):
+        """Relays one of the kernel's channels to nbsandboxd, until cancelled.
+
+        It never waits on a single poll for good: ZeroMQ signals a socket
+        readable on edges only, and the shell socket is also written to (and
+        polled with timeouts while the kernel starts), so an endless poll can
+        miss a reply already queued, and the session's shell channel goes
+        silent while iopub carries on (seen under load in the soak). A new
+        poll every second sees what is queued. And an error never ends the
+        pump: it is reported, and the pump goes on."""
         while True:
-            msg = await channel.get_msg()
+            try:
+                msg = await channel.get_msg(timeout=PUMP_POLL)
+            except queue.Empty:
+                continue
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                await self.bridge(notice="a message from the kernel's %s channel was lost: %s" % (name, e))
+                await asyncio.sleep(PUMP_POLL / 10)
+                continue
             mt = msg["header"]["msg_type"]
             if mt not in ALLOWED_OUT[name]:
                 continue

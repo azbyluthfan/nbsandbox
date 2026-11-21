@@ -116,12 +116,28 @@ func (k *kernelConn) next(match func(kmsg) bool) kmsg {
 	}
 }
 
-// run executes code and returns what it printed and its reply.
+// run executes code and returns what it printed and its reply. Both must
+// come: the output and idle status (iopub) and the reply (shell), which can
+// arrive in either order. A cell that finishes without a reply fails at once
+// (a silent shell channel would otherwise only show at the next completion).
 func (k *kernelConn) run(code string) (stdout string, reply kmsg) {
 	k.t.Helper()
 	id := k.send("shell", "execute_request", map[string]any{"code": code, "silent": false})
 	var out strings.Builder
-	for {
+	idle := false
+	for !idle || reply.Channel == "" {
+		if idle {
+			_ = k.c.SetReadDeadline(time.Now().Add(30 * time.Second))
+			_, b, err := k.c.ReadMessage()
+			if err != nil {
+				k.t.Fatalf("a cell finished (iopub idle) but no execute_reply came on the shell channel: %v", err)
+			}
+			var m kmsg
+			if json.Unmarshal(b, &m) == nil && m.Parent["msg_id"] == id && m.Channel == "shell" && m.typ() == "execute_reply" {
+				reply = m
+			}
+			continue
+		}
 		m := k.next(func(m kmsg) bool { return m.Parent["msg_id"] == id })
 		switch {
 		case m.Channel == "iopub" && m.typ() == "stream":
@@ -131,9 +147,10 @@ func (k *kernelConn) run(code string) (stdout string, reply kmsg) {
 		case m.Channel == "shell" && m.typ() == "execute_reply":
 			reply = m
 		case m.Channel == "iopub" && m.typ() == "status" && m.Content["execution_state"] == "idle":
-			return out.String(), reply
+			idle = true
 		}
 	}
+	return out.String(), reply
 }
 
 func (k *kernelConn) complete(code string) []string {

@@ -160,5 +160,60 @@ class RestartTest(unittest.TestCase):
             s.close()
 
 
+
+class PumpTest(unittest.TestCase):
+    """The pump keeps relaying whatever happens on a poll."""
+
+    def test_pump_polls_again_and_survives_errors(self):
+        import asyncio
+        import io
+
+        sys.path.insert(0, os.path.dirname(BRIDGE))
+        import session_bridge
+
+        reply = {"header": {"msg_type": "complete_reply", "msg_id": "r"}, "parent_header": {"msg_id": "q"},
+                 "metadata": {}, "content": {"matches": ["a"]}}
+
+        class Channel:
+            def __init__(self):
+                self.calls = []
+
+            async def get_msg(self, timeout=None):
+                self.calls.append(timeout)
+                n = len(self.calls)
+                if n == 1:
+                    raise queue.Empty  # nothing within the timeout: poll again
+                if n == 2:
+                    raise RuntimeError("boom")  # reported; the pump goes on
+                if n == 3:
+                    return reply
+                await asyncio.sleep(3600)
+
+        async def run():
+            out = io.BytesIO()
+            b = session_bridge.Bridge(out=out)
+            ch = Channel()
+            old, session_bridge.PUMP_POLL = session_bridge.PUMP_POLL, 0.05
+            try:
+                task = asyncio.create_task(b.pump(ch, "shell"))
+                for _ in range(100):
+                    if len(ch.calls) >= 4:
+                        break
+                    await asyncio.sleep(0.01)
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+            finally:
+                session_bridge.PUMP_POLL = old
+            return ch.calls, [json.loads(line) for line in out.getvalue().splitlines()]
+
+        calls, msgs = asyncio.run(run())
+        self.assertTrue(all(t is not None for t in calls), calls)  # never an endless poll
+        self.assertIn("boom", msgs[0]["content"]["notice"])
+        self.assertEqual((msgs[1]["channel"], msgs[1]["header"]["msg_type"]), ("shell", "complete_reply"))
+
+
 if __name__ == "__main__":
     unittest.main()
