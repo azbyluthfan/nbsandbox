@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package mcpserver exposes nbsandbox to AI agents as Model Context Protocol
-// tools: spaces, files, runs, functions and the runtime, each a thin call
-// to the REST API as the agent's user. The server holds no data and grants
-// nothing: every call is authorised by nbsandbox, with the caller's own
-// credentials.
+// tools: spaces, files, runs, functions, interactive sessions and the
+// runtime, each a thin call to the REST API as the agent's user. The
+// server holds no data and grants nothing: every call is authorised by
+// nbsandbox, with the caller's own credentials.
 package mcpserver
 
 import (
@@ -52,6 +52,8 @@ func New(o Options) *mcp.Server {
 const instructions = `nbsandbox runs Jupyter notebooks (Python) in isolated sandboxes: each run gets a fresh container with no network, limited memory, CPU and time, and a copy of its space's files.
 
 Typical use: create or pick a space, write a notebook (nbformat 4 JSON) and any data files into it, run the notebook with parameters, and read the result: its status, the error with the failing cell, the value it returned with nbsandbox.output(...), the log, and the files it wrote to its artifacts. Published functions are notebooks with an input and output contract; invoke them with parameters.
+
+To explore step by step, open a session on a notebook (open_session): a live kernel where run_cell runs code and the variables stay between calls, so data is loaded once. End it with end_session when done.
 
 Runs can't reach the internet: everything a notebook needs must be in the space or in the runner image (nbsandbox_runtime lists its packages).`
 

@@ -118,7 +118,8 @@ func TestToolsAreListedWithHints(t *testing.T) {
 	}
 	for _, name := range []string{"nbsandbox_runtime", "list_spaces", "create_space", "list_files", "read_file", "write_file",
 		"run_notebook", "get_run_result", "get_run", "list_runs", "get_run_log", "cancel_run", "list_artifacts", "read_artifact",
-		"list_functions", "get_function", "invoke_function"} {
+		"list_functions", "get_function", "invoke_function",
+		"open_session", "list_sessions", "run_cell", "complete_code", "interrupt_session", "end_session"} {
 		tool := byName[name]
 		if tool == nil || tool.Description == "" || tool.Annotations == nil {
 			t.Errorf("tool %s missing or undescribed", name)

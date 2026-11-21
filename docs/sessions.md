@@ -62,6 +62,8 @@ curl -su alice:… -X POST "$URL/v1/spaces/$SPACE/sessions" -H 'Content-Type: ap
 
 Then open the WebSocket `GET /v1/spaces/{id}/sessions/{session_id}/channel` and exchange Jupyter messages, one JSON object per text message. [api.md](api.md#7-work-interactively-a-session) describes the protocol; the OpenAPI spec lists every endpoint. gRPC has the same as `SessionService` (the channel is a bidirectional stream). Opening, using and ending a session needs the `nbsandbox.runs` scope: a session runs code, as a run does.
 
+AI agents get sessions as MCP tools (`open_session`, `run_cell`, `complete_code`, `end_session`): [mcp.md](mcp.md#tools).
+
 ## Limits
 
 | | Default | Setting |

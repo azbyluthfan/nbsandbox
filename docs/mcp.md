@@ -17,8 +17,14 @@ It's a thin layer over the [REST API](api.md): every tool is one or two API call
 | `cancel_run` | stop a run; its partial output is kept |
 | `list_artifacts`, `read_artifact` | the files a run wrote to its artifacts folder; text ones are returned (up to 64 KiB) |
 | `list_functions`, `get_function`, `invoke_function` | published functions: their contracts, and calls with parameters |
+| `open_session`, `list_sessions` | a notebook's live kernel, an **interactive session** ([sessions.md](sessions.md)), optionally `read_only`; the space's open sessions |
+| `run_cell` | run code in a session and return what it printed, its result, the error with its traceback, and charts as images (at most 4 a cell); variables stay for the next cell. Waits up to `wait_seconds` (default 120); a longer cell goes on in the session |
+| `complete_code` | completions from the session's live objects (a DataFrame's columns after `df["`) |
+| `interrupt_session`, `end_session` | stop the running cell; end the session (its kernel stops; a read-write session's files are written to the space first) |
 
-Tools are marked read-only, or as making changes (`write_file` and `cancel_run` as destructive), so clients can ask before the ones that change things. Long texts are cut with a note saying how much was left out.
+Tools are marked read-only, or as making changes (`write_file`, `cancel_run` and `end_session` as destructive), so clients can ask before the ones that change things. Long texts are cut with a note saying how much was left out.
+
+**Runs or a session?** A run starts fresh each time and is kept with its log and result: right for a finished notebook, or for a result someone else will look at. A session keeps the kernel between tool calls, so an agent exploring data loads it once and then tries one step after another in milliseconds each; it ends when the agent calls `end_session`, or after 30 minutes idle. Each tool call connects to the session and disconnects again, so a shared (HTTP) server keeps no state either.
 
 ## Local: the agent starts it (stdio)
 
@@ -62,15 +68,15 @@ With OIDC, the agent's token needs the scopes of the tools it uses:
 
 | Scope | For |
 |---|---|
-| `nbsandbox.read` | every listing and read, results and logs |
+| `nbsandbox.read` | every listing and read, results and logs, `list_sessions` |
 | `nbsandbox.spaces.write` | `create_space` |
 | `nbsandbox.files.write` | `write_file` |
-| `nbsandbox.runs` | `run_notebook`, `cancel_run` |
+| `nbsandbox.runs` | `run_notebook`, `cancel_run`, and the session tools (`open_session`, `run_cell`, `complete_code`, `interrupt_session`, `end_session`) |
 | `nbsandbox.functions.invoke` | `invoke_function` |
 
 A token with only `nbsandbox.read` and `nbsandbox.functions.invoke` gives an agent the published functions and nothing else: a safe way to let an agent use notebooks someone else wrote and reviewed.
 
 ## Notes
 
-- **The sandbox applies to what the agent runs.** Notebooks run with the same isolation as any run: no network, the run's limits, its own copy of the space. Files a run writes are written back to the space when it ends (unless `read_only`), so an agent can change a space's files through runs as well as through `write_file`; give it its own space.
+- **The sandbox applies to what the agent runs.** Notebooks run with the same isolation as any run: no network, the run's limits, its own copy of the space. Files a run or a read-write session writes are written back to the space (unless `read_only`), so an agent can change a space's files through them as well as through `write_file`; give it its own space.
 - **gRPC:** the MCP server uses the REST API. The gRPC services offer the same operations for programs that prefer them ([api.md](api.md)).
