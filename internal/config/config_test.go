@@ -338,3 +338,30 @@ func TestPackagesSettings(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionsSettings(t *testing.T) {
+	d := Default().Sessions
+	if !d.Enabled || d.Idle != 30*time.Minute || d.Max != 8*time.Hour || d.PerUser != 2 || d.PerWorker != 4 {
+		t.Fatalf("defaults: %+v", d)
+	}
+	s, err := Load("", envOf(map[string]string{"NBSANDBOX_SESSIONS_IDLE": "10m", "NBSANDBOX_SESSIONS_MAX": "2h",
+		"NBSANDBOX_SESSIONS_PER_USER": "0", "NBSANDBOX_SESSIONS_PER_WORKER": "8"}))
+	if err != nil || s.Sessions.Idle != 10*time.Minute || s.Sessions.Max != 2*time.Hour || s.Sessions.PerUser != 0 || s.Sessions.PerWorker != 8 {
+		t.Fatalf("env: %+v %v", s.Sessions, err)
+	}
+	if s, err := Load("", envOf(map[string]string{"NBSANDBOX_SESSIONS_ENABLED": "false", "NBSANDBOX_SESSIONS_PER_WORKER": "0"})); err != nil || s.Sessions.Enabled {
+		t.Fatalf("off: settings aren't checked: %v", err)
+	}
+	for name, env := range map[string]map[string]string{
+		"short idle":        {"NBSANDBOX_SESSIONS_IDLE": "1s"},
+		"max below idle":    {"NBSANDBOX_SESSIONS_IDLE": "1h", "NBSANDBOX_SESSIONS_MAX": "30m"},
+		"a week and more":   {"NBSANDBOX_SESSIONS_MAX": "200h"},
+		"no worker room":    {"NBSANDBOX_SESSIONS_PER_WORKER": "0"},
+		"negative per user": {"NBSANDBOX_SESSIONS_PER_USER": "-1"},
+		"not a number":      {"NBSANDBOX_SESSIONS_PER_USER": "two"},
+	} {
+		if _, err := Load("", envOf(env)); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}

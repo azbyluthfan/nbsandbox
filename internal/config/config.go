@@ -63,6 +63,9 @@ type Settings struct {
 	// Packages builds a space's requirements.txt into a package set its
 	// runs import (docs/packages.md).
 	Packages Packages `yaml:"packages"`
+	// Sessions are interactive sessions: a notebook's live kernel
+	// (docs/sessions.md).
+	Sessions Sessions `yaml:"sessions"`
 
 	Auth Auth `yaml:"auth"`
 
@@ -153,6 +156,29 @@ type UI struct {
 }
 
 // Packages configures custom packages per space.
+// Sessions configures interactive sessions. A session runs with the run
+// limits (limits:), for longer.
+type Sessions struct {
+	Enabled bool `yaml:"enabled"`
+	// Idle ends a session nobody uses: no cell running and no browser
+	// connected, for this long.
+	Idle time.Duration `yaml:"idle"`
+	// Max ends a session in any case, this long after it started.
+	Max time.Duration `yaml:"max"`
+	// PerUser bounds a user's open sessions (0: no limit).
+	PerUser int `yaml:"per_user"`
+	// PerWorker bounds the sessions a worker holds, beside runs.concurrency.
+	PerWorker int `yaml:"per_worker"`
+	// WriteBack is how often a read-write session's file changes are
+	// written to the space (also on request, and when it ends).
+	WriteBack time.Duration `yaml:"write_back"`
+	// MaxMessage bounds one output a session sends (larger ones become a
+	// notice).
+	MaxMessage Size `yaml:"max_message"`
+	// Retention keeps ended sessions' records this long.
+	Retention time.Duration `yaml:"retention"`
+}
+
 type Packages struct {
 	Enabled bool `yaml:"enabled"`
 	// IndexURL is the package index builds use (pip's --index-url).
@@ -368,6 +394,8 @@ func Default() Settings {
 		Packages: Packages{Enabled: false, IndexURL: "https://pypi.org/simple", Allowed: []string{}, MaxSize: GiB,
 			BuildTimeout: 10 * time.Minute, Retention: 30 * 24 * time.Hour, CacheSize: 20 * GiB,
 			BuilderImage: "nbsandbox-runner-builder:dev", Network: "bridge"},
+		Sessions: Sessions{Enabled: true, Idle: 30 * time.Minute, Max: 8 * time.Hour, PerUser: 2, PerWorker: 4,
+			WriteBack: 5 * time.Minute, MaxMessage: 2 * MiB, Retention: 7 * 24 * time.Hour},
 		UI: UI{Enabled: false, Listen: "127.0.0.1:8090", Auth: "none",
 			Session: UISession{Idle: time.Hour, Max: 12 * time.Hour},
 			OIDC: UIOIDC{Scopes: []string{"openid", "profile", auth.ScopeRead, auth.ScopeSpacesWrite, auth.ScopeFilesWrite,
@@ -557,6 +585,8 @@ func applyEnv(s *Settings, getenv func(string) string) error {
 		"NBSANDBOX_EVENT_RETENTION":    &s.Runs.EventRetention,
 		"NBSANDBOX_IDEMPOTENCY_WINDOW": &s.Runs.IdempotencyWindow,
 		"NBSANDBOX_CLEANUP_EVERY":      &s.Runs.CleanupEvery,
+		"NBSANDBOX_SESSIONS_IDLE":      &s.Sessions.Idle,
+		"NBSANDBOX_SESSIONS_MAX":       &s.Sessions.Max,
 	}
 	for k, p := range durations {
 		if v := getenv(k); v != "" {
@@ -575,6 +605,7 @@ func applyEnv(s *Settings, getenv func(string) string) error {
 		"NBSANDBOX_AUDIT_ENABLED":          &s.Audit.Enabled,
 		"NBSANDBOX_PACKAGES_ENABLED":       &s.Packages.Enabled,
 		"NBSANDBOX_AUDIT_DOWNLOADS":        &s.Audit.Downloads,
+		"NBSANDBOX_SESSIONS_ENABLED":       &s.Sessions.Enabled,
 	} {
 		if v := getenv(name); v != "" {
 			b, err := strconv.ParseBool(v)
@@ -586,6 +617,18 @@ func applyEnv(s *Settings, getenv func(string) string) error {
 	}
 	if v := getenv("NBSANDBOX_K8S_PROBE_TARGETS"); v != "" {
 		s.Kubernetes.ProbeTargets = strings.Split(v, ",")
+	}
+	for name, p := range map[string]*int{
+		"NBSANDBOX_SESSIONS_PER_USER":   &s.Sessions.PerUser,
+		"NBSANDBOX_SESSIONS_PER_WORKER": &s.Sessions.PerWorker,
+	} {
+		if v := getenv(name); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				return fmt.Errorf("%s: %w", name, err)
+			}
+			*p = n
+		}
 	}
 	if v := getenv("NBSANDBOX_RUN_CONCURRENCY"); v != "" {
 		n, err := strconv.Atoi(v)
@@ -746,6 +789,23 @@ func (s Settings) Validate() error {
 	case "warn", "reject":
 	default:
 		add("runs.dependency_check: must be warn or reject, got %q", s.Runs.DependencyCheck)
+	}
+	if ss := s.Sessions; ss.Enabled {
+		if ss.Idle < 10*time.Second || ss.Max < ss.Idle || ss.Max > 7*24*time.Hour {
+			add("sessions: idle must be at least 10s, and max between idle and 168h, got %s and %s", ss.Idle, ss.Max)
+		}
+		if ss.PerUser < 0 || ss.PerWorker < 1 {
+			add("sessions: per_user must be 0 (no limit) or more, and per_worker at least 1, got %d and %d", ss.PerUser, ss.PerWorker)
+		}
+		if ss.WriteBack < 10*time.Second || ss.WriteBack > time.Hour {
+			add("sessions.write_back: must be between 10s and 1h, got %s", ss.WriteBack)
+		}
+		if ss.MaxMessage < 64*KiB || ss.MaxMessage > 64*MiB {
+			add("sessions.max_message: must be between 64KiB and 64MiB, got %s", ss.MaxMessage)
+		}
+		if ss.Retention < time.Minute {
+			add("sessions.retention: must be at least 1m, got %s", ss.Retention)
+		}
 	}
 	if p := s.Packages; p.Enabled {
 		if s.Backend == "kubernetes" {

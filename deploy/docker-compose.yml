@@ -165,7 +165,7 @@ services:
       - -loglevel=info
       - -allowHEAD=(/v[0-9.]+)?/_ping
       - -allowGET=(/v[0-9.]+)?/(_ping|version|info|containers/json|containers/[a-zA-Z0-9_.-]+/(json|logs|stats)|images/.+/json)
-      - -allowPOST=(/v[0-9.]+)?/containers/(create|[a-zA-Z0-9_.-]+/(start|stop|kill|wait))
+      - -allowPOST=(/v[0-9.]+)?/containers/(create|[a-zA-Z0-9_.-]+/(start|stop|kill|wait|attach))
       - -allowDELETE=(/v[0-9.]+)?/containers/[a-zA-Z0-9_.-]+
       - -allowbindmountfrom=${NBSANDBOX_DATA_DIR:-/srv/nbsandbox}/spaces,${NBSANDBOX_DATA_DIR:-/srv/nbsandbox}/packages
     volumes:

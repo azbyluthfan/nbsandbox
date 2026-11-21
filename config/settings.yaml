@@ -123,6 +123,16 @@ audit:
   retention: 2160h                  # NBSANDBOX_AUDIT_RETENTION: 90 days; 24h to 87600h
   downloads: true                   # NBSANDBOX_AUDIT_DOWNLOADS: also record downloads of files and run outputs
 
+sessions:                           # interactive sessions: a notebook's live kernel (docs/sessions.md)
+  enabled: true                     # NBSANDBOX_SESSIONS_ENABLED
+  idle: 30m                         # NBSANDBOX_SESSIONS_IDLE: ends after no cell ran and no browser was connected this long
+  max: 8h                           # NBSANDBOX_SESSIONS_MAX: ends this long after it started, in any case
+  per_user: 2                       # NBSANDBOX_SESSIONS_PER_USER: open sessions per user (0: no limit)
+  per_worker: 4                     # NBSANDBOX_SESSIONS_PER_WORKER: sessions a worker holds, beside runs.concurrency
+  write_back: 5m                    # a read-write session's file changes go to the space this often, and when it ends
+  max_message: 2MiB                 # one output larger than this is replaced by a notice
+  retention: 168h                   # ended sessions' records are kept this long
+
 # A space's own packages (docs/packages.md): its requirements.txt is built,
 # once, into a package set its runs import. Build containers are the only
 # containers with network; they install wheels only.

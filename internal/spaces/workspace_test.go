@@ -168,3 +168,50 @@ func TestCheckinNoChanges(t *testing.T) {
 		t.Fatal("an unchanged file was rewritten")
 	}
 }
+
+// A session writes its changes back more than once: each Sync writes only
+// what changed since the last one.
+func TestSyncWritesBackRepeatedly(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t, 1<<20, 10<<20)
+	sp, _ := e.svc.Create(ctx, "alice", "")
+	if _, err := e.svc.Upload(ctx, "alice", sp.ID, "", parts("notes.txt", "start", "keep.txt", "k")); err != nil {
+		t.Fatal(err)
+	}
+	id := NewID()
+	dir, err := e.svc.Checkout(ctx, sp.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("one"), 0o600)
+	_ = os.WriteFile(filepath.Join(dir, "new.txt"), []byte("n"), 0o600)
+	if conflicts, _, err := e.svc.Sync(ctx, sp.ID, id); err != nil || len(conflicts) != 0 {
+		t.Fatal(conflicts, err)
+	}
+	if got := readSpaceFile(t, e, sp.ID, "notes.txt"); got != "one" {
+		t.Fatalf("after the first sync: %q", got)
+	}
+	// Someone edits keep.txt through the API meanwhile; the session doesn't
+	// touch it, so the next sync leaves the edit alone.
+	if _, err := e.svc.Upload(ctx, "alice", sp.ID, "", parts("keep.txt", "edited")); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("two"), 0o600)
+	_ = os.Remove(filepath.Join(dir, "new.txt"))
+	if conflicts, _, err := e.svc.Sync(ctx, sp.ID, id); err != nil || len(conflicts) != 0 {
+		t.Fatalf("second sync: %v %v (an earlier sync's writes must not conflict)", conflicts, err)
+	}
+	if got := readSpaceFile(t, e, sp.ID, "notes.txt"); got != "two" {
+		t.Fatalf("after the second sync: %q", got)
+	}
+	if got := readSpaceFile(t, e, sp.ID, "keep.txt"); got != "edited" {
+		t.Fatalf("keep.txt %q", got)
+	}
+	if slices.Contains(listPaths(t, e, sp.ID), "new.txt") {
+		t.Fatal("new.txt was removed in the session")
+	}
+	// Nothing changed: nothing to write.
+	if conflicts, _, err := e.svc.Sync(ctx, sp.ID, id); err != nil || len(conflicts) != 0 {
+		t.Fatal(conflicts, err)
+	}
+}
