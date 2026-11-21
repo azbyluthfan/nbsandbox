@@ -99,9 +99,37 @@ func TestAPINodeReachesTheWorkersSession(t *testing.T) {
 	if c.spaces.count(&c.spaces.synced, s.ID) != 1 {
 		t.Fatal("the worker didn't sync")
 	}
-	// Ending it on the API node: the record ends, the worker stops it.
-	if _, err := c.api.End(ctx, "alice", c.space, s.ID, "alice"); err != nil {
+	// Ending it on the API node: the worker ends it before the answer, its
+	// changes written back, so a client reading the space next sees them.
+	ended, err := c.api.End(ctx, "alice", c.space, s.ID, "alice")
+	if err != nil {
 		t.Fatal(err)
+	}
+	if ended.Open() || ended.EndReason != "ended by alice" || ended.EndedBy != "alice" {
+		t.Fatalf("ended %+v", ended)
+	}
+	if !c.backend.wasStopped(s.ID) || c.spaces.count(&c.spaces.synced, s.ID) != 2 {
+		t.Fatalf("stopped %v, synced %d times", c.backend.wasStopped(s.ID), c.spaces.count(&c.spaces.synced, s.ID))
+	}
+}
+
+// A worker that can't be reached: the record ends anyway, and the worker
+// stops the session when it next looks.
+func TestEndWhenTheWorkerCantBeReached(t *testing.T) {
+	c := newCluster(t)
+	ctx := context.Background()
+	s, _, err := c.api.Open(ctx, "alice", c.space, "a.ipynb", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.m.Wake()
+	if _, got, err := c.api.Attach(ctx, "alice", c.space, s.ID); err != nil || got.Worker != "w1" {
+		t.Fatalf("%+v %v", got, err)
+	}
+	c.setWorkers([]store.Worker{{ID: "w1", Up: true, SessionAddr: "127.0.0.1:1"}}) // nothing listens there
+	ended, err := c.api.End(ctx, "alice", c.space, s.ID, "alice")
+	if err != nil || ended.Open() {
+		t.Fatalf("%+v %v", ended, err)
 	}
 	c.m.Wake()
 	waitFor(t, "the worker to stop it", func() bool { return c.backend.wasStopped(s.ID) })
@@ -167,19 +195,16 @@ func TestSessionsOfAGoneWorkerEnd(t *testing.T) {
 // A session no worker takes ends, rather than counting against its owner.
 func TestUnclaimedSessionEnds(t *testing.T) {
 	c := newCluster(t)
-	c.drain.Store(true) // the worker takes nothing
+	// No worker takes it: the worker is stopped first (draining it instead
+	// races with a claim already on its way to the database).
+	c.m.Shutdown(context.Background())
 	s, _, err := c.api.Open(context.Background(), "alice", c.space, "a.ipynb", "")
-	if err != nil && !errors.Is(err, ErrDraining) {
-		t.Fatal(err)
-	}
 	if err != nil {
-		// Opening while drained is refused; record one as if it was opened just before.
-		s, _, err = c.db.OpenSession(context.Background(), store.Session{ID: "11111111-2222-4333-8444-555555555555", SpaceID: c.space,
-			Owner: "alice", Notebook: "a.ipynb", Mode: store.SessionReadOnly, CreatedAt: c.clock.Now()}, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
+		t.Fatal(err)
 	}
 	c.clock.add(10 * time.Minute)
 	waitFor(t, "the session to end", func() bool { return !c.session(t, s.ID).Open() })
+	if got := c.session(t, s.ID); got.Worker != "" || got.EndReason != "no worker could start it" {
+		t.Fatalf("%+v", got)
+	}
 }

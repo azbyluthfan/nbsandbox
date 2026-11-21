@@ -66,7 +66,7 @@ for root, dirs, files in os.walk('/'):
     if root == '/':
         dirs[:] = [d for d in dirs if d not in ('proc', 'sys', 'dev')]
     found += [os.path.join(root, f) for f in files if f == 'secret.txt']
-env = sorted(k for k in os.environ if k.startswith('NBSANDBOX_') and k not in ('NBSANDBOX_SESSION', 'NBSANDBOX_SESSION_ID', 'NBSANDBOX_SESSION_MAX_MESSAGE', 'NBSANDBOX_RUN_DIR', 'NBSANDBOX_OUTPUT_DIR'))
+env = sorted(k for k in os.environ if k.startswith('NBSANDBOX_') and k not in ('NBSANDBOX_SESSION', 'NBSANDBOX_SESSION_ID', 'NBSANDBOX_SESSION_MAX_MESSAGE', 'NBSANDBOX_RUN_DIR', 'NBSANDBOX_OUTPUT_DIR', 'NBSANDBOX_NPROC'))
 print(os.getuid(), cap, rofs, sorted(os.listdir('/space')), found, env)`)
 	out = strings.TrimSpace(out)
 	ok := strings.HasPrefix(out, "1000 0000000000000000 read-only") && strings.Contains(out, "'mine.txt'") &&
@@ -103,7 +103,7 @@ func TestSessionMemoryLimit(t *testing.T) {
 	if m.Content["status"] == "ended" {
 		ready := call(t, "GET", "/readyz", "", nil, nil)
 		got = fmt.Sprintf("the session ended after %.0fs (%v); nbsandboxd ready %d", time.Since(start).Seconds(), m.Content["reason"], ready.Code)
-		ok = onKubernetes && ready.Code == http.StatusOK
+		ok = (onKubernetes || runtimeLabel == "runsc") && ready.Code == http.StatusOK // the whole container is killed there
 	} else {
 		k.next(func(m kmsg) bool { return m.Channel == "bridge" && m.Content["status"] == "ready" })
 		back := time.Since(start)
@@ -114,7 +114,7 @@ func TestSessionMemoryLimit(t *testing.T) {
 		ok = strings.TrimSpace(out) == "alive" && ready.Code == http.StatusOK
 	}
 	finding(t, "session-memory-limit", "a session's cell allocates memory without bound",
-		"the kernel is killed at the limit (Docker: started again, the session goes on; Kubernetes: the session ends); nbsandboxd goes on", got, ok)
+		"the kernel is killed at the limit (runc on Docker, gVisor on Kubernetes: started again, the session goes on; gVisor on Docker, Kubernetes otherwise: the whole container, so the session ends, saying why); nbsandboxd goes on", got, ok)
 	if !ok {
 		t.Error(got)
 	}

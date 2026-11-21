@@ -174,7 +174,7 @@ func (e *Env) sessionMemory(ctx context.Context, c *Check, k *apiclient.Kernel) 
 	ok := false
 	if m.Content["status"] == "ended" {
 		got = fmt.Sprintf("the session ended after %.0fs (%v)", time.Since(start).Seconds(), m.Content["reason"])
-		ok = e.Kubernetes // the kubelet kills the whole container there
+		ok = e.Kubernetes || e.Runtime == "runsc" // the whole container is killed there (the kubelet; on Docker, the host kills gVisor's sandbox)
 	} else {
 		if _, err := k.Next(ctx, 3*time.Minute, func(m apiclient.KernelMsg) bool { return m.Channel == "bridge" && m.Content["status"] == "ready" }); err != nil {
 			return report.Finding{}, err
@@ -192,5 +192,5 @@ func (e *Env) sessionMemory(ctx context.Context, c *Check, k *apiclient.Kernel) 
 		ok = ok && r.Code == http.StatusOK
 	}
 	return c.finding("session-memory-limit", "a session's cell allocates memory without bound",
-		"the kernel is killed at the limit (Docker: started again, the session goes on; Kubernetes: the session ends); nbsandbox goes on", got, ok), nil
+		"the kernel is killed at the limit (runc on Docker, gVisor on Kubernetes: started again, the session goes on; gVisor on Docker, Kubernetes otherwise: the whole container, so the session ends, saying why); nbsandbox goes on", got, ok), nil
 }

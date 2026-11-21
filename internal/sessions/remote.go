@@ -130,6 +130,9 @@ func (m *Manager) internalAction(w http.ResponseWriter, r *http.Request) {
 		var conflicts []store.Conflict
 		conflicts, err = l.sync(r.Context())
 		out = conflicts
+	case "end":
+		// Answered once the changes are written back and the record ended.
+		l.end(r.Context(), r.URL.Query().Get("reason"), r.URL.Query().Get("by"))
 	default:
 		http.NotFound(w, r)
 		return
@@ -193,13 +196,18 @@ func (m *Manager) internalURL(addr, scheme, id, rest string) string {
 	return u.String()
 }
 
-// remoteAction asks the worker holding s to interrupt, restart or sync it.
-func (m *Manager) remoteAction(ctx context.Context, s store.Session, action string) ([]byte, error) {
+// remoteAction asks the worker holding s to interrupt, restart, sync or
+// end it.
+func (m *Manager) remoteAction(ctx context.Context, s store.Session, action string, query url.Values) ([]byte, error) {
 	addr, err := m.workerAddr(ctx, s)
 	if err != nil {
 		return nil, err
 	}
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, m.internalURL(addr, "http", s.ID, action), nil)
+	u := m.internalURL(addr, "http", s.ID, action)
+	if len(query) > 0 {
+		u += "?" + query.Encode()
+	}
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
 	req.Header.Set("Authorization", "Bearer "+m.cfg.Secret)
 	resp, err := m.httpClient().Do(req)
 	if err != nil {
