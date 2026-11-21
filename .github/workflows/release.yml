@@ -71,19 +71,34 @@ jobs:
       - name: Runner image manifest (for the io.nbsandbox.manifest label)
         run: |
           docker build --target runner -t runner-manifest runner-image
-          echo "MANIFEST=$(docker run --rm --network none --entrypoint python runner-manifest /opt/nbsandbox/export_manifest.py)" >> "$GITHUB_ENV"
+          docker run --rm --network none --entrypoint python runner-manifest /opt/nbsandbox/export_manifest.py > "$RUNNER_TEMP/manifest.json"
+      # Not docker/build-push-action: its labels input is parsed as CSV, which
+      # strips the quotes inside the JSON label (every runner image up to
+      # 0.2.0 was published that way, and nbsandboxd refused it).
       - name: Runner image
         id: runner
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with:
-          context: runner-image
-          target: runner
-          platforms: linux/amd64,linux/arm64
-          labels: io.nbsandbox.manifest=${{ env.MANIFEST }}
-          push: true
-          sbom: true
-          provenance: mode=max
-          tags: ghcr.io/azbyluthfan/nbsandbox-runner:${{ steps.v.outputs.version }}
+        env:
+          IMAGE: ghcr.io/azbyluthfan/nbsandbox-runner:${{ steps.v.outputs.version }}
+        run: |
+          set -euo pipefail
+          docker buildx build runner-image --target runner \
+            --platform linux/amd64,linux/arm64 \
+            --label "io.nbsandbox.manifest=$(cat "$RUNNER_TEMP/manifest.json")" \
+            --sbom=true --provenance=mode=max \
+            --metadata-file "$RUNNER_TEMP/runner-meta.json" \
+            --tag "$IMAGE" --push
+          echo "digest=$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/runner-meta.json")" >> "$GITHUB_OUTPUT"
+      - name: Runner image label as published (what nbsandboxd reads)
+        env:
+          IMAGE: ghcr.io/azbyluthfan/nbsandbox-runner@${{ steps.runner.outputs.digest }}
+        run: |
+          set -euo pipefail
+          for platform in linux/amd64 linux/arm64; do
+            docker pull -q --platform "$platform" "$IMAGE" >/dev/null
+            docker image inspect "$IMAGE" --format '{{index .Config.Labels "io.nbsandbox.manifest"}}' > "$RUNNER_TEMP/label.json"
+            python3 scripts/check-runner-label.py "$RUNNER_TEMP/label.json" "$RUNNER_TEMP/manifest.json"
+            docker rmi -f "$IMAGE" >/dev/null
+          done
       - name: Builder image (builds spaces' package sets; the runner's packages plus pip)
         id: builder
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6

@@ -79,7 +79,7 @@ The chart is in [deploy/helm/nbsandbox](../deploy/helm/nbsandbox). It doesn't in
 ```bash
 kubectl create namespace nbsandbox
 kubectl -n nbsandbox create secret generic nbsandbox-db --from-literal=database-url='postgres://…?sslmode=require'
-helm upgrade --install nbsandbox oci://ghcr.io/azbyluthfan/charts/nbsandbox --version 0.1.2 -n nbsandbox -f my-values.yaml
+helm upgrade --install nbsandbox oci://ghcr.io/azbyluthfan/charts/nbsandbox --version 0.2.1 -n nbsandbox -f my-values.yaml
 ```
 
 Releases publish the chart signed, on GHCR ([releasing.md](releasing.md) shows how to verify it); from a checkout, use `deploy/helm/nbsandbox` instead of the `oci://` address.

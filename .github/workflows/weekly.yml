@@ -9,8 +9,11 @@
 #   - Kubernetes (kind with Cilium) with the default runtime and with a
 #     gVisor RuntimeClass: the isolation report;
 #   - every fuzz target for a few minutes;
-#   - a security scan (govulncheck, and Trivy on both images), which reports
-#     newly published advisories even in weeks without commits.
+#   - a security scan (govulncheck, and Trivy on the three images), which reports
+#     newly published advisories even in weeks without commits;
+#   - the latest release as published: deployed from GHCR as
+#     docs/deployment.md does, with notebooks run through it (every other job
+#     builds the images from source).
 # A failure opens an issue. Also runs from the Actions tab ("Run workflow"),
 # e.g. before a release.
 
@@ -147,11 +150,22 @@ jobs:
         # Advisories without a published fix are accepted until there is one
         # (docs/security/review.md); a fixable one fails this job.
         run: |
-          for image in nbsandboxd:dev nbsandbox-runner:dev; do
-            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock:ro \
+          for image in nbsandboxd:dev nbsandbox-runner:dev nbsandbox-runner-builder:dev; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock:ro -v "$PWD/.trivyignore:/.trivyignore:ro" \
               aquasec/trivy:0.58.1@sha256:ab70a02200597efa04748f210f793936eb647cbcdb0ea69cc30b226d6f5a22c7 \
-              image --quiet --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$image"
+              image --quiet --severity HIGH,CRITICAL --ignore-unfixed --ignorefile /.trivyignore --exit-code 1 "$image"
           done
+
+  published:
+    name: Latest release as published (GHCR images, deployment guide)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0 # the release tags
+      - name: Deploy the newest release's published images and run notebooks
+        run: scripts/check-published.sh
 
   keycloak:
     name: Keycloak (end-to-end auth)
@@ -178,7 +192,7 @@ jobs:
         run: docker compose -f deploy/docker-compose.dev.yml -f deploy/docker-compose.keycloak.yml logs --no-color | tail -300
 
   report-failure:
-    needs: [docker, kubernetes, keycloak, fuzz, security]
+    needs: [docker, kubernetes, keycloak, fuzz, security, published]
     if: failure()
     runs-on: ubuntu-24.04
     steps:

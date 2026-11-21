@@ -9,11 +9,13 @@ Run Jupyter notebooks headless, each in its own isolated sandbox, with live logs
 - **Functions:** publish a notebook as a versioned function that other services call with JSON and get JSON back, items streamed as they are produced ([docs/functions.md](docs/functions.md)).
 - **Two APIs, one model:** REST with an OpenAPI spec, and gRPC (Connect) for the same operations.
 - **For AI agents:** an MCP server (`nbsandbox-mcp`) lets Claude and other agents write notebooks, run them in the sandbox and read the results, as their user ([docs/mcp.md](docs/mcp.md)).
-- **Web editor** (local, for development): browse spaces, edit notebooks and files with completion from the runner's packages, run, and follow the log.
+- **Web editor:** browse spaces, edit notebooks and files with completion from the runner's packages, run, follow the log, see charts and maps in the results. Users sign in with your identity provider (or a users file) ([docs/auth.md](docs/auth.md#signing-in-to-the-web-ui)).
+- **A space's own packages:** a `requirements.txt` is built once into a package set the space's runs import, with no network in the runs ([docs/packages.md](docs/packages.md)).
+- **For operators:** an audit log of every change and download, administrators who can list and stop any run, and draining before maintenance ([docs/operations.md](docs/operations.md#audit-log)).
 
 Every run executes in a **fresh, locked-down container or Pod**. Code in one space can't see another space's files, processes or memory, can't reach the network, and can't use up another run's resources. An automated test suite checks each of these and writes a report: Docker ([report](docs/isolation-report.md)), Linux with Docker Engine with `runc` and gVisor side by side ([report](docs/isolation-report-linux.md)), and Kubernetes ([report](docs/isolation-report-kubernetes.md)).
 
-> **Status:** first public release (v0.x): the API is versioned (`/v1`) and follows the compatibility policy in [docs/api.md](docs/api.md), but expect changes between minor versions. See [Limitations](#limitations).
+> **Status:** v0.2, pre-1.0: the API is versioned (`/v1`) and follows the compatibility policy in [docs/api.md](docs/api.md), but expect changes between minor versions. See [Limitations](#limitations).
 
 **See it working:** [docs/tour.md](docs/tour.md) walks through the web editor and the API step by step, with a screenshot or the real output of each step.
 
@@ -41,7 +43,7 @@ client ──HTTPS──> nbsandboxd (API) ───────┐
 ```
 
 - **API and workers:** one process can be both (`role: all`), or run them separately and scale each ([docs/scaling.md](docs/scaling.md)). Workers claim queued runs from PostgreSQL, with leases so a run whose worker dies is taken over.
-- **Runner image:** Python 3.13 with papermill and the data-science packages listed by `GET /v1/runtime`. Build your own on top of it for other packages.
+- **Runner image:** Python 3.13 with papermill and the data-science packages listed by `GET /v1/runtime`. A space can add its own packages ([docs/packages.md](docs/packages.md)), or you build your own image for everyone.
 - **Files:** contents live in object storage (RustFS, Ceph, AWS S3, Azure Blob), each stored once. A run works on its own copy, and its changes are written back with conflict checks.
 
 ## Quickstart (local, Docker Desktop or Linux)
@@ -89,7 +91,8 @@ Read [docs/security/threat-model.md](docs/security/threat-model.md) before deplo
 - **Python notebooks only.** Runs use the Python 3 kernel; a notebook written for another kernel (R, Julia, …) is refused when you run or publish it.
 - **No network in runs.** Notebooks can't `pip install`. A space's `requirements.txt` can add packages (wheels from the package index, built once into a set the space's runs import) when the operator turns it on, on Docker for now ([docs/packages.md](docs/packages.md)); otherwise build a runner image with the packages you need.
 - **Authentication:** bearer tokens from any OpenID Connect provider, or basic auth from a users file, with revocation, a limit on failed sign-ins, and a web UI sign-in. Not yet: sharing a space between users.
-- **The web UI is a development tool:** no login, local only.
+- **Notebooks run whole:** a run executes every cell, in a fresh container. Running cells one at a time in the editor, with a live kernel, is next (interactive mode, [ROADMAP.md](ROADMAP.md)).
+- **Custom packages on Docker only** for now; Kubernetes is next.
 - **Reference platforms:** the isolation reports that count are Linux with Docker Engine and your own Kubernetes cluster. Docker Desktop and kind work for development.
 
 ## Documentation

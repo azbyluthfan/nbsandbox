@@ -17,13 +17,13 @@ Before v1.0, a minor version may change behaviour; changes are listed in the cha
 ## Checklist
 
 1. **Main is green:** the PR and main pipelines, and the weekly one (start it from the Actions tab: "weekly" → "Run workflow"), which runs every scenario: Docker with runc and gVisor, Kubernetes with both, fuzzing and the security scan.
-2. **Soak:** for a minor or major release, a 24 h soak on the reference host (Linux with Docker Engine):
+2. **Soak:** for a minor or major release, a 12 h soak (6 h at least) on the reference host (Linux with Docker Engine):
    ```bash
-   SOAK_DURATION=24h make test-integration TESTFLAGS="-v -run TestSoak -timeout 25h"
+   SOAK_DURATION=12h make test-integration TESTFLAGS="-v -run TestSoak -timeout 13h"
    ```
 3. **Changelog:** move "Unreleased" in [CHANGELOG.md](../CHANGELOG.md) to the new version, with today's date.
 4. **Versions in files:** `deploy/.env.example`, the defaults in `deploy/docker-compose.yml`, `deploy/helm/nbsandbox/Chart.yaml` (`version`, `appVersion`) and `values.yaml` (`runnerImage`), and `api/openapi.yaml` `info.version`.
-5. **Scans** (the [security review](security/review.md) lists the commands): `govulncheck`, Trivy on both images, `pip-audit` on the runner's packages, gitleaks on the tree. Fix what has a fix; note what doesn't.
+5. **Scans** (the [security review](security/review.md) lists the commands): `govulncheck`, Trivy on the three images (nbsandboxd, the runner and its builder), `pip-audit` on the runner's packages, gitleaks on the tree. Fix what has a fix; note what doesn't.
 6. **Isolation reports on every platform** (the release workflow repeats the Docker one on Linux):
    - Linux with Docker Engine and Kubernetes 1.37 (kind), each with `runc` and gVisor: from the latest weekly run on `main` that passed (start one from the Actions tab if the code changed since). Download its `isolation-report-*` artifacts, unzip each into a folder of its own name, run `scripts/render-reports.sh <folder>`, review the diff, and commit the two reports in the release's pull request. CI never writes them itself;
    - or on your own machines: `make report-linux`, and `make report-k8s` then `make report-k8s K8S_RUNTIME_CLASS=gvisor`.
@@ -34,17 +34,21 @@ Before v1.0, a minor version may change behaviour; changes are listed in the cha
    ```
 8. **The release workflow** (`.github/workflows/release.yml`) then:
    - runs `make report`: the full integration suite. The release stops if a required test is missing or failing;
-   - builds and pushes multi-arch (amd64, arm64) images for nbsandboxd and the runner, with SBOMs and provenance, and signs them with cosign (keyless);
+   - builds and pushes multi-arch (amd64, arm64) images for nbsandboxd, the runner and its builder, with SBOMs and provenance, checks the published runner image's manifest label for both platforms (`scripts/check-runner-label.py`), and signs them with cosign (keyless);
    - packages the Helm chart and pushes it to `oci://ghcr.io/azbyluthfan/charts`, signed with cosign;
    - builds the binaries with GoReleaser, with checksums, SBOMs and a signed checksum file;
    - creates the GitHub release with the changelog and **this commit's isolation report** attached.
-9. **Check the release:** verify the signatures (the same for `nbsandbox-runner` and `charts/nbsandbox`):
+9. **Check the release:** verify the signatures (the same for `nbsandbox-runner`, `nbsandbox-runner-builder` and `charts/nbsandbox`):
    ```bash
    cosign verify ghcr.io/azbyluthfan/nbsandboxd:X.Y.Z \
      --certificate-identity-regexp 'https://github.com/azbyluthfan/nbsandbox/' \
      --certificate-oidc-issuer https://token.actions.githubusercontent.com
    ```
-   Then deploy to a test host following [deployment.md](deployment.md).
+   Then check the published release itself: the tests before it all use images built from source, so this is the only check of what users pull. On any Docker host:
+   ```bash
+   scripts/check-published.sh X.Y.Z
+   ```
+   It deploys that release from its tag with the images on GHCR, as [deployment.md](deployment.md) does (pulled without a login, so they must be public), and runs the smoke notebook and a package set build through Caddy. The weekly workflow repeats it for the newest release.
 
 ## Security fixes
 

@@ -12,7 +12,7 @@ From a fresh Linux server to a working nbsandbox behind HTTPS, with Docker Compo
 sudo apt-get update && sudo apt-get install -y git make
 git clone https://github.com/azbyluthfan/nbsandbox.git
 cd nbsandbox
-git checkout v0.1.2
+git checkout v0.2.1
 ```
 
 ## 2. Prepare the host
@@ -28,7 +28,7 @@ It installs Docker Engine, sets Docker's log defaults, makes sure uid 1000 exist
 In production, sign people in with your identity provider (Entra ID, Keycloak, Okta and so on): see [auth.md](auth.md), then turn basic auth off. For a first check, or a small private host, basic-auth users are enough. Each user needs a bcrypt hash. Run this once per user and type the password (at least 8 characters) twice:
 
 ```bash
-sudo docker run --rm -it ghcr.io/azbyluthfan/nbsandboxd:0.1.2 hash-password
+sudo docker run --rm -it ghcr.io/azbyluthfan/nbsandboxd:0.2.1 hash-password
 ```
 
 Then edit the users file:
@@ -69,7 +69,7 @@ Per-run limits, concurrency, retention and the rest are in `/etc/nbsandbox/setti
 Releases publish the runner image on GHCR, so pulling it is enough:
 
 ```bash
-sudo docker pull ghcr.io/azbyluthfan/nbsandbox-runner:0.1.2
+sudo docker pull ghcr.io/azbyluthfan/nbsandbox-runner:0.2.1
 ```
 
 To build it yourself instead (for example, to change the packages), use `make runner-image RUNNER_IMAGE=nbsandbox-runner:custom`, set `NBSANDBOX_RUNNER_IMAGE=nbsandbox-runner:custom` in `deploy/.env`, and see [operations.md](operations.md#runner-image).
@@ -78,7 +78,7 @@ To build it yourself instead (for example, to change the packages), use `make ru
 
 ```bash
 sudo NBSANDBOX_DATA_DIR=/srv/nbsandbox NBSANDBOX_USERS_FILE=/etc/nbsandbox/users.yaml \
-  NBSANDBOX_RUNNER_IMAGE=ghcr.io/azbyluthfan/nbsandbox-runner:0.1.2 scripts/preflight.sh
+  NBSANDBOX_RUNNER_IMAGE=ghcr.io/azbyluthfan/nbsandbox-runner:0.2.1 scripts/preflight.sh
 ```
 
 Every line should say `ok`. It checks Docker, cgroup v2, the runner image, the data directory's owner and mode, free disk, and the users file's permissions.

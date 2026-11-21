@@ -2,6 +2,20 @@
 
 **2026-11-08, before the first v0.x release.** What was checked, what was found, and what was done about each finding. Repeat it before each release (the commands are at the end). The [threat model](threat-model.md) describes what nbsandbox protects against; this page is the evidence that it was checked.
 
+## v0.2.1 (2026-11-16)
+
+A release workflow fix only (the runner image's manifest label); the code, the dependencies and the pinned base images are those of 0.2.0, so the v0.2.0 review below applies.
+
+## The review for v0.2.0 (2026-11-15)
+
+| Area | Result |
+|---|---|
+| Go | `govulncheck`: none reached by our code (one in a required module, not called) |
+| Runner's Python packages | `pip-audit`: none |
+| Container images | Trivy, HIGH and CRITICAL with a fix: nbsandboxd 0, runner 0. The new **builder image** (`nbsandbox-runner-builder`, package set builds) keeps pip, so it had pip's bundled copies of urllib3 2.7.0 and msgpack 1.1.2: **fixed** by pinning pip 26.3 (with hashes), which bundles urllib3 2.8.0 and msgpack 1.2.4. One remains, **accepted**: CVE-2025-47273, a path traversal in setuptools' package downloader, reported for the `pkg_resources` that pip still bundles from setuptools 70.3.0; pip bundles only `pkg_resources`, not the downloader, and builds install wheels from the configured index only. Listed, with the reason, in `.trivyignore` |
+| Secrets in the source tree | `gitleaks`: the same two as before, a `YOUR_PASSWORD` placeholder and the demo users' published dev password in the tour. The Keycloak test realm's new client secrets (`nbsandbox-introspection-test-secret`, `nbsandbox-ui-test-secret`) are public test values, like its others |
+| New surfaces | token introspection (fails closed), the failed sign-in limit, the web UI sign-in (PKCE, nonce, browser-bound state, server-side sessions, CSRF), the audit log, admin operations, and package set builds (the only containers with network): each in the [threat model](threat-model.md), with its tests |
+
 ## Since v0.1.0: the review for v0.1.2 (2026-11-15)
 
 | Area | Result |
@@ -96,8 +110,8 @@ Go's built-in fuzzer; each target runs in CI on its seed inputs, and for a longe
 ```bash
 go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 make runner-image && docker build -q -f deploy/nbsandboxd.Dockerfile -t nbsandboxd:dev .
-docker save nbsandboxd:dev -o /tmp/nbsandboxd.tar && docker save nbsandbox-runner:dev -o /tmp/runner.tar
-docker run --rm -v /tmp:/in:ro aquasec/trivy:0.58.1 image --input /in/runner.tar --severity HIGH,CRITICAL
+docker save nbsandboxd:dev -o /tmp/nbsandboxd.tar && docker save nbsandbox-runner:dev -o /tmp/runner.tar && docker save nbsandbox-runner-builder:dev -o /tmp/builder.tar
+docker run --rm -v /tmp:/in:ro -v "$PWD/.trivyignore:/.trivyignore:ro" aquasec/trivy:0.58.1 image --input /in/runner.tar --severity HIGH,CRITICAL --ignorefile /.trivyignore   # and nbsandboxd.tar, builder.tar
 docker run --rm -v "$PWD/runner-image":/w:ro python:3.13-slim sh -c 'pip install -q pip-audit && pip-audit -r /w/requirements.txt --disable-pip --no-deps'
 docker run --rm -v "$PWD":/repo:ro zricethezav/gitleaks:v8.21.2 dir /repo --redact
 go test ./internal/tarfs -run '^$' -fuzz '^FuzzReadTar$' -fuzztime 2m   # and each target above
