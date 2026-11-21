@@ -252,43 +252,77 @@ func (m *Manager) writeBackAll(ctx context.Context) {
 	}
 }
 
-// reconcile re-attaches to the sessions this worker held, ends those whose
-// container is gone (their changes written back), and removes session
-// containers nobody holds.
+// reconcile re-attaches to the sessions whose containers are on this
+// worker's Docker: those it held, and those it adopts (it restarted under
+// another worker ID, as a recreated container gets a new host name; or,
+// with other workers, the one that held it is gone). Its open sessions whose
+// container is gone end, their changes kept; containers of sessions that
+// ended are removed.
 func (m *Manager) reconcile(ctx context.Context) error {
 	containers, err := m.d.Backend.Sessions(ctx)
 	if err != nil {
 		return err
 	}
-	running := map[string]bool{}
-	for _, c := range containers {
-		running[c.SessionID] = c.Running
-	}
-	open, err := m.d.DB.OpenSessions(ctx, store.SessionFilter{Worker: m.cfg.WorkerID})
+	others, err := m.liveWorkers(ctx)
 	if err != nil {
 		return err
 	}
 	held := map[string]bool{}
-	for _, s := range open {
-		log := m.d.Log.With("session_id", s.ID)
-		if s.Status == store.SessionReady && running[s.ID] {
-			conn, err := m.d.Backend.AttachSession(ctx, s.ID)
-			if err == nil {
-				l := newLive(m, s, conn)
-				l.kernel = KernelIdle
-				m.mu.Lock()
-				m.live[s.ID] = l
-				m.mu.Unlock()
-				held[s.ID] = true
-				go m.hold(context.WithoutCancel(ctx), l, nil)
-				_ = l.control("kernel_info_request", nil)
-				log.Info("session re-attached")
+	for _, c := range containers {
+		log := m.d.Log.With("session_id", c.SessionID)
+		s, err := m.d.DB.GetSession(ctx, c.SessionID)
+		switch {
+		case errors.Is(err, store.ErrNotFound) || (err == nil && !s.Open()):
+			if err := m.d.Backend.StopSession(ctx, c.SessionID); err != nil {
+				log.Warn("remove the container of a session that ended", "error", err)
+			}
+			continue
+		case err != nil:
+			return err
+		}
+		if s.Worker != m.cfg.WorkerID {
+			if others[s.Worker] {
+				continue // another worker on this Docker holds it
+			}
+			if s, err = m.d.DB.AdoptSession(ctx, s.ID, m.cfg.WorkerID); err != nil {
 				continue
 			}
+		}
+		if s.Status != store.SessionReady || !c.Running {
+			continue // ends below, as a session whose container is gone
+		}
+		conn, err := m.d.Backend.AttachSession(ctx, s.ID)
+		if err != nil {
 			log.Warn("re-attach a session", "error", err)
+			continue
+		}
+		l := newLive(m, s, conn)
+		l.kernel = KernelIdle
+		m.mu.Lock()
+		m.live[s.ID] = l
+		m.mu.Unlock()
+		held[s.ID] = true
+		go m.hold(context.WithoutCancel(ctx), l, nil)
+		_ = l.control("kernel_info_request", nil)
+		log.Info("session re-attached")
+	}
+	// This worker's sessions; a single process's are every claimed one,
+	// whatever worker ID they were recorded under.
+	filter := store.SessionFilter{Worker: m.cfg.WorkerID}
+	if !m.cfg.Shared {
+		filter = store.SessionFilter{}
+	}
+	open, err := m.d.DB.OpenSessions(ctx, filter)
+	if err != nil {
+		return err
+	}
+	for _, s := range open {
+		if held[s.ID] || s.Worker == "" {
+			continue
 		}
 		// Its container is gone (or it never finished starting): it ends,
 		// with what it wrote kept.
+		log := m.d.Log.With("session_id", s.ID)
 		_ = m.d.Backend.StopSession(ctx, s.ID)
 		if s.Mode == store.SessionReadWrite {
 			if _, _, err := m.d.Spaces.Sync(ctx, s.SpaceID, s.ID); err != nil {
@@ -300,14 +334,26 @@ func (m *Manager) reconcile(ctx context.Context) error {
 			log.Error("record a session's end", "error", err)
 		}
 	}
-	for _, c := range containers {
-		if !held[c.SessionID] {
-			if err := m.d.Backend.StopSession(ctx, c.SessionID); err != nil {
-				m.d.Log.Warn("remove a session container nobody holds", "session_id", c.SessionID, "error", err)
-			}
+	return nil
+}
+
+// liveWorkers are the other workers that may hold sessions on this Docker
+// (none for a single process).
+func (m *Manager) liveWorkers(ctx context.Context) (map[string]bool, error) {
+	out := map[string]bool{}
+	if !m.cfg.Shared || m.d.Workers == nil {
+		return out, nil
+	}
+	ws, err := m.d.Workers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, w := range ws {
+		if w.ID != m.cfg.WorkerID {
+			out[w.ID] = true
 		}
 	}
-	return nil
+	return out, nil
 }
 
 func (m *Manager) forget(id string) {

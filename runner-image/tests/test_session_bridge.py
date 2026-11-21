@@ -124,6 +124,15 @@ class BridgeTest(unittest.TestCase):
         self.assertEqual(self.s.reply(imid)["content"]["status"], "ok")
         self.assertEqual(self.s.reply(mid)["content"]["ename"], "KeyboardInterrupt")
 
+    def test_notebooks_written_for_runs_work(self):
+        _, msgs = self.s.execute("import os, nbsandbox\n"
+                                 "open(os.path.join(os.environ['NBSANDBOX_OUTPUT_DIR'], 'x.csv'), 'w').write('a')\n"
+                                 "nbsandbox.output({'total': 3})\nnbsandbox.progress(0.5, 'half')")
+        text = "".join(m["content"]["text"] for m in msgs if m["header"]["msg_type"] == "stream")
+        self.assertIn('"total": 3', text)
+        self.assertIn("50% half", text)
+        self.assertNotIn("Error", text)
+
     def test_large_output_is_replaced_by_a_notice(self):
         _, msgs = self.s.execute("print('x' * 500000)")
         text = "".join(m["content"]["text"] for m in msgs if m["header"]["msg_type"] == "stream")

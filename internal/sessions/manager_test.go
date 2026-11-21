@@ -669,3 +669,35 @@ func TestEndSpace(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+// A recreated container gets a new host name, so a new worker ID: the
+// sessions whose containers are on its Docker are adopted, not removed.
+func TestRestartUnderAnotherWorkerID(t *testing.T) {
+	e := newEnv(t, nil)
+	s := e.open(t, "a.ipynb", "")
+	c := e.attach(t, s.ID)
+	_ = c.Send(execute("x"))
+	next(t, c, "iopub", "stream")
+	e.m.Shutdown(context.Background())
+
+	cfg := e.m.cfg
+	cfg.WorkerID = "w2"
+	m2 := New(cfg, e.m.d)
+	if err := m2.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	defer m2.Shutdown(context.Background())
+	if e.backend.wasStopped(s.ID) {
+		t.Fatal("the session's container was removed")
+	}
+	if got := e.session(t, s.ID); !got.Open() || got.Worker != "w2" {
+		t.Fatalf("%+v", got)
+	}
+	c2, _, err := m2.Attach(context.Background(), "alice", e.space, s.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next(t, c2, "bridge", "")
+	_ = c2.Send(execute("again"))
+	next(t, c2, "iopub", "stream")
+}

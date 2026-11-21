@@ -68,16 +68,64 @@ export function renderOutput(out) {
     case "execute_result":
     case "display_data": {
       const data = out.data || {};
-      const png = data["image/png"];
-      if (typeof png === "string" && /^[A-Za-z0-9+/=\s]+$/.test(png)) {
-        return el("div", { class: "output" }, el("img", { src: `data:image/png;base64,${png.replace(/\s/g, "")}`, alt: "output image" }));
+      for (const type of ["image/png", "image/jpeg"]) {
+        const b64 = sourceText(data[type]);
+        if (b64 && /^[A-Za-z0-9+/=\s]+$/.test(b64)) {
+          return el("div", { class: "output" }, el("img", { src: `data:${type};base64,${b64.replace(/\s/g, "")}`, alt: "output image" }));
+        }
       }
+      if (data["image/svg+xml"] !== undefined) {
+        // As an image: scripts in an SVG don't run there.
+        const svg = sourceText(data["image/svg+xml"]);
+        return el("div", { class: "output" }, el("img", { src: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`, alt: "output image" }));
+      }
+      if (data["text/html"] !== undefined) return htmlOutput(sourceText(data["text/html"]));
       if (data["text/plain"] !== undefined) return el("div", { class: "output" }, sourceText(data["text/plain"]));
       return el("div", { class: "output muted" }, `[${Object.keys(data).join(", ") || "empty"} output]`);
     }
     default:
       return null;
   }
+}
+
+// Styles inside an HTML output's frame (a pandas table).
+const OUTPUT_CSS = `:root{color-scheme:light}
+body{margin:0;padding:2px;font:13px/1.4 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:#1f2328;background:#fff}
+table{border-collapse:collapse;font-variant-numeric:tabular-nums}
+table,th,td{border:0}th,td{padding:4px 10px;text-align:right;border-bottom:1px solid #d8dee4;white-space:nowrap}
+thead th{font-weight:600;border-bottom-width:2px}tbody th{font-weight:600;text-align:left}
+tbody tr:nth-child(even){background:#f6f8fa}img,svg{max-width:100%;height:auto}`;
+
+const nonceTag = document.querySelector('meta[name="csp-nonce"]');
+const pageNonce = nonceTag ? nonceTag.getAttribute("content") : "";
+
+// What an output's frame may load: nothing from anywhere; only its own
+// inline styles and data: images and fonts.
+const OUTPUT_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:";
+
+/**
+ * An HTML output (a pandas table, a styled frame) in a sandboxed frame, as
+ * Colab shows them: no scripts, a unique origin (it can't reach the page,
+ * its cookies or the API), and a policy of its own that allows no network
+ * at all, so it can't load or send anything.
+ */
+export function htmlOutput(html) {
+  // A data: frame keeps the page's policy too (and adds its own): its
+  // styles need the page's nonce.
+  const doc = `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${OUTPUT_CSP}">` +
+    `<style nonce="${pageNonce}">${OUTPUT_CSS}</style><body>${html}</body>`;
+  const frame = el("iframe", {
+    class: "output-html",
+    sandbox: "",
+    referrerpolicy: "no-referrer",
+    title: "Cell output (HTML)",
+    src: `data:text/html;charset=utf-8,${encodeURIComponent(doc)}`,
+  });
+  // No script runs inside, so it can't report its height: guess from the
+  // rows a table has, and let the user resize it.
+  const rows = (html.match(/<tr[\s>]/gi) || []).length;
+  frame.style.height = `${Math.min(Math.max(rows * 26 + 30, 60), 420)}px`;
+  return el("div", { class: "output" }, frame);
 }
 
 /**

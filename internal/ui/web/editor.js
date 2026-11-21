@@ -16,7 +16,7 @@ import {
   hoverTooltip,
 } from "./vendor/codemirror.js";
 import { el } from "./dom.js";
-import { completionSource, hoverSource } from "./complete.js";
+import { mergedCompletionSource, mergedHoverSource } from "./complete.js";
 
 /** The language for a file name or a notebook cell type. */
 export function languageFor(nameOrCellType) {
@@ -123,15 +123,19 @@ function missingImports(view, provided) {
  *   modules: Set of importable module names, for the missing-package check
  *   context(): the code around this editor (a notebook's other cells), so
  *     completion knows what they import and define
+ *   kernel(): the notebook's KernelSession, if it has one: completion and
+ *     docs then come from the live kernel too
+ *   keys: extra key bindings, before the defaults
+ *   onCursor(state, docChanged): the text or the cursor moved
  */
-export function createEditor(parent, { doc = "", lang = "text", readOnly = false, onChange, modules, label, hint, context } = {}) {
+export function createEditor(parent, { doc = "", lang = "text", readOnly = false, onChange, modules, label, hint, context, kernel, keys, onCursor } = {}) {
   const langExt = { python: python(), markdown: markdown(), json: json() }[lang] || [];
   const checks = [];
   if (lang === "python" && !readOnly) {
     checks.push(linter((view) => [...pythonSyntax(view), ...missingImports(view, modules)], { delay: 400 }), lintGutter());
-    checks.push(autocompletion(), pythonLanguage.data.of({ autocomplete: completionSource(context) }));
+    checks.push(autocompletion(), pythonLanguage.data.of({ autocomplete: mergedCompletionSource(context, kernel) }));
   }
-  if (lang === "python") checks.push(hoverTooltip(hoverSource(context), { hoverTime: 400 }));
+  if (lang === "python") checks.push(hoverTooltip(mergedHoverSource(context, kernel), { hoverTime: 400 }));
   const editable = new Compartment();
   const view = new EditorView({
     parent,
@@ -142,6 +146,8 @@ export function createEditor(parent, { doc = "", lang = "text", readOnly = false
         indentOnInput(), bracketMatching(), closeBrackets(), highlightActiveLine(), highlightSelectionMatches(),
         cspNonce ? EditorView.cspNonce.of(cspNonce) : [],
         syntaxHighlighting(classHighlighter), uiTheme,
+        // The caller's keys (run a cell) come first: Shift-Enter isn't a newline.
+        keys ? keymap.of(keys) : [],
         keymap.of([...closeBracketsKeymap, ...completionKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, indentWithTab]),
         langExt, checks,
         hint ? placeholder(hint) : [],
@@ -149,6 +155,7 @@ export function createEditor(parent, { doc = "", lang = "text", readOnly = false
         EditorView.contentAttributes.of(label ? { "aria-label": label } : {}),
         EditorView.updateListener.of((u) => {
           if (u.docChanged && onChange) onChange(u.state.doc.toString());
+          if (onCursor && (u.docChanged || u.selectionSet) && u.view.hasFocus) onCursor(u.state, u.docChanged);
         }),
       ],
     }),

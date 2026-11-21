@@ -421,6 +421,30 @@ button.card:hover { background: var(--surface); }
 .run-form label { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 13px; }
 .run-form .spacer { flex: 0 0 0; }
 
+/* The interactive session's bar, above a notebook */
+.session-bar {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0 0 10px; padding: 8px 12px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm);
+}
+.session-bar .spacer { flex: 1 1 auto; }
+.kernel-state { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; }
+.kernel-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--border-strong); flex: none; }
+.session-bar[data-state="idle"] .kernel-dot { background: var(--ok); }
+.session-bar[data-state="busy"] .kernel-dot { background: var(--info); animation: pulse 1.2s ease-in-out infinite; }
+.session-bar[data-state="starting"] .kernel-dot, .session-bar[data-state="connecting"] .kernel-dot,
+.session-bar[data-state="restarting"] .kernel-dot { background: var(--warn); animation: pulse 1.2s ease-in-out infinite; }
+.session-bar[data-state="dead"] .kernel-dot, .session-bar[data-state="ended"] .kernel-dot { background: var(--bad); }
+.kernel-why { font-size: 12px; }
+.run-cell { padding: 2px 6px; }
+.run-cell .icon { width: 13px; height: 13px; }
+.cell.running .prompt { color: var(--info); font-weight: 600; }
+.sig-help {
+  font: 12px var(--mono); color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-top: 0;
+  padding: 4px 8px; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.output-html { display: block; width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #fff; resize: vertical; }
+.kernel-doc { margin: 0; white-space: pre-wrap; font: 12px var(--mono); max-height: 22em; overflow: auto; }
+
 /* Read-only notebook rendering and cells */
 .notebook { display: flex; flex-direction: column; }
 .cell { display: grid; grid-template-columns: 56px 1fr; gap: 10px; margin: 6px 0; }

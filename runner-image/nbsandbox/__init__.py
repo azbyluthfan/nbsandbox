@@ -46,6 +46,11 @@ send more than 10 a second.
     nbsandbox.progress(0.4, "3 of 8 regions")   # 0.0 to 1.0, for callers watching
 
 progress() never affects the result.
+
+In an interactive session (NBSANDBOX_SESSION is set) there is no caller:
+output(), emit() and progress() also show, under the cell, what a run would
+return, and write it to a scratch folder in /tmp, as a run would to its
+folder; NBSANDBOX_OUTPUT_DIR is a scratch folder too.
 """
 
 import datetime as _dt
@@ -126,6 +131,20 @@ def _jsonable(v, depth=0):
                     "convert it to numbers, strings, lists or dicts first")
 
 
+def _in_session():
+    return bool(_os.environ.get("NBSANDBOX_SESSION"))
+
+
+def _show(label, value):
+    """In a session: shows what a run would have recorded, under the cell."""
+    if not _in_session():
+        return
+    text = _json.dumps(value, ensure_ascii=False, allow_nan=False, indent=2)
+    if len(text) > 4000:
+        text = text[:4000] + "\n..."
+    print(f"[nbsandbox.{label}, shown here in a session; a run returns it to its caller]\n{text}")
+
+
 def _mode():
     return _os.environ.get("NBSANDBOX_OUTPUT_MODE", "single")
 
@@ -145,6 +164,7 @@ def output(value):
     with open(tmp, "wb") as f:
         f.write(data)
     _os.replace(tmp, _os.path.join(run_dir, "output.json"))
+    _show("output", _json.loads(data))
 
 
 # One JSON line per event, read by nbsandboxd while the run works.
@@ -185,6 +205,7 @@ def emit(item, total=None):
         _time.sleep(wait)
     _append_event(event)
     _last_emit[0] = _time.monotonic()
+    _show("emit", event)
 
 
 def progress(fraction, message=""):
@@ -194,3 +215,5 @@ def progress(fraction, message=""):
     if not isinstance(message, str):
         raise TypeError("nbsandbox.progress: message must be a string")
     _append_event({"kind": "progress", "fraction": float(fraction), "message": message[:1000]})
+    if _in_session():
+        print(f"[nbsandbox.progress] {fraction:.0%} {message[:200]}".rstrip())
