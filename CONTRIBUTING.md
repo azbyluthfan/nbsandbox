@@ -97,7 +97,7 @@ scripts/nbsandbox.sh runs log <space-id> <run-id>      # the log so far
 
 | Mode | Start / stop | Logs | Wipe its database and object storage | Data folder |
 |---|---|---|---|---|
-| **Single process** (`role: all`): one nbsandboxd, web UI on :8090 | `make up` / `make down` | `make logs` | `make wipe-dev` | `~/.local/share/nbsandbox` |
+| **Single process** (`role: all`): one nbsandboxd, web UI on :8090 | `make up` / `make down` | `make logs` | `make wipe-dev` (asks first) | `~/.local/share/nbsandbox` |
 | **Cluster** (`role: api` ×2 behind a load balancer, `role: worker` ×2), see [docs/scaling.md](docs/scaling.md) | `make cluster-up` / `make cluster-down` | `make cluster-logs` | `make wipe-cluster` | `~/.local/share/nbsandbox-cluster` |
 | **Kubernetes** (the same cluster mode, with runs as Pods), see [docs/kubernetes.md](docs/kubernetes.md) | `make k8s-up` / `make k8s-down` | `make k8s-logs` | `make k8s-down` (the cluster and its data go together) | inside the kind cluster |
 
