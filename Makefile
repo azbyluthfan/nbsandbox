@@ -361,7 +361,11 @@ proto: ## Regenerate the gRPC Go code from api/proto (buf through go run; nothin
 	cd api/proto && $(GO) run github.com/bufbuild/buf/cmd/buf@v1.55.1 generate
 
 .PHONY: wipe-dev
-wipe-dev: ## Stop the dev stack and delete its database volume (the data folder is left to you)
+wipe-dev: ## Stop the dev stack and delete its database and object store volumes (asks first; YES=1 to skip)
+	@if [ "$(YES)" != 1 ]; then \
+		printf 'This deletes every space, file and run of the dev stack (its database and object store). Type "wipe" to go on: '; \
+		read answer; [ "$$answer" = wipe ] || { echo "Nothing deleted."; exit 1; }; \
+	fi
 	$(COMPOSE) down --volumes
 	@echo "dev database removed; delete $(NBSANDBOX_DATA_DIR) yourself for a completely fresh start"
 
