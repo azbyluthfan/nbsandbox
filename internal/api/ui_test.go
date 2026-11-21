@@ -101,6 +101,7 @@ func TestUIAuthorizationMatrix(t *testing.T) {
 	if rec := e.req("POST", "/v1/spaces/"+sp.ID+"/functions/fn/versions", "alice", strings.NewReader(`{"notebook":"nb.ipynb"}`), "application/json"); rec.Code != http.StatusCreated {
 		t.Fatalf("publish: %d %s", rec.Code, rec.Body)
 	}
+	session := e.openSession(t, sp.ID)
 	n := 0
 	for _, rt := range Routes(e.deps) {
 		if !rt.SpaceScoped {
@@ -112,7 +113,7 @@ func TestUIAuthorizationMatrix(t *testing.T) {
 			file = "summary.csv"
 		}
 		p := UIPrefix + strings.NewReplacer("{id}", sp.ID, "{run_id}", run.ID, "{path...}", file,
-			"{name}", "fn", "{version}", "1").Replace(rt.Pattern)
+			"{name}", "fn", "{version}", "1", "{session_id}", session).Replace(rt.Pattern)
 		p = strings.Replace(p, "{user}", "bob", 1)
 		var body io.Reader
 		ct := ""
@@ -131,7 +132,10 @@ func TestUIAuthorizationMatrix(t *testing.T) {
 		alice := strings.Replace(p, "/as/bob/", "/as/alice/", 1)
 		// Streams are covered by their own tests (the space's status stream
 		// never ends by design).
-		if rt.Method == "GET" && !strings.HasSuffix(rt.Pattern, "/stream") && !strings.HasSuffix(rt.Pattern, "/events") {
+		// Streams are covered by their own tests (the space's status stream
+		// never ends by design), and so is the session's WebSocket.
+		if rt.Method == "GET" && !strings.HasSuffix(rt.Pattern, "/stream") && !strings.HasSuffix(rt.Pattern, "/events") &&
+			!strings.HasSuffix(rt.Pattern, "/channel") {
 			if rec := uiReq(h, "GET", alice, nil, ""); rec.Code != http.StatusOK {
 				t.Errorf("as alice GET %s: %d", alice, rec.Code)
 			}

@@ -30,6 +30,7 @@ import (
 	"github.com/azbyluthfan/nbsandbox/internal/auth"
 	"github.com/azbyluthfan/nbsandbox/internal/completions"
 	"github.com/azbyluthfan/nbsandbox/internal/runs"
+	"github.com/azbyluthfan/nbsandbox/internal/sessions"
 	"github.com/azbyluthfan/nbsandbox/internal/spaces"
 	"github.com/azbyluthfan/nbsandbox/internal/store"
 )
@@ -47,6 +48,8 @@ type Deps struct {
 	Shutdown <-chan struct{}
 	// Audit records who did what (nil: nothing is recorded).
 	Audit *audit.Recorder
+	// Sessions are interactive sessions (nil: turned off).
+	Sessions *sessions.Manager
 }
 
 // maxMessage bounds one message; uploads stream any number of them.
@@ -71,6 +74,7 @@ func Handler(d Deps) http.Handler {
 		func() (string, http.Handler) { return nbsandboxv1connect.NewFunctionServiceHandler(s, opts...) },
 		func() (string, http.Handler) { return nbsandboxv1connect.NewRunServiceHandler(s, opts...) },
 		func() (string, http.Handler) { return nbsandboxv1connect.NewAdminServiceHandler(s, opts...) },
+		func() (string, http.Handler) { return nbsandboxv1connect.NewSessionServiceHandler(s, opts...) },
 	} {
 		path, handler := h()
 		mux.Handle(path, handler)
@@ -84,6 +88,7 @@ type server struct {
 	nbsandboxv1connect.UnimplementedFunctionServiceHandler
 	nbsandboxv1connect.UnimplementedRunServiceHandler
 	nbsandboxv1connect.UnimplementedAdminServiceHandler
+	nbsandboxv1connect.UnimplementedSessionServiceHandler
 }
 
 // Procedures lists every RPC's operation, from the service descriptors, for
@@ -173,6 +178,8 @@ func targetOf(msg any) (space, target string) {
 	}
 	run, path, name, version := get("run_id"), get("path"), get("name"), get("version")
 	switch {
+	case get("session_id") != "":
+		target = get("session_id")
 	case run != "" && path != "":
 		target = run + "/" + path
 	case run != "":
@@ -363,4 +370,10 @@ func clip(s string) string {
 		return s
 	}
 	return s[:maxDetail-3] + "..."
+}
+
+// quoteJSON is s as a JSON string.
+func quoteJSON(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
 }

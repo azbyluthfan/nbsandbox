@@ -38,6 +38,8 @@ const (
 	FunctionServiceName = "nbsandbox.v1.FunctionService"
 	// RunServiceName is the fully-qualified name of the RunService service.
 	RunServiceName = "nbsandbox.v1.RunService"
+	// SessionServiceName is the fully-qualified name of the SessionService service.
+	SessionServiceName = "nbsandbox.v1.SessionService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -107,6 +109,12 @@ const (
 	// AdminServiceAdminListAuditProcedure is the fully-qualified name of the AdminService's
 	// AdminListAudit RPC.
 	AdminServiceAdminListAuditProcedure = "/nbsandbox.v1.AdminService/AdminListAudit"
+	// AdminServiceAdminListSessionsProcedure is the fully-qualified name of the AdminService's
+	// AdminListSessions RPC.
+	AdminServiceAdminListSessionsProcedure = "/nbsandbox.v1.AdminService/AdminListSessions"
+	// AdminServiceAdminEndSessionProcedure is the fully-qualified name of the AdminService's
+	// AdminEndSession RPC.
+	AdminServiceAdminEndSessionProcedure = "/nbsandbox.v1.AdminService/AdminEndSession"
 	// FunctionServiceListFunctionsProcedure is the fully-qualified name of the FunctionService's
 	// ListFunctions RPC.
 	FunctionServiceListFunctionsProcedure = "/nbsandbox.v1.FunctionService/ListFunctions"
@@ -174,6 +182,30 @@ const (
 	// RunServiceFollowSpaceEventsProcedure is the fully-qualified name of the RunService's
 	// FollowSpaceEvents RPC.
 	RunServiceFollowSpaceEventsProcedure = "/nbsandbox.v1.RunService/FollowSpaceEvents"
+	// SessionServiceOpenSessionProcedure is the fully-qualified name of the SessionService's
+	// OpenSession RPC.
+	SessionServiceOpenSessionProcedure = "/nbsandbox.v1.SessionService/OpenSession"
+	// SessionServiceListSessionsProcedure is the fully-qualified name of the SessionService's
+	// ListSessions RPC.
+	SessionServiceListSessionsProcedure = "/nbsandbox.v1.SessionService/ListSessions"
+	// SessionServiceGetSessionProcedure is the fully-qualified name of the SessionService's GetSession
+	// RPC.
+	SessionServiceGetSessionProcedure = "/nbsandbox.v1.SessionService/GetSession"
+	// SessionServiceEndSessionProcedure is the fully-qualified name of the SessionService's EndSession
+	// RPC.
+	SessionServiceEndSessionProcedure = "/nbsandbox.v1.SessionService/EndSession"
+	// SessionServiceInterruptSessionProcedure is the fully-qualified name of the SessionService's
+	// InterruptSession RPC.
+	SessionServiceInterruptSessionProcedure = "/nbsandbox.v1.SessionService/InterruptSession"
+	// SessionServiceRestartSessionProcedure is the fully-qualified name of the SessionService's
+	// RestartSession RPC.
+	SessionServiceRestartSessionProcedure = "/nbsandbox.v1.SessionService/RestartSession"
+	// SessionServiceSyncSessionProcedure is the fully-qualified name of the SessionService's
+	// SyncSession RPC.
+	SessionServiceSyncSessionProcedure = "/nbsandbox.v1.SessionService/SyncSession"
+	// SessionServiceSessionChannelProcedure is the fully-qualified name of the SessionService's
+	// SessionChannel RPC.
+	SessionServiceSessionChannelProcedure = "/nbsandbox.v1.SessionService/SessionChannel"
 )
 
 // SpaceServiceClient is a client for the nbsandbox.v1.SpaceService service.
@@ -612,6 +644,9 @@ type AdminServiceClient interface {
 	AdminSetDrain(context.Context, *connect.Request[v1.AdminSetDrainRequest]) (*connect.Response[v1.DrainState], error)
 	// The audit log, newest first.
 	AdminListAudit(context.Context, *connect.Request[v1.AdminListAuditRequest]) (*connect.Response[v1.AdminListAuditResponse], error)
+	// Every open interactive session, and ending any of them.
+	AdminListSessions(context.Context, *connect.Request[v1.AdminListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
+	AdminEndSession(context.Context, *connect.Request[v1.AdminEndSessionRequest]) (*connect.Response[v1.Session], error)
 }
 
 // NewAdminServiceClient constructs a client for the nbsandbox.v1.AdminService service. By default,
@@ -673,19 +708,33 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(adminServiceMethods.ByName("AdminListAudit")),
 			connect.WithClientOptions(opts...),
 		),
+		adminListSessions: connect.NewClient[v1.AdminListSessionsRequest, v1.ListSessionsResponse](
+			httpClient,
+			baseURL+AdminServiceAdminListSessionsProcedure,
+			connect.WithSchema(adminServiceMethods.ByName("AdminListSessions")),
+			connect.WithClientOptions(opts...),
+		),
+		adminEndSession: connect.NewClient[v1.AdminEndSessionRequest, v1.Session](
+			httpClient,
+			baseURL+AdminServiceAdminEndSessionProcedure,
+			connect.WithSchema(adminServiceMethods.ByName("AdminEndSession")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // adminServiceClient implements AdminServiceClient.
 type adminServiceClient struct {
-	adminListSpaces  *connect.Client[v1.AdminListSpacesRequest, v1.AdminListSpacesResponse]
-	adminUpdateSpace *connect.Client[v1.AdminUpdateSpaceRequest, v1.AdminSpace]
-	adminDeleteSpace *connect.Client[v1.AdminDeleteSpaceRequest, v1.AdminDeleteSpaceResponse]
-	adminListRuns    *connect.Client[v1.AdminListRunsRequest, v1.AdminListRunsResponse]
-	adminCancelRun   *connect.Client[v1.AdminCancelRunRequest, v1.AdminRun]
-	adminGetDrain    *connect.Client[v1.AdminGetDrainRequest, v1.DrainState]
-	adminSetDrain    *connect.Client[v1.AdminSetDrainRequest, v1.DrainState]
-	adminListAudit   *connect.Client[v1.AdminListAuditRequest, v1.AdminListAuditResponse]
+	adminListSpaces   *connect.Client[v1.AdminListSpacesRequest, v1.AdminListSpacesResponse]
+	adminUpdateSpace  *connect.Client[v1.AdminUpdateSpaceRequest, v1.AdminSpace]
+	adminDeleteSpace  *connect.Client[v1.AdminDeleteSpaceRequest, v1.AdminDeleteSpaceResponse]
+	adminListRuns     *connect.Client[v1.AdminListRunsRequest, v1.AdminListRunsResponse]
+	adminCancelRun    *connect.Client[v1.AdminCancelRunRequest, v1.AdminRun]
+	adminGetDrain     *connect.Client[v1.AdminGetDrainRequest, v1.DrainState]
+	adminSetDrain     *connect.Client[v1.AdminSetDrainRequest, v1.DrainState]
+	adminListAudit    *connect.Client[v1.AdminListAuditRequest, v1.AdminListAuditResponse]
+	adminListSessions *connect.Client[v1.AdminListSessionsRequest, v1.ListSessionsResponse]
+	adminEndSession   *connect.Client[v1.AdminEndSessionRequest, v1.Session]
 }
 
 // AdminListSpaces calls nbsandbox.v1.AdminService.AdminListSpaces.
@@ -728,6 +777,16 @@ func (c *adminServiceClient) AdminListAudit(ctx context.Context, req *connect.Re
 	return c.adminListAudit.CallUnary(ctx, req)
 }
 
+// AdminListSessions calls nbsandbox.v1.AdminService.AdminListSessions.
+func (c *adminServiceClient) AdminListSessions(ctx context.Context, req *connect.Request[v1.AdminListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error) {
+	return c.adminListSessions.CallUnary(ctx, req)
+}
+
+// AdminEndSession calls nbsandbox.v1.AdminService.AdminEndSession.
+func (c *adminServiceClient) AdminEndSession(ctx context.Context, req *connect.Request[v1.AdminEndSessionRequest]) (*connect.Response[v1.Session], error) {
+	return c.adminEndSession.CallUnary(ctx, req)
+}
+
 // AdminServiceHandler is an implementation of the nbsandbox.v1.AdminService service.
 type AdminServiceHandler interface {
 	AdminListSpaces(context.Context, *connect.Request[v1.AdminListSpacesRequest]) (*connect.Response[v1.AdminListSpacesResponse], error)
@@ -742,6 +801,9 @@ type AdminServiceHandler interface {
 	AdminSetDrain(context.Context, *connect.Request[v1.AdminSetDrainRequest]) (*connect.Response[v1.DrainState], error)
 	// The audit log, newest first.
 	AdminListAudit(context.Context, *connect.Request[v1.AdminListAuditRequest]) (*connect.Response[v1.AdminListAuditResponse], error)
+	// Every open interactive session, and ending any of them.
+	AdminListSessions(context.Context, *connect.Request[v1.AdminListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
+	AdminEndSession(context.Context, *connect.Request[v1.AdminEndSessionRequest]) (*connect.Response[v1.Session], error)
 }
 
 // NewAdminServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -799,6 +861,18 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(adminServiceMethods.ByName("AdminListAudit")),
 		connect.WithHandlerOptions(opts...),
 	)
+	adminServiceAdminListSessionsHandler := connect.NewUnaryHandler(
+		AdminServiceAdminListSessionsProcedure,
+		svc.AdminListSessions,
+		connect.WithSchema(adminServiceMethods.ByName("AdminListSessions")),
+		connect.WithHandlerOptions(opts...),
+	)
+	adminServiceAdminEndSessionHandler := connect.NewUnaryHandler(
+		AdminServiceAdminEndSessionProcedure,
+		svc.AdminEndSession,
+		connect.WithSchema(adminServiceMethods.ByName("AdminEndSession")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/nbsandbox.v1.AdminService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AdminServiceAdminListSpacesProcedure:
@@ -817,6 +891,10 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 			adminServiceAdminSetDrainHandler.ServeHTTP(w, r)
 		case AdminServiceAdminListAuditProcedure:
 			adminServiceAdminListAuditHandler.ServeHTTP(w, r)
+		case AdminServiceAdminListSessionsProcedure:
+			adminServiceAdminListSessionsHandler.ServeHTTP(w, r)
+		case AdminServiceAdminEndSessionProcedure:
+			adminServiceAdminEndSessionHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -856,6 +934,14 @@ func (UnimplementedAdminServiceHandler) AdminSetDrain(context.Context, *connect.
 
 func (UnimplementedAdminServiceHandler) AdminListAudit(context.Context, *connect.Request[v1.AdminListAuditRequest]) (*connect.Response[v1.AdminListAuditResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.AdminService.AdminListAudit is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) AdminListSessions(context.Context, *connect.Request[v1.AdminListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.AdminService.AdminListSessions is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) AdminEndSession(context.Context, *connect.Request[v1.AdminEndSessionRequest]) (*connect.Response[v1.Session], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.AdminService.AdminEndSession is not implemented"))
 }
 
 // FunctionServiceClient is a client for the nbsandbox.v1.FunctionService service.
@@ -1650,4 +1736,272 @@ func (UnimplementedRunServiceHandler) FollowRunEvents(context.Context, *connect.
 
 func (UnimplementedRunServiceHandler) FollowSpaceEvents(context.Context, *connect.Request[v1.FollowSpaceEventsRequest], *connect.ServerStream[v1.RunEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.RunService.FollowSpaceEvents is not implemented"))
+}
+
+// SessionServiceClient is a client for the nbsandbox.v1.SessionService service.
+type SessionServiceClient interface {
+	// The notebook's open session, or a new one (starting).
+	OpenSession(context.Context, *connect.Request[v1.OpenSessionRequest]) (*connect.Response[v1.Session], error)
+	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
+	GetSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.Session], error)
+	// Ends it: its kernel stops; a read-write session's file changes are
+	// written back first.
+	EndSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.Session], error)
+	InterruptSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.SessionActionResponse], error)
+	// A new kernel: the session's variables are gone.
+	RestartSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.SessionActionResponse], error)
+	// Writes a read-write session's file changes to the space now.
+	SyncSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.SyncSessionResponse], error)
+	// The session's Jupyter messages, both ways, as the REST WebSocket
+	// carries them: the first request names the session (space_id,
+	// session_id) and may carry a message; each later one carries a message.
+	SessionChannel(context.Context) *connect.BidiStreamForClient[v1.SessionChannelRequest, v1.SessionMessage]
+}
+
+// NewSessionServiceClient constructs a client for the nbsandbox.v1.SessionService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) SessionServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	sessionServiceMethods := v1.File_nbsandbox_v1_nbsandbox_proto.Services().ByName("SessionService").Methods()
+	return &sessionServiceClient{
+		openSession: connect.NewClient[v1.OpenSessionRequest, v1.Session](
+			httpClient,
+			baseURL+SessionServiceOpenSessionProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("OpenSession")),
+			connect.WithClientOptions(opts...),
+		),
+		listSessions: connect.NewClient[v1.ListSessionsRequest, v1.ListSessionsResponse](
+			httpClient,
+			baseURL+SessionServiceListSessionsProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("ListSessions")),
+			connect.WithClientOptions(opts...),
+		),
+		getSession: connect.NewClient[v1.GetSessionRequest, v1.Session](
+			httpClient,
+			baseURL+SessionServiceGetSessionProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("GetSession")),
+			connect.WithClientOptions(opts...),
+		),
+		endSession: connect.NewClient[v1.GetSessionRequest, v1.Session](
+			httpClient,
+			baseURL+SessionServiceEndSessionProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("EndSession")),
+			connect.WithClientOptions(opts...),
+		),
+		interruptSession: connect.NewClient[v1.GetSessionRequest, v1.SessionActionResponse](
+			httpClient,
+			baseURL+SessionServiceInterruptSessionProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("InterruptSession")),
+			connect.WithClientOptions(opts...),
+		),
+		restartSession: connect.NewClient[v1.GetSessionRequest, v1.SessionActionResponse](
+			httpClient,
+			baseURL+SessionServiceRestartSessionProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("RestartSession")),
+			connect.WithClientOptions(opts...),
+		),
+		syncSession: connect.NewClient[v1.GetSessionRequest, v1.SyncSessionResponse](
+			httpClient,
+			baseURL+SessionServiceSyncSessionProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("SyncSession")),
+			connect.WithClientOptions(opts...),
+		),
+		sessionChannel: connect.NewClient[v1.SessionChannelRequest, v1.SessionMessage](
+			httpClient,
+			baseURL+SessionServiceSessionChannelProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("SessionChannel")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// sessionServiceClient implements SessionServiceClient.
+type sessionServiceClient struct {
+	openSession      *connect.Client[v1.OpenSessionRequest, v1.Session]
+	listSessions     *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
+	getSession       *connect.Client[v1.GetSessionRequest, v1.Session]
+	endSession       *connect.Client[v1.GetSessionRequest, v1.Session]
+	interruptSession *connect.Client[v1.GetSessionRequest, v1.SessionActionResponse]
+	restartSession   *connect.Client[v1.GetSessionRequest, v1.SessionActionResponse]
+	syncSession      *connect.Client[v1.GetSessionRequest, v1.SyncSessionResponse]
+	sessionChannel   *connect.Client[v1.SessionChannelRequest, v1.SessionMessage]
+}
+
+// OpenSession calls nbsandbox.v1.SessionService.OpenSession.
+func (c *sessionServiceClient) OpenSession(ctx context.Context, req *connect.Request[v1.OpenSessionRequest]) (*connect.Response[v1.Session], error) {
+	return c.openSession.CallUnary(ctx, req)
+}
+
+// ListSessions calls nbsandbox.v1.SessionService.ListSessions.
+func (c *sessionServiceClient) ListSessions(ctx context.Context, req *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error) {
+	return c.listSessions.CallUnary(ctx, req)
+}
+
+// GetSession calls nbsandbox.v1.SessionService.GetSession.
+func (c *sessionServiceClient) GetSession(ctx context.Context, req *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.Session], error) {
+	return c.getSession.CallUnary(ctx, req)
+}
+
+// EndSession calls nbsandbox.v1.SessionService.EndSession.
+func (c *sessionServiceClient) EndSession(ctx context.Context, req *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.Session], error) {
+	return c.endSession.CallUnary(ctx, req)
+}
+
+// InterruptSession calls nbsandbox.v1.SessionService.InterruptSession.
+func (c *sessionServiceClient) InterruptSession(ctx context.Context, req *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.SessionActionResponse], error) {
+	return c.interruptSession.CallUnary(ctx, req)
+}
+
+// RestartSession calls nbsandbox.v1.SessionService.RestartSession.
+func (c *sessionServiceClient) RestartSession(ctx context.Context, req *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.SessionActionResponse], error) {
+	return c.restartSession.CallUnary(ctx, req)
+}
+
+// SyncSession calls nbsandbox.v1.SessionService.SyncSession.
+func (c *sessionServiceClient) SyncSession(ctx context.Context, req *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.SyncSessionResponse], error) {
+	return c.syncSession.CallUnary(ctx, req)
+}
+
+// SessionChannel calls nbsandbox.v1.SessionService.SessionChannel.
+func (c *sessionServiceClient) SessionChannel(ctx context.Context) *connect.BidiStreamForClient[v1.SessionChannelRequest, v1.SessionMessage] {
+	return c.sessionChannel.CallBidiStream(ctx)
+}
+
+// SessionServiceHandler is an implementation of the nbsandbox.v1.SessionService service.
+type SessionServiceHandler interface {
+	// The notebook's open session, or a new one (starting).
+	OpenSession(context.Context, *connect.Request[v1.OpenSessionRequest]) (*connect.Response[v1.Session], error)
+	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
+	GetSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.Session], error)
+	// Ends it: its kernel stops; a read-write session's file changes are
+	// written back first.
+	EndSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.Session], error)
+	InterruptSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.SessionActionResponse], error)
+	// A new kernel: the session's variables are gone.
+	RestartSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.SessionActionResponse], error)
+	// Writes a read-write session's file changes to the space now.
+	SyncSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.SyncSessionResponse], error)
+	// The session's Jupyter messages, both ways, as the REST WebSocket
+	// carries them: the first request names the session (space_id,
+	// session_id) and may carry a message; each later one carries a message.
+	SessionChannel(context.Context, *connect.BidiStream[v1.SessionChannelRequest, v1.SessionMessage]) error
+}
+
+// NewSessionServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	sessionServiceMethods := v1.File_nbsandbox_v1_nbsandbox_proto.Services().ByName("SessionService").Methods()
+	sessionServiceOpenSessionHandler := connect.NewUnaryHandler(
+		SessionServiceOpenSessionProcedure,
+		svc.OpenSession,
+		connect.WithSchema(sessionServiceMethods.ByName("OpenSession")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceListSessionsHandler := connect.NewUnaryHandler(
+		SessionServiceListSessionsProcedure,
+		svc.ListSessions,
+		connect.WithSchema(sessionServiceMethods.ByName("ListSessions")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceGetSessionHandler := connect.NewUnaryHandler(
+		SessionServiceGetSessionProcedure,
+		svc.GetSession,
+		connect.WithSchema(sessionServiceMethods.ByName("GetSession")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceEndSessionHandler := connect.NewUnaryHandler(
+		SessionServiceEndSessionProcedure,
+		svc.EndSession,
+		connect.WithSchema(sessionServiceMethods.ByName("EndSession")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceInterruptSessionHandler := connect.NewUnaryHandler(
+		SessionServiceInterruptSessionProcedure,
+		svc.InterruptSession,
+		connect.WithSchema(sessionServiceMethods.ByName("InterruptSession")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceRestartSessionHandler := connect.NewUnaryHandler(
+		SessionServiceRestartSessionProcedure,
+		svc.RestartSession,
+		connect.WithSchema(sessionServiceMethods.ByName("RestartSession")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceSyncSessionHandler := connect.NewUnaryHandler(
+		SessionServiceSyncSessionProcedure,
+		svc.SyncSession,
+		connect.WithSchema(sessionServiceMethods.ByName("SyncSession")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceSessionChannelHandler := connect.NewBidiStreamHandler(
+		SessionServiceSessionChannelProcedure,
+		svc.SessionChannel,
+		connect.WithSchema(sessionServiceMethods.ByName("SessionChannel")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/nbsandbox.v1.SessionService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case SessionServiceOpenSessionProcedure:
+			sessionServiceOpenSessionHandler.ServeHTTP(w, r)
+		case SessionServiceListSessionsProcedure:
+			sessionServiceListSessionsHandler.ServeHTTP(w, r)
+		case SessionServiceGetSessionProcedure:
+			sessionServiceGetSessionHandler.ServeHTTP(w, r)
+		case SessionServiceEndSessionProcedure:
+			sessionServiceEndSessionHandler.ServeHTTP(w, r)
+		case SessionServiceInterruptSessionProcedure:
+			sessionServiceInterruptSessionHandler.ServeHTTP(w, r)
+		case SessionServiceRestartSessionProcedure:
+			sessionServiceRestartSessionHandler.ServeHTTP(w, r)
+		case SessionServiceSyncSessionProcedure:
+			sessionServiceSyncSessionHandler.ServeHTTP(w, r)
+		case SessionServiceSessionChannelProcedure:
+			sessionServiceSessionChannelHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedSessionServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedSessionServiceHandler struct{}
+
+func (UnimplementedSessionServiceHandler) OpenSession(context.Context, *connect.Request[v1.OpenSessionRequest]) (*connect.Response[v1.Session], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.SessionService.OpenSession is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.SessionService.ListSessions is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) GetSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.Session], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.SessionService.GetSession is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) EndSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.Session], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.SessionService.EndSession is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) InterruptSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.SessionActionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.SessionService.InterruptSession is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) RestartSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.SessionActionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.SessionService.RestartSession is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) SyncSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.SyncSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.SessionService.SyncSession is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) SessionChannel(context.Context, *connect.BidiStream[v1.SessionChannelRequest, v1.SessionMessage]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.SessionService.SessionChannel is not implemented"))
 }

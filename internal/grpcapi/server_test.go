@@ -31,6 +31,8 @@ import (
 	"github.com/azbyluthfan/nbsandbox/internal/blob"
 	"github.com/azbyluthfan/nbsandbox/internal/isolation"
 	"github.com/azbyluthfan/nbsandbox/internal/runs"
+	"github.com/azbyluthfan/nbsandbox/internal/sessions"
+	"github.com/azbyluthfan/nbsandbox/internal/sessions/sessiontest"
 	"github.com/azbyluthfan/nbsandbox/internal/spaces"
 	"github.com/azbyluthfan/nbsandbox/internal/store/storetest"
 )
@@ -77,6 +79,7 @@ type clients struct {
 	fns    nbsandboxv1connect.FunctionServiceClient
 	runs   nbsandboxv1connect.RunServiceClient
 	admin  nbsandboxv1connect.AdminServiceClient
+	sess   nbsandboxv1connect.SessionServiceClient
 }
 
 // newServer serves the gRPC API over HTTP/2 and returns clients speaking
@@ -109,7 +112,15 @@ func newServer(t *testing.T) func(user string) clients {
 	mgr.SetDockerUp(true)
 	t.Cleanup(func() { mgr.Shutdown(0) })
 	rec := audit.New(audit.Config{Enabled: true, Retention: time.Hour, Downloads: true}, db, log, nil)
-	h := Handler(Deps{Auth: &auth.Authenticator{Users: us, Limiter: auth.NewLoginLimiter(3, time.Minute), LimitByAddress: true}, Spaces: svc, Runs: mgr, Logger: log, Shutdown: make(chan struct{}),
+	sess := sessions.New(sessions.Config{Enabled: true, Image: "nbsandbox-runner:test", Idle: time.Hour, Max: 8 * time.Hour,
+		WriteBack: time.Hour, Retention: time.Hour, PerUser: 2, PerWorker: 4, MaxMessage: 1 << 20, WorkerID: "w1",
+		Tick: 50 * time.Millisecond, StartTimeout: 5 * time.Second},
+		sessions.Deps{DB: db, Spaces: svc, Backend: &sessiontest.Backend{}, Log: log})
+	if err := sess.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { sess.Shutdown(context.Background()) })
+	h := Handler(Deps{Sessions: sess, Auth: &auth.Authenticator{Users: us, Limiter: auth.NewLoginLimiter(3, time.Minute), LimitByAddress: true}, Spaces: svc, Runs: mgr, Logger: log, Shutdown: make(chan struct{}),
 		Audit: rec,
 		Runtime: func() (api.RuntimeInfo, error) {
 			var ri api.RuntimeInfo
@@ -130,6 +141,7 @@ func newServer(t *testing.T) func(user string) clients {
 			fns:    nbsandboxv1connect.NewFunctionServiceClient(srv.Client(), srv.URL, opts...),
 			runs:   nbsandboxv1connect.NewRunServiceClient(srv.Client(), srv.URL, opts...),
 			admin:  nbsandboxv1connect.NewAdminServiceClient(srv.Client(), srv.URL, opts...),
+			sess:   nbsandboxv1connect.NewSessionServiceClient(srv.Client(), srv.URL, opts...),
 		}
 	}
 }

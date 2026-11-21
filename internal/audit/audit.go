@@ -60,6 +60,10 @@ var (
 		auth.OpPublishFunction: true, auth.OpDeleteFunction: true, auth.OpInvokeFunction: true, auth.OpInvokeFunctionStream: true,
 		auth.OpCreateRun: true, auth.OpCancelRun: true, auth.OpDeleteRun: true, auth.OpPromoteArtifact: true,
 		auth.OpBuildSpacePackages: true,
+		// A session's start and end, interrupts and restarts; never the code
+		// its cells run.
+		auth.OpOpenSession: true, auth.OpEndSession: true, auth.OpInterruptSession: true, auth.OpRestartSession: true,
+		auth.OpSyncSession: true,
 	}
 	downloads = map[auth.Op]bool{
 		auth.OpGetFile: true, auth.OpGetRunNotebook: true, auth.OpGetRunHTML: true, auth.OpGetArtifact: true, auth.OpGetRunLog: true,

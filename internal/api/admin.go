@@ -68,6 +68,10 @@ func (a *API) adminUpdateSpace(w http.ResponseWriter, r *http.Request) {
 
 // adminDeleteSpace is DELETE /v1/admin/spaces/{id}: any owner's space.
 func (a *API) adminDeleteSpace(w http.ResponseWriter, r *http.Request) {
+	if err := a.endSpaceSessions(r, user(r)); err != nil {
+		writeDomainError(w, r, err)
+		return
+	}
 	if err := a.d.Spaces.AdminDelete(r.Context(), r.PathValue("id")); err != nil {
 		writeDomainError(w, r, err)
 		return

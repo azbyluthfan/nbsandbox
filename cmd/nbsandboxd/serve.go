@@ -296,6 +296,7 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 		MaxUpload:  int64(cfg.Uploads.MaxSpace) + 1<<20, // quota plus multipart overhead
 		MaxRunBody: int64(cfg.Runs.MaxParameters) + 64<<10,
 		Runs:       mgr,
+		Sessions:   sess,
 		Shutdown:   shuttingDown,
 		Runtime:    runtime,
 		Completions: func(ctx context.Context, ref completions.Ref) (io.ReadCloser, error) {
@@ -339,7 +340,7 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 	}
 	handler := withGRPC(api.NewHandler(deps), grpcapi.Handler(grpcapi.Deps{
 		Auth: authn, Spaces: spaceSvc, Runs: mgr, Runtime: runtime, Logger: logger, Shutdown: shuttingDown,
-		Completions: deps.Completions, Audit: recorder,
+		Completions: deps.Completions, Audit: recorder, Sessions: sess,
 	}))
 	if !cfg.Serves() {
 		handler = workerHandler(health, metrics)

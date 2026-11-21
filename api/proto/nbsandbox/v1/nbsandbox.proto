@@ -158,6 +158,9 @@ service AdminService {
   rpc AdminSetDrain(AdminSetDrainRequest) returns (DrainState);
   // The audit log, newest first.
   rpc AdminListAudit(AdminListAuditRequest) returns (AdminListAuditResponse);
+  // Every open interactive session, and ending any of them.
+  rpc AdminListSessions(AdminListSessionsRequest) returns (ListSessionsResponse);
+  rpc AdminEndSession(AdminEndSessionRequest) returns (Session);
 }
 
 message AdminSpace {
@@ -714,4 +717,81 @@ message RunEvent {
   // Set instead of the above when events after the resume point were
   // pruned: re-read the runs you wait for.
   string pruned = 16;
+}
+
+// ---------------------------------------------------------------- sessions
+
+// Interactive sessions: a notebook's live kernel, with a run's isolation
+// (docs/sessions.md).
+service SessionService {
+  // The notebook's open session, or a new one (starting).
+  rpc OpenSession(OpenSessionRequest) returns (Session);
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
+  rpc GetSession(GetSessionRequest) returns (Session);
+  // Ends it: its kernel stops; a read-write session's file changes are
+  // written back first.
+  rpc EndSession(GetSessionRequest) returns (Session);
+  rpc InterruptSession(GetSessionRequest) returns (SessionActionResponse);
+  // A new kernel: the session's variables are gone.
+  rpc RestartSession(GetSessionRequest) returns (SessionActionResponse);
+  // Writes a read-write session's file changes to the space now.
+  rpc SyncSession(GetSessionRequest) returns (SyncSessionResponse);
+  // The session's Jupyter messages, both ways, as the REST WebSocket
+  // carries them: the first request names the session (space_id,
+  // session_id) and may carry a message; each later one carries a message.
+  rpc SessionChannel(stream SessionChannelRequest) returns (stream SessionMessage);
+}
+
+message Session {
+  string id = 1;
+  string space_id = 2;
+  string notebook = 3;
+  string mode = 4;   // read-write or read-only
+  string status = 5; // starting, ready or ended
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp ended_at = 7;
+  string end_reason = 8;
+  string ended_by = 9;
+  string owner = 10;  // administrators only
+  string worker = 11; // administrators only
+}
+
+message OpenSessionRequest {
+  string space_id = 1;
+  string notebook = 2;
+  string mode = 3; // read-write (default) or read-only
+}
+message ListSessionsRequest {
+  string space_id = 1;
+}
+message ListSessionsResponse {
+  repeated Session items = 1;
+}
+message GetSessionRequest {
+  string space_id = 1;
+  string session_id = 2;
+}
+message SessionActionResponse {
+  bool ok = 1;
+}
+message SyncConflict {
+  string path = 1;
+  string saved_as = 2; // where the session's version was kept ("" if it deleted the file)
+}
+message SyncSessionResponse {
+  repeated SyncConflict conflicts = 1;
+}
+message SessionChannelRequest {
+  string space_id = 1;   // the first request only
+  string session_id = 2; // the first request only
+  string json = 3;       // a Jupyter message, as JSON
+}
+message SessionMessage {
+  string json = 1; // a Jupyter message, or the "bridge" channel's own, as JSON
+}
+
+message AdminListSessionsRequest {}
+message AdminEndSessionRequest {
+  string session_id = 1;
+  string reason = 2;
 }

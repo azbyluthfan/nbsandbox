@@ -212,7 +212,8 @@ func TestNonUUIDIDs(t *testing.T) {
 	e := newEnv(t)
 	good := "0d0f8a8e-1111-4111-8111-111111111111"
 	fill := func(pattern, id, runID string) string {
-		return strings.NewReplacer("{id}", id, "{run_id}", runID, "{path...}", "x.txt", "{name}", "fn", "{version}", "1").Replace(pattern)
+		return strings.NewReplacer("{id}", id, "{run_id}", runID, "{path...}", "x.txt", "{name}", "fn", "{version}", "1",
+			"{session_id}", runID).Replace(pattern)
 	}
 	for _, rt := range Routes(e.deps) {
 		if !rt.SpaceScoped {
@@ -223,7 +224,7 @@ func TestNonUUIDIDs(t *testing.T) {
 			if rec := e.req(rt.Method, p, "alice", nil, ""); rec.Code != http.StatusBadRequest {
 				t.Errorf("%s %s: %d, want 400", rt.Method, p, rec.Code)
 			}
-			if rt.RunScoped {
+			if rt.RunScoped || rt.SessionScoped {
 				p := fill(rt.Pattern, good, bad)
 				if rec := e.req(rt.Method, p, "alice", nil, ""); rec.Code != http.StatusBadRequest {
 					t.Errorf("%s %s: %d, want 400", rt.Method, p, rec.Code)
@@ -246,6 +247,7 @@ func TestAuthorizationMatrix(t *testing.T) {
 	if rec := e.req("POST", "/v1/spaces/"+sp.ID+"/functions/fn/versions", "alice", strings.NewReader(`{"notebook":"nb.ipynb"}`), "application/json"); rec.Code != http.StatusCreated {
 		t.Fatalf("publish: %d %s", rec.Code, rec.Body)
 	}
+	session := e.openSession(t, sp.ID)
 	missing := "0d0f8a8e-1111-4111-8111-111111111111"
 	n := 0
 	for _, rt := range Routes(e.deps) {
@@ -255,7 +257,7 @@ func TestAuthorizationMatrix(t *testing.T) {
 		n++
 		for _, id := range []string{sp.ID, missing} {
 			p := strings.NewReplacer("{id}", id, "{run_id}", run.ID, "{path...}", "secret.txt",
-				"{name}", "fn", "{version}", "1").Replace(rt.Pattern)
+				"{name}", "fn", "{version}", "1", "{session_id}", session).Replace(rt.Pattern)
 			var body io.Reader
 			ct := ""
 			switch {

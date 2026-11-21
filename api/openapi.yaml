@@ -42,6 +42,12 @@ tags:
     description: A space's own Python packages (requirements.txt), built into a package set its runs import
   - name: runs
   - name: functions
+  - name: sessions
+    description: |
+      Interactive sessions: a notebook's live kernel, with a run's isolation
+      (no network, the run limits, the space's package set). Run a cell, see
+      its output, keep the variables; completion and docs from the real
+      objects. Jupyter messages over a WebSocket (docs/sessions.md).
   - name: admin
     description: Every owner's spaces and runs, draining, and the audit log, for administrators (scope nbsandbox.admin)
 
@@ -234,6 +240,42 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
+
+  /v1/admin/sessions:
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.admin] }]
+      tags: [admin]
+      summary: Every open interactive session, with its owner and worker (administrators)
+      responses:
+        "200": { description: Open sessions, content: { application/json: { schema: { $ref: "#/components/schemas/SessionList" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/admin/sessions/{session_id}/end:
+    parameters:
+      - $ref: "#/components/parameters/SessionID"
+    post:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.admin] }]
+      tags: [admin]
+      summary: End any owner's session (administrators)
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                reason: { type: string, maxLength: 500 }
+      responses:
+        "200": { description: Ended, content: { application/json: { schema: { $ref: "#/components/schemas/Session" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /v1/admin/runs/{run_id}/cancel:
     parameters:
@@ -967,6 +1009,187 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
+  /v1/spaces/{id}/sessions:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+    post:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.runs] }]
+      tags: [sessions]
+      summary: Open a notebook's interactive session (or get its open one)
+      description: |
+        A new session starts (status `starting`, then `ready`) on a worker;
+        a notebook has at most one open session. A read-write session (the
+        default) holds the space's write lock like a writing run: no writing
+        run starts while it is open, and its file changes are written back
+        every few minutes, on request (`/sync`) and when it ends. While
+        something else writes the space, the session is read-only instead
+        (`mode` says which).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [notebook]
+              properties:
+                notebook: { type: string, description: A .ipynb file in the space }
+                mode: { type: string, enum: [read-write, read-only], default: read-write }
+      responses:
+        "200": { description: The notebook's open session, content: { application/json: { schema: { $ref: "#/components/schemas/Session" } } } }
+        "201": { description: Started, content: { application/json: { schema: { $ref: "#/components/schemas/Session" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/SessionsUnavailable" }
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [sessions]
+      summary: The space's open sessions
+      responses:
+        "200": { description: Open sessions, content: { application/json: { schema: { $ref: "#/components/schemas/SessionList" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/spaces/{id}/sessions/{session_id}:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+      - $ref: "#/components/parameters/SessionID"
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [sessions]
+      summary: A session, open or ended
+      responses:
+        "200": { description: The session, content: { application/json: { schema: { $ref: "#/components/schemas/Session" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.runs] }]
+      tags: [sessions]
+      summary: End a session (its kernel stops; a read-write session's file changes are written back first)
+      responses:
+        "200": { description: Ended, content: { application/json: { schema: { $ref: "#/components/schemas/Session" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/spaces/{id}/sessions/{session_id}/interrupt:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+      - $ref: "#/components/parameters/SessionID"
+    post:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.runs] }]
+      tags: [sessions]
+      summary: Stop the cell the session is running (KeyboardInterrupt)
+      responses:
+        "202": { $ref: "#/components/responses/SessionAction" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/SessionsUnavailable" }
+
+  /v1/spaces/{id}/sessions/{session_id}/restart:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+      - $ref: "#/components/parameters/SessionID"
+    post:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.runs] }]
+      tags: [sessions]
+      summary: Start the session's kernel again (its variables are gone; the files stay)
+      responses:
+        "202": { $ref: "#/components/responses/SessionAction" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/SessionsUnavailable" }
+
+  /v1/spaces/{id}/sessions/{session_id}/sync:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+      - $ref: "#/components/parameters/SessionID"
+    post:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.runs] }]
+      tags: [sessions]
+      summary: Write a read-write session's file changes to the space now
+      description: |
+        Files the kernel created, changed or deleted in /space. A file
+        changed in the space meanwhile keeps that change; the session's
+        version is kept beside it (`saved_as`), as for a run.
+      responses:
+        "200":
+          description: Written
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [conflicts]
+                properties:
+                  conflicts:
+                    type: array
+                    items:
+                      type: object
+                      required: [path]
+                      properties:
+                        path: { type: string }
+                        saved_as: { type: string, description: "Where the session's version was kept (absent if it deleted the file)" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/SessionsUnavailable" }
+
+  /v1/spaces/{id}/sessions/{session_id}/channel:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+      - $ref: "#/components/parameters/SessionID"
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.runs] }]
+      tags: [sessions]
+      summary: The session's WebSocket (Jupyter messages, both ways)
+      description: |
+        Upgrade: websocket. One JSON Jupyter message per text message
+        (channel, header, parent_header, metadata, content; no binary
+        buffers), as Jupyter's own kernel WebSocket carries them. A client may
+        send execute_request, complete_request, inspect_request,
+        is_complete_request and kernel_info_request (channel `shell`), and
+        interrupt_request (channel `control`); anything else is answered with
+        `{"channel": "bridge", "content": {"refused": true, "error": ...}}`.
+        The first message is the session's state: `{"channel": "bridge",
+        "content": {"status": "attached", "kernel": "idle" | "busy" | ...,
+        "mode": ...}}`. Notices (file write-backs) are `bridge` messages with
+        `notice`. When the session ends: a last `{"status": "ended",
+        "reason": ...}`, then the WebSocket closes. A page of another site
+        can't open it (its Origin is refused). Several connections to one
+        session see the same messages.
+      responses:
+        "101": { description: Switching to the WebSocket }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/SessionsUnavailable" }
+
   /v1/spaces/{id}/runs/{run_id}/result:
     parameters:
       - $ref: "#/components/parameters/SpaceID"
@@ -1216,6 +1439,12 @@ components:
       required: true
       description: Run UUID (lowercase). Anything else is 400.
       schema: { type: string, format: uuid }
+    SessionID:
+      name: session_id
+      in: path
+      required: true
+      description: Session UUID (lowercase). Anything else is 400.
+      schema: { type: string, format: uuid }
     Cursor:
       name: cursor
       in: query
@@ -1232,6 +1461,8 @@ components:
     Conflict: { description: A run is active in the space, or the run is (not) finished, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
     DockerUnavailable: { description: Docker is unavailable; retry later (Retry-After), content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
     TooLarge: { description: A file, the space quota or the request is too large; nothing was stored, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    SessionsUnavailable: { description: "No worker can hold the session now (the workers are drained, or none runs sessions): retry after Retry-After seconds (code sessions_unavailable)", headers: { Retry-After: { schema: { type: integer } } }, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    SessionAction: { description: Sent to the session, content: { application/json: { schema: { type: object, required: [ok], properties: { ok: { type: boolean } } } } } }
     VersionConflict:
       description: |
         412: the file changed since the version given (reload, then save
@@ -1257,6 +1488,26 @@ components:
               status: { type: string, enum: [queued, running] }
 
   schemas:
+    Session:
+      type: object
+      required: [id, space_id, notebook, mode, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        space_id: { type: string, format: uuid }
+        notebook: { type: string }
+        mode: { type: string, enum: [read-write, read-only] }
+        status: { type: string, enum: [starting, ready, ended] }
+        created_at: { type: string, format: date-time }
+        ended_at: { type: string, format: date-time }
+        end_reason: { type: string, description: "Why it ended (idle, its maximum length, ended by someone, its container stopped)" }
+        ended_by: { type: string, description: Who ended it (absent when it ended by itself) }
+        owner: { type: string, description: Administrators only }
+        worker: { type: string, description: The worker holding it (administrators only) }
+    SessionList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Session" } }
     RunEvent:
       description: |
         The data of a `progress` or `cell` event: what a run reported while
