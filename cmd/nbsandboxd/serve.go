@@ -226,8 +226,11 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 	if sb, ok := backend.(isolation.SessionBackend); ok && cfg.Executes() {
 		sessBackend = sb
 	}
+	if cfg.Sessions.Enabled && !cfg.SessionsOn() {
+		logger.Warn("interactive sessions are off: with API and worker processes, set sessions.secret (NBSANDBOX_SESSIONS_SECRET), the same on every process")
+	}
 	sess := sessions.New(sessions.Config{
-		Enabled: cfg.Sessions.Enabled, Image: cfg.Docker.Image, Runtime: runtimeLabel(cfg), Limits: limits,
+		Enabled: cfg.SessionsOn(), Image: cfg.Docker.Image, Runtime: runtimeLabel(cfg), Limits: limits, Secret: cfg.Sessions.Secret,
 		Idle: cfg.Sessions.Idle, Max: cfg.Sessions.Max, WriteBack: cfg.Sessions.WriteBack, Retention: cfg.Sessions.Retention,
 		PerUser: cfg.Sessions.PerUser, PerWorker: cfg.Sessions.PerWorker, MaxMessage: int64(cfg.Sessions.MaxMessage),
 		WorkerID: id, NoExecute: !cfg.Executes(), Shared: cfg.Role != config.RoleAll,
@@ -238,6 +241,7 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 			d, err := db.GetDrain(context.WithoutCancel(ctx))
 			return err == nil && d.Draining
 		},
+		Workers: func(ctx context.Context) ([]store.Worker, error) { return db.LiveWorkers(ctx, 3*cfg.Runs.Lease) },
 	})
 	if err := spaceSvc.CheckConsistency(ctx); err != nil {
 		return err
@@ -279,7 +283,7 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 			published = make(chan struct{})
 			go func() {
 				defer close(published)
-				publishWorker(supCtx, db, id, cfg, sup, comps, dockerChanged, logger)
+				publishWorker(supCtx, db, id, sessionAddr(cfg, sess, id), cfg, sup, comps, dockerChanged, logger)
 			}()
 		}
 	}
@@ -375,6 +379,16 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 		}
 	}
 
+	// A worker of a cluster serves its sessions to the API nodes on an
+	// internal listener (authenticated with the shared secret).
+	var sessSrv *http.Server
+	if cfg.Role == config.RoleWorker && sess.Holds() {
+		sessSrv = newServer(sess.InternalHandler())
+		if err := listen(cfg.Sessions.Listen, sessSrv, "sessions (internal)", nil); err != nil {
+			return err
+		}
+	}
+
 	// 7. Run until a signal, then shut down gracefully.
 	select {
 	case err := <-serveErr:
@@ -387,7 +401,7 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 	// Stop accepting requests, then stop dequeuing, wait up to the grace
 	// period for active runs, and stop the rest as interrupted. Open log
 	// streams get a final event.
-	for _, s := range []*http.Server{srv, uiSrv} {
+	for _, s := range []*http.Server{srv, uiSrv, sessSrv} {
 		if s == nil {
 			continue
 		}

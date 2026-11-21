@@ -39,11 +39,11 @@ func workerID(cfg config.Settings) string {
 // runs and that it is alive, until ctx ends; then it forgets the worker.
 //
 // changed wakes it early (Docker came or went).
-func publishWorker(ctx context.Context, db *store.DB, id string, cfg config.Settings, sup backendSupervisor, comps *completions.Publisher, changed <-chan struct{}, log *slog.Logger) {
+func publishWorker(ctx context.Context, db *store.DB, id, sessionAddr string, cfg config.Settings, sup backendSupervisor, comps *completions.Publisher, changed <-chan struct{}, log *slog.Logger) {
 	every := cfg.Runs.Lease / 3
 	publish := func(ctx context.Context) {
 		st := sup.Status()
-		w := store.Worker{ID: id, Up: st.Up && st.Manifest != nil, Runtime: "{}"}
+		w := store.Worker{ID: id, Up: st.Up && st.Manifest != nil, Runtime: "{}", SessionAddr: sessionAddr}
 		if info, err := runtimeInfo(cfg, st, comps); err == nil { //nolint:contextcheck // the index is stored under the publisher's own (process) context
 			b, _ := json.Marshal(info)
 			w.Runtime = string(b)

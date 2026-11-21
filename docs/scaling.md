@@ -21,6 +21,7 @@ Set it with `role` in `settings.yaml` or `NBSANDBOX_ROLE`.
 - **What workers run.** Each worker publishes its runner image, packages and limits in the database. API nodes use the freshest one for `GET /v1/runtime` and the dependency check, and answer `503` to new runs while no worker can take them.
 - **Package sets** ([packages.md](packages.md)): any node asks for a set, one worker builds it (a lease in the database, taken over if it dies), and each worker unpacks it once into its own cache. A run waits for its set without holding a worker slot.
 - **Web UI sessions and the audit log** are in PostgreSQL: any API node serves a signed-in browser, and records what it does.
+- **Interactive sessions** ([sessions.md](sessions.md)) run on a worker, which takes them from the `sessions` table (within `sessions.per_worker`). A client's WebSocket reaches any API node, which relays it to the worker holding the session, on the worker's internal listener (`sessions.listen`, `:8091`) at the address it publishes in the database. Interrupt, restart and save go the same way. Workers accept only requests carrying `sessions.secret`, the same long random value on every process; without it, sessions stay off on API and worker processes. Ending a session from any API node ends its record and notifies the workers. A worker that comes back re-attaches to its sessions (their kernels kept running); a worker gone for good for two minutes leaves its sessions `interrupted`, ended by whichever node notices.
 - **Periodic cleanup** (retention, unreferenced contents) runs on one node at a time.
 
 ## Tested failures
@@ -43,6 +44,7 @@ An outage longer than the lease ends the affected runs as `interrupted`: their w
 - `worker_id` must be unique per worker. The default, the host name, is unique per container and per Kubernetes pod. A worker restarted with the same ID takes back its own abandoned runs at once instead of waiting for the lease to expire.
 - Workers on one Docker host may share a data folder: each run has its own folders in it. The path must be the same inside the worker container and on the host (Docker resolves bind mounts on the host).
 - API nodes keep no run files; their data folder can be ephemeral.
+- For interactive sessions: the same `sessions.secret` on every process, and API nodes able to reach each worker's `sessions.listen` port (keep it off the internet: it trusts the secret). A load balancer in front of the API nodes must pass WebSocket upgrades over HTTP/1.1 (Caddy does with `transport http`; an h2c-only upstream can't carry them).
 - Keep `runs.lease` well above the database's worst failover time. A worker that can't renew its leases stops its runs, since nothing it does afterwards would be recorded.
 
 ## Trying it on one machine

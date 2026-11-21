@@ -14,15 +14,19 @@ type Worker struct {
 	Up       bool   // can run notebooks now
 	Runtime  string // JSON (GET /v1/runtime as this worker sees it)
 	Manifest string // the runner image's dependency manifest, as labelled
-	SeenAt   time.Time
+	// SessionAddr is where API nodes reach its interactive sessions
+	// (host:port), "" when it holds none.
+	SessionAddr string
+	SeenAt      time.Time
 }
 
 // PutWorker records a worker's state, seen now.
 func (db *DB) PutWorker(ctx context.Context, w Worker) error {
 	_, err := db.w.ExecContext(ctx, `
-		INSERT INTO workers(id, up, runtime, manifest, seen_at) VALUES (?, ?, ?, ?, `+dbNowMS+`)
+		INSERT INTO workers(id, up, runtime, manifest, session_addr, seen_at) VALUES (?, ?, ?, ?, ?, `+dbNowMS+`)
 		ON CONFLICT (id) DO UPDATE SET up = EXCLUDED.up, runtime = EXCLUDED.runtime,
-			manifest = EXCLUDED.manifest, seen_at = EXCLUDED.seen_at`, w.ID, w.Up, w.Runtime, w.Manifest)
+			manifest = EXCLUDED.manifest, session_addr = EXCLUDED.session_addr, seen_at = EXCLUDED.seen_at`,
+		w.ID, w.Up, w.Runtime, w.Manifest, w.SessionAddr)
 	return err
 }
 
@@ -30,7 +34,7 @@ func (db *DB) PutWorker(ctx context.Context, w Worker) error {
 // can run notebooks first, then the most recently seen.
 func (db *DB) LiveWorkers(ctx context.Context, within time.Duration) ([]Worker, error) {
 	rows, err := db.r.QueryContext(ctx, `
-		SELECT id, up, runtime, manifest, seen_at FROM workers
+		SELECT id, up, runtime, manifest, session_addr, seen_at FROM workers
 		WHERE seen_at > `+dbNowMS+` - ? ORDER BY up DESC, seen_at DESC, id`, within.Milliseconds())
 	if err != nil {
 		return nil, err
@@ -40,7 +44,7 @@ func (db *DB) LiveWorkers(ctx context.Context, within time.Duration) ([]Worker, 
 	for rows.Next() {
 		var w Worker
 		var seen int64
-		if err := rows.Scan(&w.ID, &w.Up, &w.Runtime, &w.Manifest, &seen); err != nil {
+		if err := rows.Scan(&w.ID, &w.Up, &w.Runtime, &w.Manifest, &w.SessionAddr, &seen); err != nil {
 			return nil, err
 		}
 		w.SeenAt = time.UnixMilli(seen)

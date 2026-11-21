@@ -5,9 +5,12 @@ package main
 
 import (
 	"context"
+	"os"
 	"time"
 
+	"github.com/azbyluthfan/nbsandbox/internal/config"
 	"github.com/azbyluthfan/nbsandbox/internal/packages"
+	"github.com/azbyluthfan/nbsandbox/internal/sessions"
 	"github.com/azbyluthfan/nbsandbox/internal/spaces"
 	"github.com/azbyluthfan/nbsandbox/internal/store"
 )
@@ -53,4 +56,18 @@ func sessionPackages(p *packages.Service, sp *spaces.Service, imageID func() str
 			}
 		}
 	}
+}
+
+// sessionAddr is where API nodes reach this worker's sessions ("" when it
+// holds none): sessions.address, or its host name and sessions.listen's
+// port (a container's host name resolves on its Compose network).
+func sessionAddr(cfg config.Settings, sess *sessions.Manager, id string) string {
+	if cfg.Role != config.RoleWorker || !sess.Holds() {
+		return ""
+	}
+	host, err := os.Hostname()
+	if err != nil || host == "" {
+		host = id
+	}
+	return cfg.Sessions.SessionAddress(host)
 }

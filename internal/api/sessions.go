@@ -5,7 +5,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -251,13 +250,6 @@ func (a *API) adminEndSession(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, sessionView(s, true))
 }
 
-// Session channel timing.
-var (
-	channelPing  = 30 * time.Second // keeps proxies from closing a quiet connection
-	channelWait  = 75 * time.Second // without a pong for this long, the client is gone
-	channelWrite = 10 * time.Second
-)
-
 var upgrader = websocket.Upgrader{
 	ReadBufferSize: 32 << 10, WriteBufferSize: 32 << 10,
 	CheckOrigin: sameOrigin,
@@ -306,94 +298,6 @@ func (a *API) sessionChannel(w http.ResponseWriter, r *http.Request) {
 		return // the upgrader has answered
 	}
 	defer func() { _ = conn.Close() }()
-	serveChannel(r.Context(), conn, client, a.d.Shutdown)
+	sessions.ServeWebSocket(r.Context(), conn, client, a.d.Shutdown)
 	obs.Logger(r.Context()).Debug("session channel closed", "session_id", r.PathValue("session_id"), "reason", client.Reason())
-}
-
-// channelClient is what serveChannel relays: a session's client (or, on an
-// API node, the worker's channel it proxies).
-type channelClient interface {
-	Messages() <-chan []byte
-	Send(msg []byte) error
-	Reason() string
-}
-
-// serveChannel relays between a WebSocket and a session's client until
-// either ends.
-func serveChannel(ctx context.Context, conn *websocket.Conn, client channelClient, shutdown <-chan struct{}) {
-	conn.SetReadLimit(sessions.MaxClientMessage)
-	_ = conn.SetReadDeadline(time.Now().Add(channelWait))
-	conn.SetPongHandler(func(string) error { return conn.SetReadDeadline(time.Now().Add(channelWait)) })
-
-	refusals := make(chan []byte, 16)
-	readDone := make(chan struct{})
-	go func() {
-		defer close(readDone)
-		for {
-			typ, msg, err := conn.ReadMessage()
-			if err != nil {
-				return
-			}
-			if typ != websocket.TextMessage {
-				continue
-			}
-			if err := client.Send(msg); err != nil {
-				select {
-				case refusals <- refusal(err):
-				default:
-				}
-			}
-		}
-	}()
-
-	ping := time.NewTicker(channelPing)
-	defer ping.Stop()
-	write := func(typ int, b []byte) error {
-		_ = conn.SetWriteDeadline(time.Now().Add(channelWrite))
-		return conn.WriteMessage(typ, b)
-	}
-	closing := func(code int, text string) {
-		_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(code, clipClose(text)), time.Now().Add(time.Second))
-	}
-	for {
-		select {
-		case msg, ok := <-client.Messages():
-			if !ok {
-				closing(websocket.CloseNormalClosure, client.Reason())
-				return
-			}
-			if write(websocket.TextMessage, msg) != nil {
-				return
-			}
-		case msg := <-refusals:
-			if write(websocket.TextMessage, msg) != nil {
-				return
-			}
-		case <-ping.C:
-			if write(websocket.PingMessage, nil) != nil {
-				return
-			}
-		case <-readDone:
-			return
-		case <-shutdown:
-			closing(websocket.CloseServiceRestart, "nbsandboxd is restarting; reconnect in a moment")
-			return
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-// refusal tells a client its message wasn't passed on.
-func refusal(err error) []byte {
-	b, _ := json.Marshal(map[string]any{"channel": "bridge", "content": map[string]any{"refused": true, "error": err.Error()}})
-	return b
-}
-
-// clipClose keeps a close reason within a control frame (125 bytes).
-func clipClose(s string) string {
-	if len(s) > 120 {
-		return s[:117] + "..."
-	}
-	return s
 }

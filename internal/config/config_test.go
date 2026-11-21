@@ -359,9 +359,37 @@ func TestSessionsSettings(t *testing.T) {
 		"no worker room":    {"NBSANDBOX_SESSIONS_PER_WORKER": "0"},
 		"negative per user": {"NBSANDBOX_SESSIONS_PER_USER": "-1"},
 		"not a number":      {"NBSANDBOX_SESSIONS_PER_USER": "two"},
+		"a short secret":    {"NBSANDBOX_ROLE": "worker", "NBSANDBOX_SESSIONS_SECRET": "short"},
+		"no worker port":    {"NBSANDBOX_ROLE": "worker", "NBSANDBOX_SESSIONS_SECRET": "0123456789abcdef", "NBSANDBOX_SESSIONS_LISTEN": "nope"},
 	} {
 		if _, err := Load("", envOf(env)); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
+	}
+}
+
+func TestSessionsInACluster(t *testing.T) {
+	base := map[string]string{"NBSANDBOX_DATABASE_URL": "postgres://u:p@db:5432/x"}
+	with := func(kv ...string) map[string]string {
+		m := map[string]string{}
+		for k, v := range base {
+			m[k] = v
+		}
+		for i := 0; i < len(kv); i += 2 {
+			m[kv[i]] = kv[i+1]
+		}
+		return m
+	}
+	s, err := Load("", envOf(with("NBSANDBOX_ROLE", "worker")))
+	if err != nil || s.SessionsOn() {
+		t.Fatalf("a worker without the secret starts, with sessions off: %v %v", err, s.SessionsOn())
+	}
+	s, err = Load("", envOf(with("NBSANDBOX_ROLE", "worker", "NBSANDBOX_SESSIONS_SECRET", "0123456789abcdef")))
+	if err != nil || !s.SessionsOn() || s.Sessions.SessionAddress("w1") != "w1:8091" {
+		t.Fatalf("worker: %v %v %q", err, s.SessionsOn(), s.Sessions.SessionAddress("w1"))
+	}
+	s, _ = Load("", envOf(with("NBSANDBOX_SESSIONS_ADDRESS", "10.0.0.5:9000")))
+	if !s.SessionsOn() || s.Sessions.SessionAddress("w1") != "10.0.0.5:9000" {
+		t.Fatalf("one process: %v %q", s.SessionsOn(), s.Sessions.SessionAddress("w1"))
 	}
 }

@@ -272,6 +272,21 @@ type env struct {
 	space   string
 	clock   *clock
 	drain   atomic.Bool
+
+	wmu     sync.Mutex
+	workers []store.Worker // what Deps.Workers answers
+}
+
+func (e *env) setWorkers(ws []store.Worker) {
+	e.wmu.Lock()
+	defer e.wmu.Unlock()
+	e.workers = ws
+}
+
+func (e *env) liveWorkers(context.Context) ([]store.Worker, error) {
+	e.wmu.Lock()
+	defer e.wmu.Unlock()
+	return append([]store.Worker(nil), e.workers...), nil
 }
 
 type clock struct {
@@ -306,7 +321,7 @@ func newEnv(t *testing.T, mod func(*Config)) *env {
 		mod(&cfg)
 	}
 	e.m = New(cfg, Deps{DB: db, Spaces: e.spaces, Backend: e.backend, Now: e.clock.Now,
-		Draining: e.drain.Load, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
+		Draining: e.drain.Load, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Workers: e.liveWorkers})
 	if err := e.m.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -323,7 +338,7 @@ func (e *env) open(t *testing.T, nb, mode string) store.Session {
 	return s
 }
 
-func (e *env) attach(t *testing.T, id string) *Client {
+func (e *env) attach(t *testing.T, id string) Conn {
 	t.Helper()
 	c, _, err := e.m.Attach(context.Background(), "alice", e.space, id)
 	if err != nil {
@@ -353,7 +368,7 @@ func (e *env) session(t *testing.T, id string) store.Session {
 }
 
 // next reads the client's next message whose channel and type match.
-func next(t *testing.T, c *Client, channel, msgType string) map[string]any {
+func next(t *testing.T, c Conn, channel, msgType string) map[string]any {
 	t.Helper()
 	timeout := time.After(5 * time.Second)
 	for {
