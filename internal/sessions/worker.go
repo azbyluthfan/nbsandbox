@@ -18,6 +18,14 @@ import (
 // removes session containers nobody holds, then takes sessions as they are
 // opened. It returns at once; Shutdown stops it.
 func (m *Manager) Start(ctx context.Context) error {
+	if m.Enabled() && m.cfg.Shared {
+		// Any node of a cluster ends sessions nobody can hold any more.
+		m.done.Add(1)
+		go func() {
+			defer m.done.Done()
+			m.reapLoop(context.WithoutCancel(ctx))
+		}()
+	}
 	if !m.Holds() {
 		return nil
 	}
@@ -65,6 +73,7 @@ func (m *Manager) loop(ctx context.Context) {
 		case <-m.stop:
 			return
 		case <-m.wake:
+			m.endEndedElsewhere(ctx) // an API node ended one (and told the workers)
 		case <-tick.C:
 			m.housekeep(ctx)
 			if now := m.d.Now(); now.Sub(lastWriteBack) >= m.cfg.WriteBack {
@@ -234,6 +243,21 @@ func (m *Manager) housekeep(ctx context.Context) {
 				}
 				l.end(ctx, reason, by)
 			}
+		}
+	}
+}
+
+// endEndedElsewhere stops the sessions held here whose records ended.
+func (m *Manager) endEndedElsewhere(ctx context.Context) {
+	m.mu.Lock()
+	held := make([]*live, 0, len(m.live))
+	for _, l := range m.live {
+		held = append(held, l)
+	}
+	m.mu.Unlock()
+	for _, l := range held {
+		if s, err := m.d.DB.GetSession(ctx, l.s.ID); err == nil && !s.Open() {
+			l.end(ctx, s.EndReason, s.EndedBy)
 		}
 	}
 }

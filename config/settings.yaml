@@ -132,6 +132,12 @@ sessions:                           # interactive sessions: a notebook's live ke
   write_back: 5m                    # a read-write session's file changes go to the space this often, and when it ends
   max_message: 2MiB                 # one output larger than this is replaced by a notice
   retention: 168h                   # ended sessions' records are kept this long
+  # With API and worker processes (role api / worker): API nodes reach the
+  # worker holding a session on its internal listener, with a shared secret.
+  # Without the secret, sessions stay off on such processes.
+  listen: ":8091"                   # NBSANDBOX_SESSIONS_LISTEN: a worker's internal listener for API nodes
+  address: ""                       # NBSANDBOX_SESSIONS_ADDRESS: how API nodes reach it (default: host name and listen's port)
+  secret: ""                        # NBSANDBOX_SESSIONS_SECRET: the same long random value on every process
 
 # A space's own packages (docs/packages.md): its requirements.txt is built,
 # once, into a package set its runs import. Build containers are the only

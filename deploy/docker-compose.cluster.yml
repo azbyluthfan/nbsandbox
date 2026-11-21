@@ -41,6 +41,9 @@ x-env: &env
   NBSANDBOX_EVENT_RETENTION: ${NBSANDBOX_EVENT_RETENTION:-}
   NBSANDBOX_IDEMPOTENCY_WINDOW: ${NBSANDBOX_IDEMPOTENCY_WINDOW:-}
   NBSANDBOX_CLEANUP_EVERY: ${NBSANDBOX_CLEANUP_EVERY:-}
+  # API nodes reach a worker's interactive sessions on its internal port
+  # (8091), with this secret. A development value: use a long random one.
+  NBSANDBOX_SESSIONS_SECRET: ${NBSANDBOX_SESSIONS_SECRET:-nbsandbox-dev-sessions-secret}
 
 services:
   lb:

@@ -177,6 +177,37 @@ type Sessions struct {
 	MaxMessage Size `yaml:"max_message"`
 	// Retention keeps ended sessions' records this long.
 	Retention time.Duration `yaml:"retention"`
+
+	// With API and worker processes (role api or worker), API nodes reach
+	// the worker holding a session on its internal listener.
+	//
+	// Listen is a worker's internal listener for API nodes (":8091").
+	Listen string `yaml:"listen"`
+	// Address is how API nodes reach this worker's Listen (host:port);
+	// default: the worker's host name and Listen's port.
+	Address string `yaml:"address"`
+	// Secret authenticates API nodes to workers: the same long random value
+	// on every process (NBSANDBOX_SESSIONS_SECRET). Never logged.
+	Secret string `yaml:"secret"`
+}
+
+// SessionsOn reports whether this process runs interactive sessions:
+// turned on, and, with API and worker processes, given the secret they
+// share.
+func (s Settings) SessionsOn() bool {
+	return s.Sessions.Enabled && (s.Role == RoleAll || s.Role == "" || s.Sessions.Secret != "")
+}
+
+// SessionAddress is where API nodes reach this worker's sessions.
+func (s Sessions) SessionAddress(host string) string {
+	if s.Address != "" {
+		return s.Address
+	}
+	_, port, err := net.SplitHostPort(s.Listen)
+	if err != nil || port == "" {
+		return ""
+	}
+	return net.JoinHostPort(host, port)
 }
 
 type Packages struct {
@@ -395,7 +426,7 @@ func Default() Settings {
 			BuildTimeout: 10 * time.Minute, Retention: 30 * 24 * time.Hour, CacheSize: 20 * GiB,
 			BuilderImage: "nbsandbox-runner-builder:dev", Network: "bridge"},
 		Sessions: Sessions{Enabled: true, Idle: 30 * time.Minute, Max: 8 * time.Hour, PerUser: 2, PerWorker: 4,
-			WriteBack: 5 * time.Minute, MaxMessage: 2 * MiB, Retention: 7 * 24 * time.Hour},
+			WriteBack: 5 * time.Minute, MaxMessage: 2 * MiB, Retention: 7 * 24 * time.Hour, Listen: ":8091"},
 		UI: UI{Enabled: false, Listen: "127.0.0.1:8090", Auth: "none",
 			Session: UISession{Idle: time.Hour, Max: 12 * time.Hour},
 			OIDC: UIOIDC{Scopes: []string{"openid", "profile", auth.ScopeRead, auth.ScopeSpacesWrite, auth.ScopeFilesWrite,
@@ -544,6 +575,9 @@ func applyEnv(s *Settings, getenv func(string) string) error {
 		"NBSANDBOX_UI_PUBLIC_URL":           &s.UI.PublicURL,
 		"NBSANDBOX_UI_OIDC_CLIENT_ID":       &s.UI.OIDC.ClientID,
 		"NBSANDBOX_UI_OIDC_CLIENT_SECRET":   &s.UI.OIDC.ClientSecret,
+		"NBSANDBOX_SESSIONS_LISTEN":         &s.Sessions.Listen,
+		"NBSANDBOX_SESSIONS_ADDRESS":        &s.Sessions.Address,
+		"NBSANDBOX_SESSIONS_SECRET":         &s.Sessions.Secret,
 	}
 	for k, p := range str {
 		if v := getenv(k); v != "" {
@@ -805,6 +839,16 @@ func (s Settings) Validate() error {
 		}
 		if ss.Retention < time.Minute {
 			add("sessions.retention: must be at least 1m, got %s", ss.Retention)
+		}
+		if s.Role == RoleAPI || s.Role == RoleWorker {
+			// No secret: sessions stay off on this process (SessionsOn), so a
+			// cluster upgraded without one still starts.
+			if ss.Secret != "" && len(ss.Secret) < 16 {
+				add("sessions.secret: must be at least 16 characters (the same long random value on every process)")
+			}
+			if _, _, err := net.SplitHostPort(ss.Listen); s.Role == RoleWorker && err != nil {
+				add("sessions.listen: a worker's internal listener for API nodes, host:port or :port, got %q", ss.Listen)
+			}
 		}
 	}
 	if p := s.Packages; p.Enabled {

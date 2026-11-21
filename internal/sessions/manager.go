@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"path"
 	"strings"
 	"sync"
@@ -43,8 +44,11 @@ type Config struct {
 	// NoExecute: this process doesn't hold sessions (an API node).
 	NoExecute bool
 	// Shared: other workers share the database (API and worker
-	// processes); a session another live worker holds is left alone.
+	// processes); a session another live worker holds is left alone, and is
+	// reached through it (Secret).
 	Shared bool
+	// Secret authenticates API nodes to workers (InternalHandler).
+	Secret string
 	// Tick is how often sessions are checked (idle, maximum, write-back,
 	// ended elsewhere); 10s if zero.
 	Tick time.Duration
@@ -92,8 +96,10 @@ type Deps struct {
 	// Workers lists the live workers (with Shared): who else holds
 	// sessions, and where API nodes reach them.
 	Workers func(ctx context.Context) ([]store.Worker, error)
-	Log     *slog.Logger
-	Now     func() time.Time
+	// HTTP reaches other workers (nil: a default client).
+	HTTP *http.Client
+	Log  *slog.Logger
+	Now  func() time.Time
 }
 
 // Errors.
@@ -278,80 +284,127 @@ func (m *Manager) end(ctx context.Context, s store.Session, reason, by string) (
 	return m.d.DB.GetSession(ctx, s.ID)
 }
 
-// Attach connects a client to one of the owner's open sessions held by this
-// process. ErrNotHere if another worker holds it; the caller proxies.
-func (m *Manager) Attach(ctx context.Context, owner, spaceID, id string) (*Client, store.Session, error) {
+// Attach connects a client to one of the owner's open sessions: here if
+// this process holds it, otherwise through the worker that does. A session
+// still starting is waited for.
+func (m *Manager) Attach(ctx context.Context, owner, spaceID, id string) (Conn, store.Session, error) {
 	s, err := m.Get(ctx, owner, spaceID, id)
 	if err != nil {
 		return nil, store.Session{}, err
 	}
-	if !s.Open() {
-		return nil, s, ErrEnded
+	l, s, err := m.find(ctx, s)
+	if err != nil {
+		return nil, s, err
 	}
-	l := m.get(id)
-	if l == nil {
-		if s.Worker != "" && s.Worker != m.cfg.WorkerID {
-			return nil, s, ErrNotHere
-		}
-		if !m.Holds() {
-			return nil, s, ErrNotHere
-		}
-		// Still starting: wait for it here.
-		if l, err = m.waitLive(ctx, id); err != nil {
-			return nil, s, err
-		}
+	if l != nil {
+		return l.subscribe(), s, nil
 	}
-	return l.subscribe(), s, nil
+	c, err := m.remoteAttach(ctx, s)
+	return c, s, err
 }
 
 // Interrupt stops the cell an owner's session is running.
 func (m *Manager) Interrupt(ctx context.Context, owner, spaceID, id string) error {
-	l, err := m.holding(ctx, owner, spaceID, id)
-	if err != nil {
-		return err
-	}
-	return l.control("interrupt_request", nil)
+	return m.act(ctx, owner, spaceID, id, "interrupt", func(l *live) error { return l.control("interrupt_request", nil) })
 }
 
 // Restart starts the session's kernel again: its variables are gone.
 func (m *Manager) Restart(ctx context.Context, owner, spaceID, id string) error {
-	l, err := m.holding(ctx, owner, spaceID, id)
-	if err != nil {
-		return err
-	}
-	return l.control("shutdown_request", map[string]any{"restart": true})
+	return m.act(ctx, owner, spaceID, id, "restart", func(l *live) error {
+		return l.control("shutdown_request", map[string]any{"restart": true})
+	})
 }
 
 // SyncFiles writes a read-write session's file changes to the space now.
 func (m *Manager) SyncFiles(ctx context.Context, owner, spaceID, id string) ([]store.Conflict, error) {
-	l, err := m.holding(ctx, owner, spaceID, id)
-	if err != nil {
-		return nil, err
-	}
-	if l.s.Mode != store.SessionReadWrite {
-		return nil, &InvalidError{Msg: "a read-only session has no changes to write back"}
-	}
-	return l.sync(ctx)
-}
-
-func (m *Manager) holding(ctx context.Context, owner, spaceID, id string) (*live, error) {
 	s, err := m.Get(ctx, owner, spaceID, id)
 	if err != nil {
 		return nil, err
 	}
+	if s.Mode != store.SessionReadWrite {
+		return nil, &InvalidError{Msg: "a read-only session has no changes to write back"}
+	}
+	l, s, err := m.find(ctx, s)
+	if err != nil {
+		return nil, err
+	}
+	if l != nil {
+		return l.sync(ctx)
+	}
+	body, err := m.remoteAction(ctx, s, "sync")
+	if err != nil {
+		return nil, err
+	}
+	return conflictsFrom(body)
+}
+
+// act does something to a session, here or through its worker.
+func (m *Manager) act(ctx context.Context, owner, spaceID, id, action string, here func(*live) error) error {
+	s, err := m.Get(ctx, owner, spaceID, id)
+	if err != nil {
+		return err
+	}
+	l, s, err := m.find(ctx, s)
+	if err != nil {
+		return err
+	}
+	if l != nil {
+		return here(l)
+	}
+	_, err = m.remoteAction(ctx, s, action)
+	return err
+}
+
+// find locates an open session: the live one if this process holds it,
+// else its record once a worker holds it and it is ready (nil live: reach
+// it through that worker). A session still starting is waited for.
+func (m *Manager) find(ctx context.Context, s store.Session) (*live, store.Session, error) {
 	if !s.Open() {
-		return nil, ErrEnded
+		return nil, s, ErrEnded
 	}
-	l := m.get(id)
-	if l == nil {
-		if s.Worker != "" && s.Worker != m.cfg.WorkerID || !m.Holds() {
-			return nil, ErrNotHere
+	if l := m.get(s.ID); l != nil {
+		return l, s, nil
+	}
+	if s.Worker == m.cfg.WorkerID && m.Holds() || s.Worker == "" && !m.cfg.Shared && m.Holds() {
+		l, err := m.waitLive(ctx, s.ID)
+		return l, s, err
+	}
+	if !m.cfg.Shared {
+		return nil, s, ErrNotHere
+	}
+	s, err := m.waitReady(ctx, s.ID)
+	if err != nil {
+		return nil, s, err
+	}
+	if s.Worker == m.cfg.WorkerID && m.Holds() {
+		l, err := m.waitLive(ctx, s.ID)
+		return l, s, err
+	}
+	return nil, s, nil
+}
+
+// waitReady waits for a session to be ready on some worker.
+func (m *Manager) waitReady(ctx context.Context, id string) (store.Session, error) {
+	ctx, cancel := context.WithTimeout(ctx, m.cfg.StartTimeout)
+	defer cancel()
+	t := time.NewTicker(200 * time.Millisecond)
+	defer t.Stop()
+	for {
+		s, err := m.d.DB.GetSession(ctx, id)
+		switch {
+		case err != nil:
+			return s, err
+		case !s.Open():
+			return s, fmt.Errorf("%w: %s", ErrEnded, s.EndReason)
+		case s.Status == store.SessionReady && s.Worker != "":
+			return s, nil
 		}
-		if l, err = m.waitLive(ctx, id); err != nil {
-			return nil, err
+		select {
+		case <-ctx.Done():
+			return s, fmt.Errorf("the session hasn't started: %w", ctx.Err())
+		case <-t.C:
 		}
 	}
-	return l, nil
 }
 
 func (m *Manager) get(id string) *live {
