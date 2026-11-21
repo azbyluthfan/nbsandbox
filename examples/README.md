@@ -13,6 +13,8 @@ Small, complete clients showing what an application does to run notebooks in nbs
 | [go/runnotebook](go/runnotebook/main.go) (standard library) | the result stream (`GET …/result` as Server-Sent Events) | reading SSE without a library; items of a streamed output as they arrive (`-stream`), resuming with `Last-Event-ID` |
 | [go/grpcclient](go/grpcclient/main.go) (gRPC, the generated client) | `FollowRunResult` | uploading in chunks over a client stream; `-stream` as above |
 
+One more works with a notebook's live kernel instead of runs, as the web editor does ([docs/sessions.md](../docs/sessions.md)): [python/interactive_session.py](python/interactive_session.py) (`requests`, `websocket-client`) opens the notebook's session, connects to its WebSocket (Jupyter messages as JSON), runs cells whose variables stay between them, asks the kernel for a DataFrame's columns and a function's docs, stops a long cell, saves a file the kernel wrote to the space, and ends the session.
+
 The notebooks:
 
 - [notebooks/sales_report.ipynb](notebooks/sales_report.ipynb) takes `region` and `months`, reads `data/sales.csv`, returns the totals as one value (`nbsandbox.output`), and writes `monthly.csv` as an artifact. Its input contract only allows the three regions in the data, so a wrong value is refused with `400 invalid_parameters` before anything runs.
@@ -32,6 +34,10 @@ export NBSANDBOX_URL=http://127.0.0.1:8080 NBSANDBOX_USER=alice NBSANDBOX_PASSWO
 
 ```bash
 python examples/python/run_notebook.py --region bandung --months 4
+```
+
+```bash
+python examples/python/interactive_session.py
 ```
 
 ```bash
