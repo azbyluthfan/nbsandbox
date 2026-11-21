@@ -13,6 +13,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/azbyluthfan/nbsandbox/internal/isolation"
@@ -29,9 +30,13 @@ const (
 	KernelDead       = "dead"
 )
 
-// clientBuffer is how many messages a client may fall behind before it is
-// disconnected (it reconnects and asks again).
-const clientBuffer = 1024
+// A client may fall this many messages, or this many bytes, behind before
+// it is disconnected (it reconnects and asks again): one slow viewer of a
+// session printing large outputs mustn't hold gigabytes in nbsandboxd.
+const (
+	clientBuffer      = 1024
+	clientBufferBytes = 32 << 20
+)
 
 // live is a session this process holds: its container's stdio, its
 // clients, and what the idle rule needs.
@@ -182,8 +187,14 @@ func (l *live) broadcast(line []byte) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	for c := range l.clients {
+		if c.queued.Load()+int64(len(line)) > clientBufferBytes {
+			c.closeLocked("the connection fell too far behind")
+			delete(l.clients, c)
+			continue
+		}
 		select {
-		case c.out <- line:
+		case c.in <- line:
+			c.queued.Add(int64(len(line)))
 		default:
 			// Too far behind: it reconnects and asks again.
 			c.closeLocked("the connection fell too far behind")
@@ -206,7 +217,8 @@ func (l *live) statusMessage(status, reason string) []byte {
 }
 
 func (l *live) subscribe() *Client {
-	c := &Client{l: l, out: make(chan []byte, clientBuffer), done: make(chan struct{})}
+	c := &Client{l: l, in: make(chan []byte, clientBuffer), out: make(chan []byte), done: make(chan struct{})}
+	go c.pump()
 	hello := l.statusMessage("attached", "")
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -214,7 +226,8 @@ func (l *live) subscribe() *Client {
 		c.closeLocked("the session has ended")
 		return c
 	}
-	c.out <- hello
+	c.in <- hello
+	c.queued.Add(int64(len(hello)))
 	l.clients[c] = struct{}{}
 	l.updateQuiet(l.m.d.Now())
 	return c
@@ -331,7 +344,7 @@ func (l *live) end(ctx context.Context, reason, by string) {
 	l.mu.Lock()
 	for c := range l.clients {
 		select {
-		case c.out <- bye:
+		case c.in <- bye:
 		default:
 		}
 		c.closeLocked(reason)
@@ -390,10 +403,31 @@ func (l *live) detach() {
 // Client is one connection to a session (a browser tab, an API client).
 type Client struct {
 	l      *live
-	out    chan []byte
+	in     chan []byte  // what the session sent, not yet read
+	out    chan []byte  // Messages: in, as the client reads it
+	queued atomic.Int64 // bytes in in
 	done   chan struct{}
 	once   sync.Once
 	reason string
+}
+
+// pump hands the queued messages to the reader, keeping count of the bytes
+// still queued; it closes Messages once the queue is drained after a close.
+func (c *Client) pump() {
+	defer close(c.out)
+	for msg := range c.in {
+		c.queued.Add(-int64(len(msg)))
+		select {
+		case c.out <- msg:
+		case <-c.done:
+			// Disconnected: what's still queued (the last "ended" message)
+			// goes to a reader still reading, briefly.
+			select {
+			case c.out <- msg:
+			case <-time.After(time.Second):
+			}
+		}
+	}
 }
 
 // Messages are the session's messages for this client, one JSON object
@@ -447,6 +481,6 @@ func (c *Client) closeLocked(reason string) {
 	c.once.Do(func() {
 		c.reason = reason
 		close(c.done)
-		close(c.out)
+		close(c.in)
 	})
 }

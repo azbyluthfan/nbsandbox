@@ -78,6 +78,10 @@ type Spaces interface {
 	Sync(ctx context.Context, spaceID, id string) ([]store.Conflict, []string, error)
 	Discard(spaceID, id string)
 	WorkPath(spaceID, id string) string
+	// Usage is the space's usage, working copies included (a read-write
+	// session over its space's quota ends).
+	Usage(ctx context.Context, id string) (spaces.Usage, error)
+	InvalidateUsage(id string)
 }
 
 // Deps are the manager's collaborators.

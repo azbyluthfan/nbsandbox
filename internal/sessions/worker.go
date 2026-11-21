@@ -245,6 +245,10 @@ func (m *Manager) housekeep(ctx context.Context) {
 			l.end(ctx, "the session's container stopped (out of memory, or killed)", "")
 			continue
 		}
+		if m.overQuota(ctx, l) {
+			l.end(ctx, "its space went over its quota: the session's file changes were not stored", "")
+			continue
+		}
 		switch q := l.quiet(); {
 		case now.Sub(l.s.CreatedAt) >= m.cfg.Max:
 			l.end(ctx, fmt.Sprintf("it reached the maximum length (%s)", m.cfg.Max), "")
@@ -260,6 +264,22 @@ func (m *Manager) housekeep(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// overQuota reports whether a read-write session's space is over its
+// quota, its working copy counted (as a writing run is stopped). Where the
+// backend keeps the files itself (Kubernetes), the Pod's own disk limit
+// bounds them instead.
+func (m *Manager) overQuota(ctx context.Context, l *live) bool {
+	if l.s.Mode != store.SessionReadWrite {
+		return false
+	}
+	if _, pulls := m.d.Backend.(isolation.SessionFilePuller); pulls {
+		return false
+	}
+	m.d.Spaces.InvalidateUsage(l.s.SpaceID)
+	u, err := m.d.Spaces.Usage(ctx, l.s.SpaceID)
+	return err == nil && u.QuotaBytes > 0 && u.BytesUsed > u.QuotaBytes
 }
 
 // endEndedElsewhere stops the sessions held here whose records ended.

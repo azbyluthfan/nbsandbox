@@ -97,6 +97,9 @@ services:
       # Overridable for tests (make test-integration uses short values).
       NBSANDBOX_SHUTDOWN_GRACE: ${NBSANDBOX_SHUTDOWN_GRACE:-60s}
       NBSANDBOX_RUN_TIMEOUT: ${NBSANDBOX_RUN_TIMEOUT:-10m}
+      # The integration tests set 0 (no limit): sessions a developer left
+      # open mustn't make them fail.
+      NBSANDBOX_SESSIONS_PER_USER: ${NBSANDBOX_SESSIONS_PER_USER:-2}
       NBSANDBOX_RUN_CONCURRENCY: ${NBSANDBOX_RUN_CONCURRENCY:-2}
       # Cleanup timers; the soak test shortens them ("" = the settings file's).
       NBSANDBOX_RUN_RETENTION: ${NBSANDBOX_RUN_RETENTION:-}

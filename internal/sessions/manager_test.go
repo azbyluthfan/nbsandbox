@@ -214,6 +214,8 @@ type fakeSpaces struct {
 	files     map[string]bool // spaceID/path
 	synced    []string
 	discarded []string
+	used      int64
+	quota     int64
 }
 
 func (f *fakeSpaces) Get(_ context.Context, owner, id string) (spaces.Space, error) {
@@ -251,6 +253,20 @@ func (f *fakeSpaces) Discard(_, id string) {
 }
 
 func (f *fakeSpaces) WorkPath(spaceID, id string) string { return filepath.Join(f.root, spaceID, id) }
+
+func (f *fakeSpaces) Usage(context.Context, string) (spaces.Usage, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return spaces.Usage{QuotaBytes: f.quota, BytesUsed: f.used}, nil
+}
+
+func (f *fakeSpaces) InvalidateUsage(string) {}
+
+func (f *fakeSpaces) setUsage(used, quota int64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.used, f.quota = used, quota
+}
 
 func (f *fakeSpaces) count(list *[]string, id string) int {
 	f.mu.Lock()
@@ -715,4 +731,44 @@ func TestRestartUnderAnotherWorkerID(t *testing.T) {
 	next(t, c2, "bridge", "")
 	_ = c2.Send(execute("again"))
 	next(t, c2, "iopub", "stream")
+}
+
+// A read-write session whose space goes over its quota ends, as a writing
+// run is stopped; a read-only one can't grow it.
+func TestSessionOverQuotaEnds(t *testing.T) {
+	e := newEnv(t, nil)
+	rw := e.open(t, "a.ipynb", "")
+	ro := e.open(t, "b.ipynb", store.SessionReadOnly)
+	e.attach(t, rw.ID)
+	e.attach(t, ro.ID)
+	e.spaces.setUsage(2<<20, 1<<20)
+	waitFor(t, "the read-write session to end", func() bool { return !e.session(t, rw.ID).Open() })
+	if r := e.session(t, rw.ID).EndReason; !strings.Contains(r, "quota") {
+		t.Fatalf("reason %q", r)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if !e.session(t, ro.ID).Open() {
+		t.Fatal("a read-only session ended over quota")
+	}
+}
+
+// A client that stops reading is disconnected once it is too many bytes
+// behind, not after nbsandboxd has queued gigabytes for it.
+func TestSlowClientIsDisconnectedByBytes(t *testing.T) {
+	e := newEnv(t, nil)
+	s := e.open(t, "a.ipynb", "")
+	c := e.attach(t, s.ID)
+	l := e.m.get(s.ID)
+	big := []byte(`{"channel":"iopub","content":{"text":"` + strings.Repeat("x", 1<<20) + `"}}`)
+	for range 40 {
+		l.broadcast(big) // nobody reads
+	}
+	select {
+	case <-c.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("still connected after 40 MiB queued")
+	}
+	if !strings.Contains(c.Reason(), "behind") {
+		t.Fatalf("reason %q", c.Reason())
+	}
 }
