@@ -27,7 +27,7 @@ const ChanSessions = "sessions"
 var (
 	// ErrSessionLimit means the owner already has as many open sessions as
 	// allowed.
-	ErrSessionLimit = errors.New("too many open sessions")
+	ErrSessionLimit = errors.New("you have as many open sessions as you may: end one (End session on its notebook) to open another")
 	// ErrWritingSession means a read-write session holds the space's write
 	// lock. It is an ErrActiveRun, so callers that refuse a second writer
 	// refuse it the same way.

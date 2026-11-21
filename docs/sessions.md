@@ -23,8 +23,9 @@ Open a notebook. The bar above it says **No session**:
 
    Editing a cell keeps its output until it runs again, as in Jupyter. **Save** stores the outputs in the notebook, at most 1 MiB per cell.
 4. **Completion** as you type comes from the kernel when it answers within 300 ms, merged with the editor's own index of the runner image's packages. While a cell runs, the kernel can't answer, and the editor's index still does. The highlighted suggestion shows its docs; hovering over a name shows them too. After `(`, a line under the cell shows the call's signature.
-5. **Interrupt** stops the running cell (`KeyboardInterrupt`). **Restart** starts a new kernel: the variables are gone, the files stay.
-6. **End session** stops the kernel. You don't have to: leaving the page keeps the session (reopen the notebook to rejoin it), and an unused session ends by itself ([limits](#limits)).
+5. **Variables** (in the bar) lists the kernel's variables: name, type, shape or length, a DataFrame's columns, and the start of each value. It refreshes after every cell, with a silent request that doesn't count as a cell run.
+6. **Interrupt** stops the running cell (`KeyboardInterrupt`). **Restart** starts a new kernel: the variables are gone, the files stay.
+7. **End session** stops the kernel. You don't have to: leaving the page keeps the session (reopen the notebook to rejoin it), and an unused session ends by itself ([limits](#limits)).
 
 ### Files: read-write and read-only
 

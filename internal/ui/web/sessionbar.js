@@ -34,9 +34,13 @@ export function sessionBar(ctx) {
     title: "Write the files the kernel changed to the space now (also every few minutes, and at the end)" }, icon("save"), "Save files");
   const end = el("button", { type: "button", class: "ghost small", hidden: true, title: "End the session: its kernel stops" }, "End session");
   const why = el("span", { class: "muted kernel-why" });
-  const node = el("div", { class: "session-bar", role: "group", "aria-label": "Interactive session" },
+  const varsBtn = el("button", { type: "button", class: "ghost small", hidden: true, "aria-expanded": "false",
+    title: "The kernel's variables: type, shape, a DataFrame's columns" }, "Variables");
+  const bar = el("div", { class: "session-bar", role: "group", "aria-label": "Interactive session" },
     el("span", { class: "kernel-state", role: "status", "aria-live": "polite" }, dot, label), mode, why,
-    el("span", { class: "spacer" }), startBtn, runAll, interrupt, restart, save, end);
+    el("span", { class: "spacer" }), startBtn, runAll, interrupt, restart, save, varsBtn, end);
+  const varsPanel = el("div", { class: "vars-panel", hidden: true });
+  const node = el("div", { class: "session-area" }, bar, varsPanel);
 
   let starting = null;
   const k = new KernelSession(ctx.api, ctx.space, ctx.path, {
@@ -46,7 +50,9 @@ export function sessionBar(ctx) {
 
   function show(st) {
     const live = st.status === "ready";
-    node.dataset.state = live ? st.kernel || "idle" : st.status;
+    bar.dataset.state = live ? st.kernel || "idle" : st.status;
+    varsBtn.hidden = !live;
+    if (!live) varsPanel.hidden = true, varsBtn.setAttribute("aria-expanded", "false");
     let text;
     if (st.status === "none") text = "No session";
     else if (st.status === "starting") text = "Starting a session…";
@@ -116,6 +122,34 @@ export function sessionBar(ctx) {
     if (!confirm("End the session? Its kernel stops; changed files are saved to the space first.")) return;
     await k.end();
   }));
+
+  // The variables panel: refreshed after every cell while it's open.
+  async function refreshVariables() {
+    if (varsPanel.hidden) return;
+    const vars = await k.variables();
+    if (vars === null) return; // busy or not ready: keep what's shown
+    clear(varsPanel);
+    if (vars.length === 0) {
+      varsPanel.append(el("p", { class: "muted" }, "No variables yet: run a cell."));
+      return;
+    }
+    const rows = vars.map((v) => el("tr", {},
+      el("td", { class: "var-name" }, v.name),
+      el("td", { class: "muted" }, v.type),
+      el("td", { class: "muted" }, v.shape || ""),
+      el("td", { class: "var-value", title: v.columns.length ? v.columns.join(", ") : v.value },
+        v.columns.length ? `columns: ${v.columns.join(", ")}` : v.value)));
+    varsPanel.append(el("table", { class: "vars" },
+      el("thead", {}, el("tr", {}, el("th", {}, "Name"), el("th", {}, "Type"), el("th", {}, "Shape"), el("th", {}, "Value"))),
+      el("tbody", {}, rows)));
+  }
+  k.onExecuted = refreshVariables;
+  varsBtn.addEventListener("click", () => {
+    varsPanel.hidden = !varsPanel.hidden;
+    varsBtn.setAttribute("aria-expanded", String(!varsPanel.hidden));
+    varsBtn.classList.toggle("on", !varsPanel.hidden);
+    refreshVariables();
+  });
 
   show({ status: "none" });
   // Join the notebook's session if it has one (opened in another tab, or
