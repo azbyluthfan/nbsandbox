@@ -263,6 +263,8 @@ func (t *tools) register(s *mcp.Server) {
 			out, err := t.waitResult(ctx, req, in.SpaceID, id, in.WaitSeconds)
 			return nil, out, err
 		})
+
+	t.registerSessions(s)
 }
 
 // waitResult waits for the run's result, in steps of the API's longest
