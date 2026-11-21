@@ -214,7 +214,8 @@ func (c *Check) Run(ctx context.Context, e *Env) ([]report.Finding, error) {
 // All is every check, in the report's order.
 func All() []*Check {
 	return []*Check{isolationCheck, memoryCheck, cpuCheck, pidsCheck, tmpCheck, endlessCheck,
-		cancelRunningCheck, cancelAtCompletionCheck, callerDisconnectCheck, kernelCrashCheck, cellExceptionCheck, renderFailureCheck, timeLimitCheck}
+		cancelRunningCheck, cancelAtCompletionCheck, callerDisconnectCheck, kernelCrashCheck, cellExceptionCheck, renderFailureCheck, timeLimitCheck,
+		sessionsCheck}
 }
 
 // Get returns the check called name.
@@ -232,10 +233,4 @@ func Get(name string) *Check {
 var NotChecked = map[string]string{
 	"cancel-queued":       "needs every run slot of the deployment busy",
 	"docker-lost-mid-run": "stops the Docker socket proxy",
-	// Interactive sessions are checked by the integration suite (make
-	// report); this check doesn't open sessions yet.
-	"session-network":      "interactive sessions: checked by make report, not yet by this check",
-	"session-isolation":    "interactive sessions: checked by make report, not yet by this check",
-	"session-memory-limit": "interactive sessions: checked by make report, not yet by this check",
-	"session-read-only":    "interactive sessions: checked by make report, not yet by this check",
 }

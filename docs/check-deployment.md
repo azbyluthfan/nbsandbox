@@ -31,6 +31,7 @@ Useful flags:
 ## What it does to the deployment
 
 - It creates its own spaces, named `nbsandbox-check-…`, under the two users, and deletes them at the end, also on Ctrl-C.
+- It opens two interactive sessions, one after the other, read-only (they hold no write lock), and ends them; one fills its memory to the limit. A deployment with sessions turned off gets findings saying so.
 - It runs up to two notebooks at a time (a "noisy" one and a neighbour), so it takes up to two run slots for about 10 minutes. One of them spins its CPU for 50 seconds, another fills its own `/tmp`; both stay within their run's limits.
 - It never restarts or stops anything. The checks that kill services (worker crashes, PostgreSQL blips, nbsandboxd restarts) and the queue check that needs every run slot busy stay in the integration suite; the report lists them under "Not checked here".
 
@@ -40,5 +41,6 @@ The report has the same sections as [isolation-report.md](isolation-report.md), 
 - **Isolation:** the probe tries to read the other user's space, canary file, processes, memory and shared memory; looks for the Docker socket, secrets in its environment and any network route; and checks it is an unprivileged user with no capabilities. Then the second user tries to read the probe's run through the API.
 - **Resources:** memory, processes, `/tmp`, output size and the time limit stop the noisy run and leave the neighbour unaffected. CPU fairness is recorded, not judged: shared nodes vary too much.
 - **Cancellation and errors:** cancels, a caller that disconnects, a crashing kernel and a failing cell end with the right status.
+- **Interactive sessions:** a session's kernel reaches nothing (the internet, the metadata address, nbsandbox itself, your `-target`s, DNS), is an unprivileged user seeing only its own space, can't write when read-only, and dies at the memory limit without taking nbsandbox with it. The other user gets `404` for it.
 
 A failure in **Isolation** means a run could reach something it must not: don't run untrusted notebooks on that deployment until it's fixed. On Kubernetes, the usual cause is a network plugin that doesn't enforce the deny-all NetworkPolicy ([kubernetes.md](kubernetes.md#which-clusters-any-network-plugin-that-enforces-networkpolicy)); the worker's own probe would normally have refused runs already.

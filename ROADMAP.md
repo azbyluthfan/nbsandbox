@@ -45,7 +45,7 @@ A patch release: the runner images published on GHCR up to 0.2.0 had a broken ma
 
 ## Next
 
-- **Interactive mode:** built, in the next release ([docs/sessions.md](docs/sessions.md)): run cells live in the editor, with completion, signatures and docs from the live kernel (`df.` lists the columns), on Docker, Kubernetes and clusters. Next for it: a variables panel, and the deployment check (`nbsandbox-report check`) opening sessions too.
+- **Interactive mode:** built, in the next release ([docs/sessions.md](docs/sessions.md)): run cells live in the editor, with completion, signatures and docs from the live kernel (`df.` lists the columns), on Docker, Kubernetes and clusters. Next for it: a variables panel.
 - **Authentication against Entra ID, end to end.** Keycloak is tested end to end (tokens, scopes, audience, token exchange); Entra ID is unit-tested against a local issuer and documented, and needs the same end-to-end test with a real tenant.
 - **Sandboxes on real clusters.** Run the suite under GKE Sandbox (gVisor) and AKS Pod Sandboxing (Kata), and add a GKE Terraform example beside the AKS one. `nbsandbox-report check` makes each one a deploy, a check and a teardown.
 
