@@ -9,7 +9,8 @@ This guide shows how to use the HTTP API, task by task: which endpoints to call,
 - [4. Organise files](#4-organise-files)
 - [5. Publish a notebook and call it from another service](#5-publish-a-notebook-and-call-it-from-another-service)
 - [6. Follow progress: which stream to use](#6-follow-progress-which-stream-to-use)
-- [7. Errors and retries](#7-errors-and-retries)
+- [7. Work interactively: a session](#7-work-interactively-a-session)
+- [8. Errors and retries](#8-errors-and-retries)
 - [Endpoint overview](#endpoint-overview), [viewing the spec](#viewing-the-spec), [compatibility policy](#compatibility-policy)
 
 ## Basics
@@ -27,7 +28,7 @@ nb() { curl -sS -u "$NBSANDBOX_USER:$NBSANDBOX_PASSWORD" "$@"; }
 - **Ownership:** you see only your own spaces. Another user's space answers `404`, exactly like one that doesn't exist, whatever the request contains.
 - **IDs:** spaces and runs are lowercase UUIDs; anything else in their place is `400`. File paths are relative to the space and may contain `/`; `..`, absolute paths and names starting with `.nbsandbox` are refused.
 - **Request bodies:** JSON with `Content-Type: application/json`, except uploads (`multipart/form-data`) and file saves (the raw file). Unknown fields are refused with `400`, so typos don't pass silently.
-- **Errors:** always `{"error": {"code": "…", "message": "…"}}`. Act on `code` and the status; `message` is for people. Some errors add fields: `problems` (where parameters broke the contract), `current_version` (on file saves), `status` (asking for the result of a run that hasn't finished). See [7. Errors and retries](#7-errors-and-retries).
+- **Errors:** always `{"error": {"code": "…", "message": "…"}}`. Act on `code` and the status; `message` is for people. Some errors add fields: `problems` (where parameters broke the contract), `current_version` (on file saves), `status` (asking for the result of a run that hasn't finished). See [8. Errors and retries](#8-errors-and-retries).
 - **Lists:** paged with `limit` (default 50, at most 200) and `cursor`. Pass the response's `next_cursor` to get the next page; it is empty on the last one.
 - **Times** are RFC 3339 in UTC.
 
@@ -260,7 +261,39 @@ They come from the notebook, so treat them as information, not as facts about th
 
 Without SSE, poll with `GET …/runs/{run_id}/result?wait=30s`: one request per 30 s, answered as soon as the run finishes.
 
-## 7. Errors and retries
+## 7. Work interactively: a session
+
+A **session** is one notebook's live kernel, with a run's isolation (no network, the run limits, the space's files and package set). Run a cell, see its output, keep the variables, run the next; completion and docs come from the real objects (`df.` lists a DataFrame's columns). The web editor uses it; any client can ([sessions.md](sessions.md)).
+
+```bash
+# Open the notebook's session (or get its open one): 201, "starting", then "ready".
+curl -su alice:… -X POST "$URL/v1/spaces/$SPACE/sessions" -H 'Content-Type: application/json' \
+  -d '{"notebook": "analysis.ipynb"}'
+# {"id": "c0de…", "notebook": "analysis.ipynb", "mode": "read-write", "status": "starting", …}
+```
+
+Then open the WebSocket `GET …/sessions/{session_id}/channel` and exchange **Jupyter messages**, one JSON object per text message, as Jupyter's own kernel WebSocket does:
+
+```json
+{"channel": "shell", "header": {"msg_id": "1", "msg_type": "execute_request"}, "content": {"code": "df = load()\ndf.head()"}}
+```
+
+- **Allowed:** `execute_request`, `complete_request`, `inspect_request`, `is_complete_request`, `kernel_info_request` (channel `shell`) and `interrupt_request` (channel `control`). The kernel's answers come back with their `parent_header`, and its outputs on `iopub` (`stream`, `display_data`, `execute_result`, `error`, `status`, …).
+- **Refused:** anything else (`input()`, widgets, history): `{"channel": "bridge", "content": {"refused": true, "error": "…"}}`.
+- **nbsandbox's own messages** are on the `bridge` channel. The first is the session's state (`"status": "attached"`, `"kernel": "idle"`); notices (file write-backs) carry `notice`; when the session ends, `"status": "ended"` with the reason, then the WebSocket closes.
+- **Several connections** to one session see the same messages: tell your answers apart by `parent_header.msg_id`.
+- **From a browser,** only this site's pages can open it (another site's `Origin` is refused).
+
+| | |
+|---|---|
+| `POST …/sessions/{session_id}/interrupt` | stop the running cell (`KeyboardInterrupt`) |
+| `POST …/sessions/{session_id}/restart` | a new kernel: the variables are gone, the files stay |
+| `POST …/sessions/{session_id}/sync` | write a read-write session's file changes to the space now (also every 5 minutes, and at the end) |
+| `DELETE …/sessions/{session_id}` | end it |
+
+**Read-write and read-only.** A read-write session (the default) holds the space's write lock, like a writing run: no writing run starts while it's open (`409`), and what the kernel writes in `/space` is written back. While something else writes the space, a new session is read-only instead (`mode` says which). A session **ends by itself** after 30 minutes with no cell running and nobody connected, or 8 hours after it started.
+
+## 8. Errors and retries
 
 | Status | `code` | What happened | What to do |
 |---|---|---|---|
@@ -270,13 +303,14 @@ Without SSE, poll with `GET …/runs/{run_id}/result?wait=30s`: one request per 
 | `401` | `unauthorized` | Missing or wrong credentials, or an invalid or expired token. | Check the credentials; get a fresh token. |
 | `403` | `forbidden` | The token lacks the endpoint's scope (named in `WWW-Authenticate`). | Request the scope at the identity provider. |
 | `404` | `not_found` | It doesn't exist, or it belongs to another user. | Check the IDs. |
-| `409` | `conflict` | A writing run is already active in the space; the run is (not) finished yet; the target path exists; the folder isn't empty. | Wait, cancel, or pick another path; the message says which. |
+| `409` | `conflict` | A writing run or a read-write session is already active in the space; the run is (not) finished yet; the session has ended, or you have too many open; the target path exists; the folder isn't empty. | Wait, cancel, end a session, or pick another path; the message says which. |
 | `412` / `428` | `version_mismatch` / `version_required` | A file save with a stale or missing version. | See [3](#3-edit-a-file-without-overwriting-someone-elses-changes). |
 | `413` | `payload_too_large` | A file, the request, or the space's quota is too large. Nothing was stored. | Make it smaller or free space. |
 | `422` | `unprocessable` | `Idempotency-Key` reused with another body, or missing packages with `dependency_check: reject`. | Use a new key, or fix the imports. |
 | `422` | `packages_failed` | The space's `requirements.txt` couldn't be built ([packages.md](packages.md)); `build_log` says why. | Fix `requirements.txt`; a failed build is retried after a few minutes. |
 | `429` | `too_many_requests` | Too many failed sign-ins for the username or address ([auth.md](auth.md#failed-sign-ins)). | Wait for `Retry-After`. |
 | `503` | `docker_unavailable` | Docker isn't reachable. | Retry after `Retry-After`. |
+| `503` | `sessions_unavailable` | No worker can hold a session now: the workers are drained, or none runs sessions. | Retry after `Retry-After`. |
 | `500` | `internal` | A bug. | Report it with the time and request. |
 
 **A run that fails is not an HTTP error.** Submitting succeeded (`201`); the run's own outcome is in its `status` and its result's `error`. Retry a run only when `error.retryable` is true (`interrupted`, `platform_error`); any other failure will fail the same way with the same input. Send the same `Idempotency-Key` when retrying a request whose answer you didn't get, so you don't start the run twice.
@@ -294,17 +328,19 @@ Without SSE, poll with `GET …/runs/{run_id}/result?wait=30s`: one request per 
 | Status streams (SSE) | `GET …/runs/{run_id}/events`, `GET /v1/spaces/{id}/events` |
 | Functions | `GET …/functions`, `GET/DELETE …/functions/{name}`, `POST …/functions/{name}/versions` (publish), `GET …/versions/{version}`, `GET …/contract`, `POST …/invoke`, `POST …/versions/{version}/invoke` |
 | Packages | `GET/POST /v1/spaces/{id}/packages`: the space's package set, and building it now ([packages.md](packages.md)) |
-| Administration (`nbsandbox.admin`) | `GET /v1/admin/spaces`, `PATCH/DELETE /v1/admin/spaces/{id}`, `GET /v1/admin/runs`, `POST /v1/admin/runs/{run_id}/cancel`, `GET/PUT /v1/admin/drain`, `GET /v1/admin/audit` ([auth.md](auth.md#administration)) |
+| Sessions | `POST/GET …/sessions`, `GET/DELETE …/sessions/{session_id}`, `POST …/interrupt`, `…/restart`, `…/sync`, `GET …/channel` (WebSocket) ([sessions.md](sessions.md)) |
+| Administration (`nbsandbox.admin`) | `GET /v1/admin/spaces`, `PATCH/DELETE /v1/admin/spaces/{id}`, `GET /v1/admin/runs`, `POST /v1/admin/runs/{run_id}/cancel`, `GET/PUT /v1/admin/drain`, `GET /v1/admin/audit`, `GET /v1/admin/sessions`, `POST /v1/admin/sessions/{session_id}/end` ([auth.md](auth.md#administration)) |
 
 ## gRPC
 
-The same API is served over gRPC, gRPC-Web and the Connect protocol, on the same port as REST: [api/proto/nbsandbox/v1/nbsandbox.proto](../api/proto/nbsandbox/v1/nbsandbox.proto). Four services, one RPC per REST operation, with the same names as the scopes table uses:
+The same API is served over gRPC, gRPC-Web and the Connect protocol, on the same port as REST: [api/proto/nbsandbox/v1/nbsandbox.proto](../api/proto/nbsandbox/v1/nbsandbox.proto). Five services, one RPC per REST operation, with the same names as the scopes table uses:
 
 | Service | RPCs |
 |---|---|
 | `SpaceService` | `CreateSpace`, `ListSpaces`, `GetSpace`, `UpdateSpace`, `DeleteSpace`, `UploadFiles` (client stream), `ListFiles`, `GetFile` (server stream), `PutFile` (client stream), `MoveFile`, `DeleteFile`, `CreateFolder`, `GetSpacePackages`, `BuildSpacePackages` |
 | `FunctionService` | `ListFunctions`, `GetFunction`, `DeleteFunction`, `PublishFunction`, `GetFunctionVersion`, `GetFunctionContract`, `InvokeFunction` (with `wait_seconds`), `InvokeFunctionStream` (server stream) |
-| `AdminService` | `AdminListSpaces`, `AdminUpdateSpace`, `AdminDeleteSpace`, `AdminListRuns`, `AdminCancelRun`, `AdminGetDrain`, `AdminSetDrain`, `AdminListAudit` |
+| `AdminService` | `AdminListSpaces`, `AdminUpdateSpace`, `AdminDeleteSpace`, `AdminListRuns`, `AdminCancelRun`, `AdminGetDrain`, `AdminSetDrain`, `AdminListAudit`, `AdminListSessions`, `AdminEndSession` |
+| `SessionService` | `OpenSession`, `ListSessions`, `GetSession`, `EndSession`, `InterruptSession`, `RestartSession`, `SyncSession`, `SessionChannel` (bidirectional stream: the WebSocket's messages; the first request names the session) |
 | `RunService` | `GetRuntime`, `CreateRun`, `ListRuns`, `GetRun`, `CancelRun`, `GetRunResult` (with `wait_seconds`), `FollowRunResult` (server stream: items, then the result), `DeleteRun`, `GetRunNotebook`, `GetRunHTML`, `GetRunLog`, `GetArtifact` (server streams), `ListArtifacts`, `PromoteArtifact`, `FollowRunLog`, `FollowRunEvents`, `FollowSpaceEvents` (server streams) |
 
 - **Same data.** Every message has the fields of its REST JSON twin, with the same names. Parameters and outputs are `google.protobuf.Value`, times are `Timestamp`.

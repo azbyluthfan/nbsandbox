@@ -64,6 +64,19 @@ const (
 	OpAdminSetDrain    Op = "AdminSetDrain"
 	OpAdminListAudit   Op = "AdminListAudit"
 
+	// Interactive sessions: a notebook's live kernel.
+	OpOpenSession      Op = "OpenSession"
+	OpListSessions     Op = "ListSessions"
+	OpGetSession       Op = "GetSession"
+	OpEndSession       Op = "EndSession"
+	OpInterruptSession Op = "InterruptSession"
+	OpRestartSession   Op = "RestartSession"
+	OpSyncSession      Op = "SyncSession"
+	OpSessionChannel   Op = "SessionChannel"
+
+	OpAdminListSessions Op = "AdminListSessions"
+	OpAdminEndSession   Op = "AdminEndSession"
+
 	// gRPC only: REST serves these on the same route as their twin, as a
 	// stream when asked (Accept: text/event-stream).
 	OpFollowRunResult      Op = "FollowRunResult"
@@ -136,6 +149,19 @@ var opScopes = map[Op]string{
 	OpAdminGetDrain:    ScopeAdmin,
 	OpAdminSetDrain:    ScopeAdmin,
 	OpAdminListAudit:   ScopeAdmin,
+
+	// A session runs code: the runs scope, as starting a run.
+	OpOpenSession:      ScopeRuns,
+	OpListSessions:     ScopeRead,
+	OpGetSession:       ScopeRead,
+	OpEndSession:       ScopeRuns,
+	OpInterruptSession: ScopeRuns,
+	OpRestartSession:   ScopeRuns,
+	OpSyncSession:      ScopeRuns,
+	OpSessionChannel:   ScopeRuns,
+
+	OpAdminListSessions: ScopeAdmin,
+	OpAdminEndSession:   ScopeAdmin,
 
 	OpFollowRunResult:      ScopeRead,
 	OpInvokeFunctionStream: ScopeFunctionsInvoke,

@@ -57,6 +57,12 @@ func checkSpec(t *testing.T, h http.Handler, uiUser func(string) bool) http.Hand
 				return
 			}
 		}
+		// A WebSocket that was accepted answered 101 on the raw connection;
+		// the recorder only sees what was written before.
+		if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+			h.ServeHTTP(w, r)
+			return
+		}
 		if path.Clean(p) != p || !spec.Covered(r.Method, p) {
 			h.ServeHTTP(w, r)
 			return

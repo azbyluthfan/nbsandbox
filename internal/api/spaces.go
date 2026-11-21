@@ -197,6 +197,10 @@ func (a *API) patchSpace(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) deleteSpace(w http.ResponseWriter, r *http.Request) {
+	if err := a.endSpaceSessions(r, user(r)); err != nil {
+		writeDomainError(w, r, err)
+		return
+	}
 	if err := a.d.Spaces.Delete(r.Context(), user(r), r.PathValue("id")); err != nil {
 		writeDomainError(w, r, err)
 		return
@@ -390,4 +394,12 @@ func (a *API) createFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	WriteJSON(w, http.StatusCreated, f)
+}
+
+// endSpaceSessions ends a space's open sessions before it is deleted.
+func (a *API) endSpaceSessions(r *http.Request, by string) error {
+	if !a.d.Sessions.Enabled() {
+		return nil
+	}
+	return a.d.Sessions.EndSpace(r.Context(), r.PathValue("id"), by)
 }

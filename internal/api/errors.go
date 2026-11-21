@@ -13,22 +13,23 @@ import (
 // Error codes used across the API. Every error response has the shape
 // {"error": {"code": "...", "message": "..."}}.
 const (
-	CodeBadRequest        = "bad_request"
-	CodeUnauthorized      = "unauthorized"
-	CodeForbidden         = "forbidden" // the token lacks the route's scope (403)
-	CodeNotFound          = "not_found"
-	CodeMethodNotAllowed  = "method_not_allowed"
-	CodeConflict          = "conflict"
-	CodePayloadTooLarge   = "payload_too_large"
-	CodeUnprocessable     = "unprocessable"
-	CodeInvalidParameters = "invalid_parameters" // parameters don't match the notebook's input contract
-	CodeInvalidContract   = "invalid_contract"   // the notebook's contract isn't valid
-	CodeVersionMismatch   = "version_mismatch"   // the file changed since the version given (412)
-	CodeVersionRequired   = "version_required"   // replacing a file needs If-Match (428)
-	CodeDockerUnavailable = "docker_unavailable"
-	CodeTooManyRequests   = "too_many_requests" // too many failed sign-ins (429, Retry-After)
-	CodePackagesFailed    = "packages_failed"   // the space's requirements.txt could not be built (422)
-	CodeInternal          = "internal"
+	CodeBadRequest          = "bad_request"
+	CodeUnauthorized        = "unauthorized"
+	CodeForbidden           = "forbidden" // the token lacks the route's scope (403)
+	CodeNotFound            = "not_found"
+	CodeMethodNotAllowed    = "method_not_allowed"
+	CodeConflict            = "conflict"
+	CodePayloadTooLarge     = "payload_too_large"
+	CodeUnprocessable       = "unprocessable"
+	CodeInvalidParameters   = "invalid_parameters" // parameters don't match the notebook's input contract
+	CodeInvalidContract     = "invalid_contract"   // the notebook's contract isn't valid
+	CodeVersionMismatch     = "version_mismatch"   // the file changed since the version given (412)
+	CodeVersionRequired     = "version_required"   // replacing a file needs If-Match (428)
+	CodeDockerUnavailable   = "docker_unavailable"
+	CodeTooManyRequests     = "too_many_requests"    // too many failed sign-ins (429, Retry-After)
+	CodePackagesFailed      = "packages_failed"      // the space's requirements.txt could not be built (422)
+	CodeSessionsUnavailable = "sessions_unavailable" // no worker can hold the session now (drained, or none runs sessions) (503)
+	CodeInternal            = "internal"
 )
 
 // ErrorBody is the JSON error envelope.

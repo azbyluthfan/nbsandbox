@@ -28,13 +28,13 @@ Each endpoint needs one scope (listed per operation in [api/openapi.yaml](../api
 
 | Scope | Allows |
 |---|---|
-| `nbsandbox.read` | list and read spaces, files, runs, results, logs and streams; the runtime |
+| `nbsandbox.read` | list and read spaces, files, runs, results, logs and streams, and sessions; the runtime |
 | `nbsandbox.spaces.write` | create, rename and delete spaces |
 | `nbsandbox.files.write` | upload, edit, move and delete files and folders; promote artifacts |
-| `nbsandbox.runs` | start, cancel and delete runs |
+| `nbsandbox.runs` | start, cancel and delete runs; open, use and end interactive sessions (a session runs code, as a run does) |
 | `nbsandbox.functions.invoke` | call functions |
 | `nbsandbox.functions.publish` | publish and delete functions |
-| `nbsandbox.admin` | every owner's spaces: list them, give one to another owner, delete one (`/v1/admin/spaces`, gRPC `AdminService`). Grant it only to operators: it is never implied by the others |
+| `nbsandbox.admin` | every owner's spaces: list them, give one to another owner, delete one (`/v1/admin/spaces`, gRPC `AdminService`); every owner's runs and sessions, stopping them; draining; the audit log. Grant it only to operators: it is never implied by the others |
 
 A backend that only calls functions needs `nbsandbox.functions.invoke nbsandbox.read` (read lets it fetch results and follow status).
 

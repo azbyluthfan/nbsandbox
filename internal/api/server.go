@@ -19,6 +19,7 @@ import (
 	"github.com/azbyluthfan/nbsandbox/internal/completions"
 	"github.com/azbyluthfan/nbsandbox/internal/obs"
 	"github.com/azbyluthfan/nbsandbox/internal/runs"
+	"github.com/azbyluthfan/nbsandbox/internal/sessions"
 	"github.com/azbyluthfan/nbsandbox/internal/spaces"
 )
 
@@ -43,6 +44,8 @@ type Deps struct {
 	// plus room for the rest of the request).
 	MaxRunBody int64
 	Runs       *runs.Manager
+	// Sessions are interactive sessions (nil: turned off).
+	Sessions *sessions.Manager
 	// Runtime describes the runner image and limits (GET /v1/runtime).
 	Runtime func() (RuntimeInfo, error)
 	// Completions opens a stored completion index (gzipped JSON); nil:
@@ -93,6 +96,9 @@ func wrapRoute(rt Route, d Deps) http.Handler {
 	if rt.RunScoped {
 		h = requireValidRunID(h)
 	}
+	if rt.SessionScoped {
+		h = requireValidSessionID(h)
+	}
 	if rt.SpaceScoped || rt.AnySpace {
 		h = requireValidSpaceID(h)
 	}
@@ -122,6 +128,8 @@ func auditRoute(rt Route, d Deps, next http.Handler) http.Handler {
 func pathTarget(r *http.Request) string {
 	run, p, name, v := r.PathValue("run_id"), r.PathValue("path"), r.PathValue("name"), r.PathValue("version")
 	switch {
+	case r.PathValue("session_id") != "":
+		return r.PathValue("session_id")
 	case run != "" && p != "":
 		return run + "/" + p
 	case run != "":

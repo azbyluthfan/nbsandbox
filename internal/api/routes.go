@@ -26,7 +26,9 @@ type Route struct {
 	SpaceScoped bool    // has {id}: validated as a UUID, owned by the caller
 	AnySpace    bool    // has {id}: validated as a UUID, any owner's (administrators)
 	RunScoped   bool    // has {run_id}: validated as a UUID
-	MaxBody     int64   // 0 = DefaultMaxBody
+	// SessionScoped: has {session_id}, validated as a UUID.
+	SessionScoped bool
+	MaxBody       int64 // 0 = DefaultMaxBody
 }
 
 func (a *API) routes() []Route {
@@ -97,6 +99,18 @@ func (a *API) routes() []Route {
 		{Method: "POST", Pattern: "/v1/spaces/{id}/runs/{run_id}/promote", Handler: a.promoteArtifact, Auth: true, Op: auth.OpPromoteArtifact, SpaceScoped: true, RunScoped: true},
 		{Method: "GET", Pattern: "/v1/spaces/{id}/runs/{run_id}/log", Handler: a.getRunLog, Auth: true, Op: auth.OpGetRunLog, SpaceScoped: true, RunScoped: true},
 		{Method: "GET", Pattern: "/v1/spaces/{id}/runs/{run_id}/log/stream", Handler: a.streamRunLog, Auth: true, Op: auth.OpFollowRunLog, SpaceScoped: true, RunScoped: true},
+
+		// Interactive sessions: a notebook's live kernel, and its WebSocket.
+		{Method: "POST", Pattern: "/v1/spaces/{id}/sessions", Handler: a.openSession, Auth: true, Op: auth.OpOpenSession, SpaceScoped: true},
+		{Method: "GET", Pattern: "/v1/spaces/{id}/sessions", Handler: a.listSessions, Auth: true, Op: auth.OpListSessions, SpaceScoped: true},
+		{Method: "GET", Pattern: "/v1/spaces/{id}/sessions/{session_id}", Handler: a.getSession, Auth: true, Op: auth.OpGetSession, SpaceScoped: true, SessionScoped: true},
+		{Method: "DELETE", Pattern: "/v1/spaces/{id}/sessions/{session_id}", Handler: a.endSession, Auth: true, Op: auth.OpEndSession, SpaceScoped: true, SessionScoped: true},
+		{Method: "POST", Pattern: "/v1/spaces/{id}/sessions/{session_id}/interrupt", Handler: a.interruptSession, Auth: true, Op: auth.OpInterruptSession, SpaceScoped: true, SessionScoped: true},
+		{Method: "POST", Pattern: "/v1/spaces/{id}/sessions/{session_id}/restart", Handler: a.restartSession, Auth: true, Op: auth.OpRestartSession, SpaceScoped: true, SessionScoped: true},
+		{Method: "POST", Pattern: "/v1/spaces/{id}/sessions/{session_id}/sync", Handler: a.syncSession, Auth: true, Op: auth.OpSyncSession, SpaceScoped: true, SessionScoped: true},
+		{Method: "GET", Pattern: "/v1/spaces/{id}/sessions/{session_id}/channel", Handler: a.sessionChannel, Auth: true, Op: auth.OpSessionChannel, SpaceScoped: true, SessionScoped: true},
+		{Method: "GET", Pattern: "/v1/admin/sessions", Handler: a.adminListSessions, Auth: true, Op: auth.OpAdminListSessions},
+		{Method: "POST", Pattern: "/v1/admin/sessions/{session_id}/end", Handler: a.adminEndSession, Auth: true, Op: auth.OpAdminEndSession, SessionScoped: true},
 
 		// Status streams (SSE): one run, or every run in the space.
 		{Method: "GET", Pattern: "/v1/spaces/{id}/runs/{run_id}/events", Handler: a.streamRunEvents, Auth: true, Op: auth.OpFollowRunEvents, SpaceScoped: true, RunScoped: true},

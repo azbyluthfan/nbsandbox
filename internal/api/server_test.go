@@ -27,6 +27,8 @@ import (
 	"github.com/azbyluthfan/nbsandbox/internal/obs"
 	"github.com/azbyluthfan/nbsandbox/internal/packages"
 	"github.com/azbyluthfan/nbsandbox/internal/runs"
+	"github.com/azbyluthfan/nbsandbox/internal/sessions"
+	"github.com/azbyluthfan/nbsandbox/internal/sessions/sessiontest"
 	"github.com/azbyluthfan/nbsandbox/internal/spaces"
 	"github.com/azbyluthfan/nbsandbox/internal/store"
 	"github.com/azbyluthfan/nbsandbox/internal/store/storetest"
@@ -110,9 +112,17 @@ func newEnvFull(t *testing.T, idp *authtest.IDP, pkgs func(db *store.DB, dataDir
 	if idp != nil {
 		authn.OIDC = idp.Verifier(t)
 	}
+	sess := sessions.New(sessions.Config{Enabled: true, Image: "nbsandbox-runner:test", Idle: time.Hour, Max: 8 * time.Hour,
+		WriteBack: time.Hour, Retention: time.Hour, PerUser: 2, PerWorker: 4, MaxMessage: 1 << 20, WorkerID: "w1",
+		Tick: 50 * time.Millisecond, StartTimeout: 5 * time.Second},
+		sessions.Deps{DB: db, Spaces: svc, Backend: &sessiontest.Backend{}, Log: logger})
+	if err := sess.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { sess.Shutdown(context.Background()) })
 	rec := audit.New(audit.Config{Enabled: true, Retention: time.Hour, Downloads: true}, db, logger, m.AuditFailures)
 	deps := Deps{Auth: authn, Users: us, Health: health, Metrics: m, Logger: logger, Spaces: svc, MaxUpload: testMaxSpace + 64<<10, Audit: rec,
-		Runs: mgr, Shutdown: shutdown, StreamHeartbeat: 50 * time.Millisecond, Runtime: func() (RuntimeInfo, error) {
+		Runs: mgr, Sessions: sess, Shutdown: shutdown, StreamHeartbeat: 50 * time.Millisecond, Runtime: func() (RuntimeInfo, error) {
 			var ri RuntimeInfo
 			ri.Image.Ref, ri.PythonVersion, ri.Packages, ri.Runtime = "nbsandbox-runner:test", "3.13.18", map[string]string{"pandas": "3.1.1"}, "runc"
 			return ri, nil

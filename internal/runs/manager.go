@@ -29,11 +29,14 @@ import (
 
 // Errors the API maps to status codes.
 var (
-	ErrDockerUnavailable   = errors.New("docker is unavailable; try again later")                // 503
-	ErrSpaceBusy           = errors.New("the space already has a queued or running run")         // 409
-	ErrNotFinished         = errors.New("the run has not finished")                              // 409
-	ErrAlreadyFinished     = errors.New("the run has already finished")                          // 409
-	ErrIdempotencyMismatch = errors.New("Idempotency-Key was already used with another request") // 422
+	ErrDockerUnavailable = errors.New("docker is unavailable; try again later")        // 503
+	ErrSpaceBusy         = errors.New("the space already has a queued or running run") // 409
+	// ErrSessionWriting: a read-write interactive session holds the space's
+	// write lock (409). It is an ErrSpaceBusy (errors.Is).
+	ErrSessionWriting      error = busyError("a read-write interactive session is open in the space: end it first")
+	ErrNotFinished               = errors.New("the run has not finished")                              // 409
+	ErrAlreadyFinished           = errors.New("the run has already finished")                          // 409
+	ErrIdempotencyMismatch       = errors.New("Idempotency-Key was already used with another request") // 422
 )
 
 // DependencyError rejects a submission when dependency_check is "reject".
@@ -350,6 +353,8 @@ func (m *Manager) submit(ctx context.Context, owner, spaceID string, req SubmitR
 	// On a refusal or a replay the stored snapshot is unreferenced: the
 	// cleanup removes it.
 	switch {
+	case errors.Is(err, store.ErrWritingSession):
+		return View{}, false, ErrSessionWriting
 	case errors.Is(err, store.ErrActiveRun):
 		return View{}, false, ErrSpaceBusy
 	case errors.Is(err, store.ErrIdempotencyMismatch):
@@ -669,6 +674,13 @@ func (m *Manager) RunStatus(ctx context.Context, owner, spaceID, runID string) (
 
 // Draining reports whether the manager is shutting down.
 func (m *Manager) Draining() bool { return m.ex.isDraining() }
+
+// busyError is a refusal because something else writes the space: it is
+// an ErrSpaceBusy, with its own message.
+type busyError string
+
+func (e busyError) Error() string        { return string(e) }
+func (e busyError) Is(target error) bool { return target == ErrSpaceBusy }
 
 // dbRetryFor is how long a write that must not be lost (a run's final
 // status, an item of its output) keeps trying through a database outage.
