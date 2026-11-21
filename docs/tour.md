@@ -1,6 +1,6 @@
 # A Tour of nbsandbox
 
-A walk through what nbsandbox does, screen by screen: first the web editor, then the same things through the API, the way another service uses it. Every screenshot and every output below is real, taken from the development stack (`make up`) with the example notebooks in [examples/notebooks](../examples/notebooks). `make tour` retakes the screenshots.
+A walk through what nbsandbox does, screen by screen: first the web editor, then the same things through the API, the way another service uses it. Every screenshot and every output below is real, taken from the development stack (`make up`) with the example notebooks in [examples/notebooks](../examples/notebooks). `make tour` retakes the screenshots (`TOUR_ONLY=sessions` only those of the live session, steps 13 to 15).
 
 The example is a small sales analysis: [sales_report.ipynb](../examples/notebooks/sales_report.ipynb) reads `data/sales.csv`, summarises one region's last few months, returns the totals as JSON and writes a CSV file; [sales_by_month.ipynb](../examples/notebooks/sales_by_month.ipynb) sends the same numbers month by month as it computes them.
 
@@ -79,6 +79,24 @@ Each call runs in its own fresh container, read-only, from the published version
 ![The runs panel: the run and the call, each with status and duration](images/tour/12-runs.png)
 
 The **Runs** panel lists the space's runs and function calls, newest first, live.
+
+### 13. A live session
+
+![Cells run in a session: the DataFrame shown as a table under the printed text](images/tour/13-session.png)
+
+A run starts from scratch every time. While writing a notebook, **Start session** gives it a live kernel instead ([sessions.md](sessions.md)): cells run one at a time (the play button or Shift-Enter), and the variables stay between them, so changing one cell doesn't run everything again. A session is held to the same isolation as a run: no network, the same limits, only its own space's files. It opens in about two seconds; after that a small cell answers in milliseconds ([perf.md](perf.md#interactive-sessions)). Read-write sessions save the files the kernel writes back to the space, every few minutes and at the end; read-only sessions can't change them.
+
+### 14. Completion from the live objects
+
+![Typing mine[" lists the DataFrame's columns, with what the kernel knows about it](images/tour/14-session-completion.png)
+
+With a session, completion asks the kernel itself, so it knows the real objects: `mine["` lists the DataFrame's columns, which no index built ahead of time could know.
+
+### 15. The variables
+
+![The variables panel: each name with its type, shape and value; a DataFrame's columns](images/tour/15-variables.png)
+
+**Variables** lists what the kernel holds, refreshed after every cell. **End session** stops the kernel; one with no cell running and nobody connected ends by itself after 30 minutes (`sessions.idle`).
 
 ## Part 2: the API
 

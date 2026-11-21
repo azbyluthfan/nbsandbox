@@ -56,6 +56,18 @@ A space's own packages ([packages.md](packages.md)), measured on Docker Desktop 
 - **Builds are cached:** the same `requirements.txt` builds once for every space.
 - **Not measured yet:** the first use on another worker downloads the set from object storage and unpacks it; this test stack has one worker.
 
+## Interactive sessions
+
+Measured on Docker Desktop (Apple silicon, 4 CPUs, 3 GB), through the API and the WebSocket (nbsandboxd and the browser's path), a session with the run limits (1 CPU), 2026-11-21:
+
+| | Median | Notes |
+|---|---|---|
+| Open a session until its kernel is ready | **2.1 s** | 5 sessions, 2.0–2.2 s: a container like a run's, the kernel, the attach. Opening the notebook's existing session is instant |
+| Completion `df["` (the DataFrame's columns), the WebSocket's round trip | **4.6 ms** | 30 requests; the slowest 117 ms (the first). The editor waits at most 300 ms for the kernel and shows the static index meanwhile |
+| Running `1+1`, until the kernel is idle again | **6 ms** | 30 cells; the slowest 11 ms |
+
+In the kernel alone (the spike), completion takes 2–5 ms without Jedi and 36 ms median with it (323 ms worst), which is why Jedi stays off. A session holds a run slot's worth of memory and CPU for as long as it is open, so size workers for `runs.concurrency` plus `sessions.per_worker` containers.
+
 ## A run's footprint
 
 The smoke notebook on Docker Desktop: about 3.7 s of container time, about 300 MB peak memory, 3 s of CPU. The tour's sales report (pandas, 4 months of data): 4.7 s, 124 MB peak, 4.3 s CPU ([tour.md](tour.md)).
