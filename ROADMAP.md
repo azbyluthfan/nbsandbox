@@ -45,7 +45,7 @@ A patch release: the runner images published on GHCR up to 0.2.0 had a broken ma
 
 ## Next
 
-- **Interactive mode.** Designed and agreed: run cells live in the editor, with autocomplete, signatures and docs from the live kernel (`df.` lists the columns). A kernel per notebook in a long-lived container with a run's isolation (no network), reached over its stdio and proxied as Jupyter messages over a WebSocket. Docker first, Kubernetes after.
+- **Interactive mode:** built, in the next release ([docs/sessions.md](docs/sessions.md)): run cells live in the editor, with completion, signatures and docs from the live kernel (`df.` lists the columns), on Docker, Kubernetes and clusters. Next for it: a variables panel, and the deployment check (`nbsandbox-report check`) opening sessions too.
 - **Authentication against Entra ID, end to end.** Keycloak is tested end to end (tokens, scopes, audience, token exchange); Entra ID is unit-tested against a local issuer and documented, and needs the same end-to-end test with a real tenant.
 - **Sandboxes on real clusters.** Run the suite under GKE Sandbox (gVisor) and AKS Pod Sandboxing (Kata), and add a GKE Terraform example beside the AKS one. `nbsandbox-report check` makes each one a deploy, a check and a teardown.
 
@@ -55,7 +55,6 @@ A patch release: the runner images published on GHCR up to 0.2.0 had a broken ma
 |---|---|---|
 | Fast starts (under 1 s) | A small call takes about 2.5 s, which suits batch work and most function calls. What remains is CPU work on the run's one CPU (the Jupyter client libraries and the kernel's imports, about 0.6 s each; [perf.md](docs/perf.md#starting-a-run)): starting the kernel earlier doesn't help on one CPU, so going under 1 s takes **a pool of single-use pre-started containers** per published function version (created and kernel started ahead of time, used once, then removed), and later restoring a booted kernel from a snapshot (gVisor checkpoint/restore, Firecracker snapshots). Waits for a caller that needs it | isolation, runs, runner image |
 | Shared spaces | Grants keyed by caller ID (`space, principal, role`), read or read-write | auth, API, web UI |
-| Completion through variables | `df.` after `df = pd.read_csv(...)`: follow return annotations in the completion index (today it knows modules, aliases and names across cells), or the kernel's own completion in interactive mode (next) | runner image, web UI |
 | Deeper lint in the editor | ruff (as WebAssembly, in the browser): undefined names, unused imports, common mistakes across all cells | web UI |
 | Bring your own image | A space or function names its own image (any language or package set), pinned by digest from an allowed registry, with the runner contract installed. Only with gVisor or a sandbox RuntimeClass: a foreign image must not get `runc`'s level of trust | runner images, isolation, runs |
 | Custom packages on Kubernetes | Package sets on Kubernetes: build pods with an egress policy of their own, and a per-node cache of sets mounted read-only into run pods (a copy per run would be slow for large sets) | isolation, runs, Helm |

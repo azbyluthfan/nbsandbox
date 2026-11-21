@@ -87,7 +87,7 @@ Runs that were active when the backup was taken end as `interrupted` when nbsand
 
 1. Read the release notes and [CHANGELOG.md](../CHANGELOG.md).
 2. **Back up first** (see above).
-3. **Optional: drain**, so no run is interrupted: no queued run starts, running ones finish, and new runs still queue. Wait until `running_runs` is 0. The drain is stored in the database, so it holds across the restart; resume afterwards (step 7). A long drain may set off the queue-backlog alert.
+3. **Optional: drain**, so no run is interrupted: no queued run starts, running ones finish, and new runs still queue. No interactive session starts either; open ones keep running through the upgrade and are re-attached ([sessions.md](sessions.md#for-operators)). Wait until `running_runs` is 0. The drain is stored in the database, so it holds across the restart; resume afterwards (step 7). A long drain may set off the queue-backlog alert.
    ```bash
    curl -su root -X PUT "https://$HOST/v1/admin/drain" -H 'Content-Type: application/json' -d '{"draining":true,"reason":"upgrade to 0.2.1"}'
    curl -su root "https://$HOST/v1/admin/drain"     # {"draining":true, ..., "queued_runs":3,"running_runs":0}

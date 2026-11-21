@@ -10,6 +10,7 @@ Run Jupyter notebooks headless, each in its own isolated sandbox, with live logs
 - **Two APIs, one model:** REST with an OpenAPI spec, and gRPC (Connect) for the same operations.
 - **For AI agents:** an MCP server (`nbsandbox-mcp`) lets Claude and other agents write notebooks, run them in the sandbox and read the results, as their user ([docs/mcp.md](docs/mcp.md)).
 - **Web editor:** browse spaces, edit notebooks and files with completion from the runner's packages, run, follow the log, see charts and maps in the results. Users sign in with your identity provider (or a users file) ([docs/auth.md](docs/auth.md#signing-in-to-the-web-ui)).
+- **Interactive sessions:** run a notebook's cells one by one in a live kernel, as in Jupyter, with a run's isolation. Completion comes from the real objects (`df.` lists a DataFrame's columns). In the editor, or over a WebSocket of Jupyter messages ([docs/sessions.md](docs/sessions.md)).
 - **A space's own packages:** a `requirements.txt` is built once into a package set the space's runs import, with no network in the runs ([docs/packages.md](docs/packages.md)).
 - **For operators:** an audit log of every change and download, administrators who can list and stop any run, and draining before maintenance ([docs/operations.md](docs/operations.md#audit-log)).
 
@@ -91,7 +92,7 @@ Read [docs/security/threat-model.md](docs/security/threat-model.md) before deplo
 - **Python notebooks only.** Runs use the Python 3 kernel; a notebook written for another kernel (R, Julia, …) is refused when you run or publish it.
 - **No network in runs.** Notebooks can't `pip install`. A space's `requirements.txt` can add packages (wheels from the package index, built once into a set the space's runs import) when the operator turns it on, on Docker for now ([docs/packages.md](docs/packages.md)); otherwise build a runner image with the packages you need.
 - **Authentication:** bearer tokens from any OpenID Connect provider, or basic auth from a users file, with revocation, a limit on failed sign-ins, and a web UI sign-in. Not yet: sharing a space between users.
-- **Notebooks run whole:** a run executes every cell, in a fresh container. Running cells one at a time in the editor, with a live kernel, is next (interactive mode, [ROADMAP.md](ROADMAP.md)).
+- **No widgets or `input()` in sessions:** an interactive session's kernel can't ask for input, and ipywidgets and other JavaScript outputs show as text.
 - **Custom packages on Docker only** for now; Kubernetes is next.
 - **Reference platforms:** the isolation reports that count are Linux with Docker Engine and your own Kubernetes cluster. Docker Desktop and kind work for development.
 
@@ -102,6 +103,7 @@ Read [docs/security/threat-model.md](docs/security/threat-model.md) before deplo
 | [docs/tour.md](docs/tour.md) | A guided tour, screen by screen |
 | [docs/user-guide.md](docs/user-guide.md) | People running notebooks: spaces, files, parameters, statuses, logs, the editor |
 | [docs/functions.md](docs/functions.md) | Calling a notebook from your service: contracts, publishing, invoking, streamed output |
+| [docs/sessions.md](docs/sessions.md) | Interactive sessions: a notebook's live kernel, in the editor or through the API |
 | [docs/packages.md](docs/packages.md) | A space's own Python packages (`requirements.txt`) |
 | [docs/api.md](docs/api.md) and [api/openapi.yaml](api/openapi.yaml) | The REST and gRPC APIs and their compatibility policy |
 | [docs/mcp.md](docs/mcp.md) | AI agents: the MCP server, its tools and how to connect Claude |
