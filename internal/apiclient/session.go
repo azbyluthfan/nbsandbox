@@ -78,7 +78,7 @@ func (c *Client) ConnectSession(ctx context.Context, who *Identity, spaceID, id 
 	u := strings.TrimSuffix(c.BaseURL, "/") + "/v1/spaces/" + spaceID + "/sessions/" + id + "/channel"
 	u = "ws" + strings.TrimPrefix(u, "http") // http -> ws, https -> wss
 	h := http.Header{}
-	req, _ := http.NewRequest("GET", u, nil)
+	req, _ := http.NewRequestWithContext(ctx, "GET", u, nil) // only to encode basic credentials
 	switch {
 	case who == nil:
 	case who.Header != "":
