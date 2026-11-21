@@ -39,6 +39,13 @@ data:
       enabled: {{ .Values.audit.enabled }}
       retention: {{ .Values.audit.retention | quote }}
       downloads: {{ .Values.audit.downloads }}
+    sessions:
+      enabled: {{ .Values.sessions.enabled }}
+      idle: {{ .Values.sessions.idle | quote }}
+      max: {{ .Values.sessions.max | quote }}
+      per_user: {{ .Values.sessions.perUser }}
+      per_worker: {{ .Values.sessions.perWorker }}
+      listen: ":8091"
     {{- if .Values.ui.enabled }}
     ui:
       enabled: true

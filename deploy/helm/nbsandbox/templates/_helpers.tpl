@@ -54,6 +54,10 @@ seccompProfile: { type: RuntimeDefault }
 - name: NBSANDBOX_UI_OIDC_CLIENT_SECRET
   valueFrom: { secretKeyRef: { name: {{ required "ui.oidc.secretName is required with ui.auth oidc" .Values.ui.oidc.secretName | quote }}, key: client-secret } }
 {{- end }}
+{{- if and .Values.sessions.enabled .Values.sessions.secretName }}
+- name: NBSANDBOX_SESSIONS_SECRET
+  valueFrom: { secretKeyRef: { name: {{ .Values.sessions.secretName | quote }}, key: secret } }
+{{- end }}
 {{- with .Values.extraEnv }}
 {{ toYaml . }}
 {{- end }}

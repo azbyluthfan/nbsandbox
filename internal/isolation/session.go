@@ -53,5 +53,12 @@ type SessionBackend interface {
 	Sessions(ctx context.Context) ([]SessionInfo, error)
 }
 
+// SessionFilePuller is a session backend whose sessions' files aren't on
+// this worker's disk (Kubernetes): before a read-write session's changes
+// are written back, its /space is pulled over the local working copy.
+type SessionFilePuller interface {
+	PullSessionFiles(ctx context.Context, sessionID, localDir string) error
+}
+
 // SessionBridge is where the session bridge is in the runner image.
 const SessionBridge = "/opt/nbsandbox/session_bridge.py"

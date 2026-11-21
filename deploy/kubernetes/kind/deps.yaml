@@ -19,6 +19,12 @@ kind: Secret
 metadata: { name: nbsandbox-s3, namespace: nbsandbox }
 stringData: { access-key: nbsandbox, secret-key: nbsandbox-dev-secret }
 ---
+# API pods reach the worker holding an interactive session with it.
+apiVersion: v1
+kind: Secret
+metadata: { name: nbsandbox-sessions, namespace: nbsandbox }
+stringData: { secret: nbsandbox-dev-sessions-secret }
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata: { name: postgres, namespace: nbsandbox }

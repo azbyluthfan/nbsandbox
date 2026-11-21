@@ -425,6 +425,9 @@ func (b *Backend) copyIn(ctx context.Context, name string, spec isolation.RunSpe
 	cctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	for _, d := range []struct{ local, remote string }{{spec.SpaceDir, "/space"}, {spec.RunDir, "/run"}} {
+		if d.local == "" {
+			continue // a session has no run folder
+		}
 		pr, pw := io.Pipe()
 		go func() { pw.CloseWithError(writeTar(pw, d.local, workerOwned)) }()
 		err := b.exec(cctx, name, filesContainer, []string{"tar", "-x", "-m", "--no-same-owner", "-C", d.remote, "-f", "-"}, pr, nil)
@@ -446,7 +449,10 @@ func (b *Backend) copyOut(ctx context.Context, name string, spec isolation.RunSp
 		local, remote string
 		replace       bool // mirror deletions too (the space)
 	}
-	dirs := []dir{{spec.RunDir, "/run", false}}
+	var dirs []dir
+	if spec.RunDir != "" { // a session has none
+		dirs = append(dirs, dir{spec.RunDir, "/run", false})
+	}
 	if !spec.SpaceReadOnly {
 		dirs = append(dirs, dir{spec.SpaceDir, "/space", true})
 	}

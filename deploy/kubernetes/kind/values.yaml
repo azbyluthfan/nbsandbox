@@ -25,6 +25,7 @@ storage:
   kind: s3
   s3: { endpoint: "rustfs:9000", bucket: nbsandbox, tls: false, createBucket: true, existingSecret: nbsandbox-s3 }
 auth: { basic: true, usersSecret: nbsandbox-users }
+sessions: { secretName: nbsandbox-sessions }
 extraEnv:
   - { name: NBSANDBOX_SHUTDOWN_GRACE, value: 5s }
 podDisruptionBudget: { enabled: false }

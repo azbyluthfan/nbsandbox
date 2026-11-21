@@ -85,8 +85,17 @@ func (f *Backend) StopSession(_ context.Context, id string) error {
 	return nil
 }
 
-// Sessions implements isolation.SessionBackend.
-func (f *Backend) Sessions(context.Context) ([]isolation.SessionInfo, error) { return nil, nil }
+// Sessions implements isolation.SessionBackend: the sessions started and
+// not stopped.
+func (f *Backend) Sessions(context.Context) ([]isolation.SessionInfo, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]isolation.SessionInfo, 0, len(f.running))
+	for id := range f.running {
+		out = append(out, isolation.SessionInfo{SessionID: id, Running: true})
+	}
+	return out, nil
+}
 
 // Specs are the sessions started, in order.
 func (f *Backend) Specs() []isolation.SessionSpec {
