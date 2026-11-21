@@ -74,7 +74,7 @@ The smoke notebook on Docker Desktop: about 3.7 s of container time, about 300 M
 
 ## Soak tests
 
-A soak runs a mix of notebooks for a long time (succeeding, failing, crashing the kernel, streaming, cancelled) and fails on steady growth of goroutines, open files, memory, disk or leftover containers; cleanup timers are shortened so every cleanup path runs many times. `make soak` (45 minutes, weekly; a 12 h soak before a minor or major release, [releasing.md](releasing.md)), `make soak-cluster` and `make soak-k8s` sample every process.
+A soak runs a mix of notebooks for a long time (succeeding, failing, crashing the kernel, streaming, cancelled), with interactive sessions one after another beside them (cells, completion, reattaching, interrupting, restarting, files written back), and fails on steady growth of goroutines, open files, memory, disk or leftover run or session containers; cleanup timers are shortened so every cleanup path runs many times. `make soak` (45 minutes, weekly; a 12 h soak before a minor or major release, [releasing.md](releasing.md)), `make soak-cluster` and `make soak-k8s` sample every process.
 
 | Date | Stack | Duration | Runs | Result |
 |---|---|---|---|---|

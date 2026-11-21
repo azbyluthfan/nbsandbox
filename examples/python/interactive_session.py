@@ -86,6 +86,12 @@ class Kernel:
                                  "parent_header": {}, "metadata": {}, "content": content}))
         return msg_id
 
+    def reply(self, msg_id: str, msg_type: str, timeout: float = 10) -> dict:
+        """The reply of that type (the kernel's status messages for the
+        request come too, before and after it)."""
+        msgs = self.wait(msg_id, lambda m: m["header"]["msg_type"] == msg_type, timeout)
+        return next(m for m in msgs if m["header"]["msg_type"] == msg_type)
+
     def wait(self, msg_id: str, done, timeout: float = 120) -> list[dict]:
         """Messages answering msg_id, until done(msg) is true for one."""
         deadline = time.time() + timeout
@@ -116,13 +122,11 @@ class Kernel:
 
     def complete(self, code: str) -> list[str]:
         msg_id = self.send("shell", "complete_request", {"code": code, "cursor_pos": len(code)})
-        reply = self.wait(msg_id, lambda m: m["header"]["msg_type"] == "complete_reply", timeout=10)[-1]
-        return reply["content"]["matches"]
+        return self.reply(msg_id, "complete_reply")["content"]["matches"]
 
     def docs(self, code: str) -> str:
         msg_id = self.send("shell", "inspect_request", {"code": code, "cursor_pos": len(code), "detail_level": 0})
-        reply = self.wait(msg_id, lambda m: m["header"]["msg_type"] == "inspect_reply", timeout=10)[-1]
-        return reply["content"].get("data", {}).get("text/plain", "")
+        return self.reply(msg_id, "inspect_reply")["content"].get("data", {}).get("text/plain", "")
 
     def close(self):
         self.ws.close()

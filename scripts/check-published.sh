@@ -14,7 +14,8 @@
 # (nbsandbox-published), on ports 18081 and 18443 (NBSANDBOX_HTTP_PORT,
 # NBSANDBOX_HTTPS_PORT). Removes everything it made when it ends. On Linux it
 # uses sudo to give the data directory and users file to uid 1000, as the
-# provisioning script does. Needs Docker with Compose, git, curl, openssl.
+# provisioning script does. Needs Docker with Compose, git, curl, openssl,
+# and python3 with venv (the session check, for releases with sessions).
 
 set -euo pipefail
 
@@ -140,6 +141,24 @@ cat > "$WORK/packages.ipynb" <<'EOF'
 EOF
 "$client" files upload "$space" "$WORK/requirements.txt" "$WORK/packages.ipynb" >/dev/null
 run packages.ipynb
+
+# An interactive session (releases that have them): the release's own
+# example opens one through Caddy, runs cells over its WebSocket, completes,
+# interrupts, saves a file to the space and ends it.
+if [ -f "$SRC/docs/sessions.md" ]; then
+	step "An interactive session, with the release's example (examples/python/interactive_session.py)"
+	python3 -m venv "$WORK/venv"
+	"$WORK/venv/bin/pip" install -q requests websocket-client
+	out=$(WEBSOCKET_CLIENT_CA_BUNDLE=$CURL_CA_BUNDLE "$WORK/venv/bin/python" "$SRC/examples/python/interactive_session.py" 2>&1) ||
+		{ echo "$out" >&2; exit 1; }
+	echo "$out"
+	for want in "connected: kernel" "completes to: ['amount', 'month', 'region']" "interrupted the long cell" "totals.csv in the space: True" "session ended"; do
+		case "$out" in *"$want"*) ;; *) echo "the session example didn't print: $want" >&2; exit 1 ;; esac
+	done
+	session=$(echo "$out" | sed -n 's/^session \([0-9a-f-]*\):.*/\1/p')
+	[ -n "$session" ] && [ -z "$(docker ps -aq --filter "name=nbsandbox-session-$session")" ] ||
+		{ echo "the session's container is left behind (or no session ID printed)" >&2; exit 1; }
+fi
 
 left=$(docker ps -aq --filter "name=nbsandbox-run-" | wc -l | tr -d ' ')
 [ "$left" = 0 ] || { echo "$left run containers left behind" >&2; exit 1; }
