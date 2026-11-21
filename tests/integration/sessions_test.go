@@ -47,6 +47,14 @@ type kernelConn struct {
 
 func connectSession(t *testing.T, user, sp, id string) *kernelConn {
 	t.Helper()
+	k := dialSession(t, user, sp, id)
+	t.Cleanup(func() { _ = k.c.Close() })
+	return k
+}
+
+// dialSession connects to a session's channel; the caller closes it.
+func dialSession(t *testing.T, user, sp, id string) *kernelConn {
+	t.Helper()
 	h := http.Header{}
 	req, _ := http.NewRequest("GET", baseURL, nil)
 	req.SetBasicAuth(user, passwords[user])
@@ -64,7 +72,6 @@ func connectSession(t *testing.T, user, sp, id string) *kernelConn {
 		_ = resp.Body.Close()
 	}
 	k := &kernelConn{t: t, c: c}
-	t.Cleanup(func() { _ = c.Close() })
 	hello := k.next(func(m kmsg) bool { return m.Channel == "bridge" })
 	if hello.Content["status"] != "attached" {
 		t.Fatalf("first message %+v", hello)

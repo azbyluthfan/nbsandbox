@@ -69,6 +69,7 @@ type sample struct {
 	at                       time.Duration // since the baseline
 	procs                    map[string]procSample
 	containers, dataMiB, run float64
+	sessionContainers        float64 // session containers (or Pods)
 }
 
 // procSample is one nbsandboxd process's figures.
@@ -178,6 +179,13 @@ func TestSoak(t *testing.T) {
 	first.json(t, &firstRun)
 	waitRun(t, "alice", keySpace, firstRun.ID, 3*time.Minute)
 	keyUsed := time.Now()
+	// Sessions: their own spaces (an open read-write session refuses runs
+	// that write), one per user.
+	sessionSpaces := map[string]string{}
+	for _, u := range users {
+		sessionSpaces[u] = space(t, u)
+		upload(t, u, sessionSpaces[u], "", map[string]string{"nb.ipynb": codeNotebook("1")})
+	}
 
 	// Warm up: one cycle per space, then the baseline.
 	cycle := func(t *testing.T, i, n int) {
@@ -221,6 +229,7 @@ func TestSoak(t *testing.T) {
 			}
 		}
 		s.containers = float64(len(runContainersQuiet()))
+		s.sessionContainers = float64(len(sessionContainersQuiet()))
 		s.dataMiB = float64(dirBytes(dataDir)) / (1 << 20)
 		mu.Lock()
 		samples = append(samples, s)
@@ -243,8 +252,9 @@ func TestSoak(t *testing.T) {
 		}
 	}()
 
-	// The workload: every space busy at once until the time is up.
-	var cycles atomic.Int64
+	// The workload: every space busy at once until the time is up, and
+	// interactive sessions one after another beside them.
+	var cycles, sessionCycles atomic.Int64
 	end := start.Add(d)
 	t.Run("workers", func(t *testing.T) {
 		for i := range spaces {
@@ -256,6 +266,14 @@ func TestSoak(t *testing.T) {
 				}
 			})
 		}
+		t.Run("sessions", func(t *testing.T) {
+			t.Parallel()
+			for n := 0; time.Now().Before(end); n++ {
+				user := users[n%2]
+				soakSession(t, user, sessionSpaces[user], n)
+				sessionCycles.Add(1)
+			}
+		})
 	})
 	stop()
 	<-samplerDone
@@ -349,7 +367,7 @@ func TestSoak(t *testing.T) {
 	}
 	last := all[len(all)-1]
 	// Limits: growth that would matter over a day, well above sampling noise.
-	trendOK := gr <= 10 && fd <= 10 && rss <= 20 && (!dataJudged || data <= 50) && last.containers == 0 &&
+	trendOK := gr <= 10 && fd <= 10 && rss <= 20 && (!dataJudged || data <= 50) && last.containers == 0 && last.sessionContainers == 0 &&
 		call(t, "GET", "/readyz", "", nil, nil).Code == http.StatusOK
 	dataNote := fmt.Sprintf("%+.1f MiB", data)
 	switch {
@@ -359,11 +377,12 @@ func TestSoak(t *testing.T) {
 		dataNote = "not judged (run longer than retention plus two cleanups)"
 	}
 	var csv strings.Builder
-	csv.WriteString("minutes,process,goroutines,open_fds,rss_mib,run_containers,data_mib,active_runs\n")
+	csv.WriteString("minutes,process,goroutines,open_fds,rss_mib,run_containers,data_mib,active_runs,session_containers\n")
 	for _, s := range all {
 		for _, src := range sources {
 			if p, ok := s.procs[src.name]; ok {
-				fmt.Fprintf(&csv, "%.1f,%s,%.0f,%.0f,%.1f,%.0f,%.1f,%.0f\n", s.at.Minutes(), src.name, p.goroutines, p.fds, p.rssMiB, s.containers, s.dataMiB, s.run)
+				fmt.Fprintf(&csv, "%.1f,%s,%.0f,%.0f,%.1f,%.0f,%.1f,%.0f,%.0f\n", s.at.Minutes(), src.name, p.goroutines, p.fds, p.rssMiB, s.containers, s.dataMiB, s.run,
+					s.sessionContainers)
 			}
 		}
 	}
@@ -378,11 +397,11 @@ func TestSoak(t *testing.T) {
 		_ = os.WriteFile(filepath.Join(dir, "soak-samples.csv"), []byte(csv.String()), 0o644)
 	}
 	runs := cycles.Load()
-	finding(t, "SOAK", fmt.Sprintf("%d spaces at once for %s (%d runs), %d processes sampled every %s; cleanup timers %s",
-		nSpaces, d, runs, len(sources), every, map[bool]string{true: "shortened", false: "default"}[retention > 0]),
-		"no steady growth in goroutines, open files, memory or data; no leftover containers; cleanup removes old runs, events and keys",
-		fmt.Sprintf("worst per hour: goroutines %+.1f (%s), open fds %+.1f (%s), RSS %+.1f MiB (%s), data %s; end: %s; %.0f MiB data, %.0f containers; %s",
-			gr, grProc, fd, fdProc, rss, rssProc, dataNote, strings.Join(ends, "; "), last.dataMiB, last.containers, strings.Join(checks, "; ")),
+	finding(t, "SOAK", fmt.Sprintf("%d spaces at once for %s (%d runs) beside interactive sessions one after another (%d), %d processes sampled every %s; cleanup timers %s",
+		nSpaces, d, runs, sessionCycles.Load(), len(sources), every, map[bool]string{true: "shortened", false: "default"}[retention > 0]),
+		"no steady growth in goroutines, open files, memory or data; no leftover run or session containers; cleanup removes old runs, events and keys",
+		fmt.Sprintf("worst per hour: goroutines %+.1f (%s), open fds %+.1f (%s), RSS %+.1f MiB (%s), data %s; end: %s; %.0f MiB data, %.0f run and %.0f session containers; %s",
+			gr, grProc, fd, fdProc, rss, rssProc, dataNote, strings.Join(ends, "; "), last.dataMiB, last.containers, last.sessionContainers, strings.Join(checks, "; ")),
 		trendOK && cleanupOK)
 	if !trendOK || !cleanupOK {
 		t.Fatalf("soak failed: trends ok %v, cleanup ok %v (%s)", trendOK, cleanupOK, strings.Join(checks, "; "))
@@ -450,6 +469,95 @@ func firstEventName(t *testing.T, user, spaceID string, after int64) string {
 // sampler goroutine (nil on error).
 func runContainersQuiet() []string {
 	out, err := exec.Command("docker", "ps", "-a", "--filter", "label=nbsandbox.run", "--format", "{{.Names}}").Output()
+	if err != nil || len(strings.TrimSpace(string(out))) == 0 {
+		return nil
+	}
+	return strings.Split(strings.TrimSpace(string(out)), "\n")
+}
+
+// soakSession is one interactive session from start to end: cells whose
+// variables carry over, completion from the live objects, and by turns a
+// reattach, an interrupted cell and a kernel restart. Read-write ones (two
+// in three) write a file that must be in the space once the session ends.
+func soakSession(t *testing.T, user, sp string, n int) {
+	t.Helper()
+	mode := "read-write"
+	if n%3 == 2 {
+		mode = "read-only"
+	}
+	r := jsonCall(t, "POST", "/v1/spaces/"+sp+"/sessions", user, map[string]string{"notebook": "nb.ipynb", "mode": mode}, nil)
+	if r.Code != http.StatusCreated && r.Code != http.StatusOK {
+		t.Fatalf("session %d: open: %d %s", n, r.Code, r.Body)
+	}
+	var s sessionJSON
+	r.json(t, &s)
+	base := "/v1/spaces/" + sp + "/sessions/" + s.ID
+	k := dialSession(t, user, sp, s.ID)
+	defer func() { _ = k.c.Close() }()
+	expect := func(what, got, want string) {
+		t.Helper()
+		if got != want {
+			t.Fatalf("session %d (%s): %s: %q, want %q", n, mode, what, got, want)
+		}
+	}
+	k.run("import pandas as pd\ndf = pd.DataFrame({'region': ['a', 'b', 'a'], 'amount': [1.0, 2.0, 3.0]})")
+	out, _ := k.run("print(df.groupby('region')['amount'].sum().to_dict())")
+	expect("a cell using the last one's variables", out, "{'a': 4.0, 'b': 2.0}\n")
+	if cols := strings.Join(k.complete(`df["`), ","); !strings.Contains(cols, "amount") || !strings.Contains(cols, "region") {
+		t.Fatalf("session %d: completion of df[\": %s", n, cols)
+	}
+	if n%4 == 1 { // disconnect and come back: the variables are still there
+		_ = k.c.Close()
+		k = dialSession(t, user, sp, s.ID)
+		out, _ = k.run("print(len(df))")
+		expect("after reattaching", out, "3\n")
+	}
+	if n%5 == 3 { // a cell that never ends, interrupted
+		id := k.send("shell", "execute_request", map[string]any{"code": "import time\nwhile True: time.sleep(0.1)", "silent": false})
+		k.next(func(m kmsg) bool {
+			return m.Parent["msg_id"] == id && m.typ() == "status" && m.Content["execution_state"] == "busy"
+		})
+		if r := call(t, "POST", base+"/interrupt", user, nil, nil); r.Code != http.StatusAccepted && r.Code != http.StatusOK {
+			t.Fatalf("session %d: interrupt: %d %s", n, r.Code, r.Body)
+		}
+		k.next(func(m kmsg) bool { return m.Parent["msg_id"] == id && m.typ() == "execute_reply" })
+		out, _ = k.run("print('after')") // may be aborted once, right after the interrupt
+		if out != "after\n" {
+			out, _ = k.run("print('after')")
+		}
+		expect("after an interrupt", out, "after\n")
+	}
+	if n%7 == 5 { // restart: the variables go, the session stays
+		if r := call(t, "POST", base+"/restart", user, nil, nil); r.Code != http.StatusAccepted {
+			t.Fatalf("session %d: restart: %d %s", n, r.Code, r.Body)
+		}
+		k.next(func(m kmsg) bool { return m.Channel == "bridge" && m.Content["status"] == "ready" })
+		out, _ = k.run("print('df' in dir())")
+		expect("after a restart", out, "False\n")
+	}
+	file := fmt.Sprintf("session-%d.txt", n)
+	if mode == "read-write" {
+		k.run(fmt.Sprintf("open(%q, 'w').write('cycle %d')", file, n))
+	}
+	if r := call(t, "DELETE", base, user, nil, nil); r.Code != http.StatusOK {
+		t.Fatalf("session %d: end: %d %s", n, r.Code, r.Body)
+	}
+	if mode == "read-write" {
+		r := call(t, "GET", "/v1/spaces/"+sp+"/files/"+file, user, nil, nil)
+		expect("the file it wrote, after the end", fmt.Sprintf("%d %s", r.Code, r.Body), fmt.Sprintf("200 cycle %d", n))
+		call(t, "DELETE", "/v1/spaces/"+sp+"/files/"+file, user, nil, nil) // the space doesn't grow
+	}
+}
+
+// sessionContainersQuiet lists session containers (Pods on Kubernetes)
+// without a *testing.T, for the sampler goroutine (nil on error).
+func sessionContainersQuiet() []string {
+	args := []string{"ps", "-a", "--filter", "label=nbsandbox.session", "--format", "{{.Names}}"}
+	if onKubernetes {
+		args = []string{"exec", kindNode, "kubectl", "--kubeconfig=/etc/kubernetes/admin.conf", "-n", "nbsandbox-runs", "get", "pods",
+			"-l", "nbsandbox.session", "-o", "name"}
+	}
+	out, err := exec.Command("docker", args...).Output()
 	if err != nil || len(strings.TrimSpace(string(out))) == 0 {
 		return nil
 	}

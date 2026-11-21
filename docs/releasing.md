@@ -48,7 +48,7 @@ Before v1.0, a minor version may change behaviour; changes are listed in the cha
    ```bash
    scripts/check-published.sh X.Y.Z
    ```
-   It deploys that release from its tag with the images on GHCR, as [deployment.md](deployment.md) does (pulled without a login, so they must be public), and runs the smoke notebook and a package set build through Caddy. The weekly workflow repeats it for the newest release.
+   It deploys that release from its tag with the images on GHCR, as [deployment.md](deployment.md) does (pulled without a login, so they must be public), and runs the smoke notebook and a package set build through Caddy; for a release with interactive sessions, also the release's own session example ([examples/python/interactive_session.py](../examples/python/interactive_session.py)) over a WebSocket through Caddy (needs `python3` with `venv`). The weekly workflow repeats it for the newest release.
 
 ## Security fixes
 
