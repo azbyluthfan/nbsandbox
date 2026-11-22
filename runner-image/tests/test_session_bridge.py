@@ -215,5 +215,68 @@ class PumpTest(unittest.TestCase):
         self.assertEqual((msgs[1]["channel"], msgs[1]["header"]["msg_type"]), ("shell", "complete_reply"))
 
 
+
+class InterruptTimingTest(unittest.TestCase):
+    """An interrupt is never lost: the kernel ignores SIGINT between saying
+    "busy" and starting the cell's code (it says execute_input then)."""
+
+    def run_case(self, steps, hold=0.2):
+        import asyncio
+        import io
+
+        sys.path.insert(0, os.path.dirname(BRIDGE))
+        import session_bridge
+
+        class KM:
+            def __init__(self):
+                self.interrupts = 0
+
+            async def interrupt_kernel(self):
+                self.interrupts += 1
+
+        def iopub(mt, parent, **content):
+            return {"header": {"msg_type": mt}, "parent_header": {"msg_id": parent, "msg_type": "execute_request"},
+                    "content": content}
+
+        async def run():
+            b = session_bridge.Bridge(out=io.BytesIO())
+            b.km = KM()
+            old, session_bridge.INTERRUPT_HOLD = session_bridge.INTERRUPT_HOLD, hold
+            seen = []
+            try:
+                for step in steps:
+                    if step == "interrupt":
+                        await b.interrupt()
+                    elif step == "wait":
+                        await asyncio.sleep(hold * 2)
+                    elif step == "busy":
+                        await b.track(iopub("status", "c1", execution_state="busy"))
+                    elif step == "idle":
+                        await b.track(iopub("status", "c1", execution_state="idle"))
+                    else:
+                        await b.track(iopub(step, "c1"))
+                    seen.append(b.km.interrupts)
+            finally:
+                session_bridge.INTERRUPT_HOLD = old
+            return seen
+
+        return asyncio.run(run())
+
+    def test_interrupt_before_the_code_starts_waits_for_it(self):
+        self.assertEqual(self.run_case(["busy", "interrupt", "execute_input"]), [0, 0, 1])
+
+    def test_a_cell_that_never_says_it_started_is_interrupted_after_the_hold(self):
+        self.assertEqual(self.run_case(["busy", "interrupt", "wait"]), [0, 0, 1])
+
+    def test_interrupt_of_running_code_is_at_once(self):
+        self.assertEqual(self.run_case(["busy", "execute_input", "interrupt", "wait"]), [0, 0, 1, 1])
+
+    def test_a_cell_that_ends_before_it_starts_is_not_interrupted_later(self):
+        self.assertEqual(self.run_case(["busy", "interrupt", "idle", "wait"]), [0, 0, 0, 0])
+
+    def test_interrupt_with_no_cell_running_is_at_once(self):
+        self.assertEqual(self.run_case(["interrupt"]), [1])
+
+
 if __name__ == "__main__":
     unittest.main()
