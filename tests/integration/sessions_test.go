@@ -7,6 +7,7 @@ package integration
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -43,6 +44,68 @@ type kernelConn struct {
 	t *testing.T
 	c *websocket.Conn
 	n int
+	// For a failure's message: the session, what the test was doing, and
+	// the last messages the channel carried.
+	sid, step string
+	trail     []string
+	user, sp  string
+}
+
+// saw keeps a short summary of a message for a failure's message.
+func (k *kernelConn) saw(m kmsg) {
+	parent, _ := m.Parent["msg_id"].(string)
+	state, _ := m.Content["execution_state"].(string)
+	status, _ := m.Content["status"].(string)
+	k.trail = append(k.trail, strings.TrimSpace(fmt.Sprintf("%s/%s parent=%s %s%s", m.Channel, m.typ(), parent, state, status)))
+	if len(k.trail) > 12 {
+		k.trail = k.trail[len(k.trail)-12:]
+	}
+}
+
+// fail ends the test, saying where the session was.
+func (k *kernelConn) fail(format string, args ...any) {
+	k.t.Helper()
+	k.t.Fatalf("session %s, step %q: %s; last messages: %s; %s", k.sid, k.step, fmt.Sprintf(format, args...), strings.Join(k.trail, " | "), k.probe())
+}
+
+// probe looks at a session that stopped answering: its record, and what a
+// new connection gets for a cell and a completion (every message, 20 s).
+func (k *kernelConn) probe() string {
+	r := call(k.t, "GET", "/v1/spaces/"+k.sp+"/sessions/"+k.sid, k.user, nil, nil)
+	out := fmt.Sprintf("probe: record %d %.300s", r.Code, r.Body)
+	h := http.Header{}
+	req, _ := http.NewRequest("GET", baseURL, nil)
+	req.SetBasicAuth(k.user, passwords[k.user])
+	h.Set("Authorization", req.Header.Get("Authorization"))
+	c, resp, err := (&websocket.Dialer{HandshakeTimeout: 20 * time.Second}).Dial("ws"+strings.TrimPrefix(baseURL, "http")+"/v1/spaces/"+k.sp+"/sessions/"+k.sid+"/channel", h)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+	if err != nil {
+		return out + fmt.Sprintf("; a new connection failed: %v", err)
+	}
+	defer func() { _ = c.Close() }()
+	p := &kernelConn{t: k.t, c: c}
+	for _, req := range []struct{ typ, code string }{{"execute_request", "print('probe')"}, {"complete_request", "pri"}} {
+		id := "probe-" + req.typ
+		b, _ := json.Marshal(map[string]any{"channel": "shell", "header": map[string]any{"msg_id": id, "msg_type": req.typ, "session": "probe"},
+			"parent_header": map[string]any{}, "metadata": map[string]any{},
+			"content": map[string]any{"code": req.code, "cursor_pos": len(req.code), "silent": false}})
+		_ = c.WriteMessage(websocket.TextMessage, b)
+	}
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		_ = c.SetReadDeadline(deadline)
+		_, b, err := c.ReadMessage()
+		if err != nil {
+			break
+		}
+		var m kmsg
+		if json.Unmarshal(b, &m) == nil {
+			p.saw(m)
+		}
+	}
+	return out + "; a new connection then got: " + strings.Join(p.trail, " | ")
 }
 
 func connectSession(t *testing.T, user, sp, id string) *kernelConn {
@@ -71,7 +134,7 @@ func dialSession(t *testing.T, user, sp, id string) *kernelConn {
 	if resp != nil {
 		_ = resp.Body.Close()
 	}
-	k := &kernelConn{t: t, c: c}
+	k := &kernelConn{t: t, c: c, sid: id, step: "attach", user: user, sp: sp}
 	hello := k.next(func(m kmsg) bool { return m.Channel == "bridge" })
 	if hello.Content["status"] != "attached" {
 		t.Fatalf("first message %+v", hello)
@@ -107,10 +170,14 @@ func (k *kernelConn) next(match func(kmsg) bool) kmsg {
 		_ = k.c.SetReadDeadline(deadline)
 		_, b, err := k.c.ReadMessage()
 		if err != nil {
-			k.t.Fatalf("session channel: %v", err)
+			k.fail("session channel: %v", err)
 		}
 		var m kmsg
-		if json.Unmarshal(b, &m) == nil && match(m) {
+		if json.Unmarshal(b, &m) != nil {
+			continue
+		}
+		k.saw(m)
+		if match(m) {
 			return m
 		}
 	}
@@ -130,11 +197,14 @@ func (k *kernelConn) run(code string) (stdout string, reply kmsg) {
 			_ = k.c.SetReadDeadline(time.Now().Add(30 * time.Second))
 			_, b, err := k.c.ReadMessage()
 			if err != nil {
-				k.t.Fatalf("a cell finished (iopub idle) but no execute_reply came on the shell channel: %v", err)
+				k.fail("a cell finished (iopub idle) but no execute_reply came on the shell channel: %v", err)
 			}
 			var m kmsg
-			if json.Unmarshal(b, &m) == nil && m.Parent["msg_id"] == id && m.Channel == "shell" && m.typ() == "execute_reply" {
-				reply = m
+			if json.Unmarshal(b, &m) == nil {
+				k.saw(m)
+				if m.Parent["msg_id"] == id && m.Channel == "shell" && m.typ() == "execute_reply" {
+					reply = m
+				}
 			}
 			continue
 		}
