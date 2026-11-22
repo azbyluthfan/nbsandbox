@@ -4,7 +4,9 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
-### Upgrading
+## [0.3.0] - 2026-11-22
+
+### Upgrading from 0.2.1
 
 - **Database migrations 11 and 12** run at startup: interactive sessions, and where API nodes reach a worker's sessions.
 - **The Docker socket proxy must allow attach** (`POST /containers/{id}/attach`) for interactive sessions: the Compose files in `deploy/` do. A proxy configured by hand needs it added, or set `sessions.enabled: false`.
@@ -25,8 +27,15 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
   - **Limits:** a session ends after 30 minutes with no cell running and nobody connected, or 8 hours after it started; 2 per user, 4 per worker (`sessions.*`).
   - **Docker, Kubernetes and clusters:** sessions survive a restart of nbsandboxd (re-attached). With API and worker processes, API nodes relay to the worker holding a session, authenticated with `sessions.secret`.
   - **Isolation report:** a new section, "Interactive sessions": no network, the same isolation as a run, the memory limit, read-only sessions, re-attaching.
+- **MCP tools for interactive sessions** in `nbsandbox-mcp`: `open_session`, `list_sessions`, `run_cell` (printed output, the result, errors with their traceback, charts as images), `complete_code`, `interrupt_session` and `end_session`, so an agent loads data once and tries one step after another ([docs/mcp.md](docs/mcp.md)).
+- **An example session client:** [examples/python/interactive_session.py](examples/python/interactive_session.py) opens a session over the API and its WebSocket, runs cells, completes, interrupts, saves a file and ends it. The [tour](docs/tour.md) shows sessions in the editor; [docs/perf.md](docs/perf.md) has their timings (about 2 s to a ready kernel, then milliseconds per small cell or completion).
 - **`nbsandbox-report check` checks interactive sessions** through the API: no network, the same isolation as a run, read-only sessions, the memory limit ([docs/check-deployment.md](docs/check-deployment.md)).
-- **A check of the published release** (`scripts/check-published.sh`): deploys a release from GHCR as `docs/deployment.md` does and runs notebooks through it. Weekly for the newest release, and part of the release checklist.
+- **A check of the published release** (`scripts/check-published.sh`): deploys a release from GHCR as `docs/deployment.md` does and runs notebooks through it, an interactive session included for releases that have them. Weekly for the newest release, and part of the release checklist.
+- **The soak test runs interactive sessions** beside its runs (cells, completion, reattaching, interrupting, restarting, files written back) and fails on leftover session containers.
+
+### Changed
+
+- **`make wipe-dev` asks first** (type `wipe`; `YES=1` skips the question): it deletes the dev stack's spaces, files and runs.
 
 ## [0.2.1] - 2026-11-16
 
