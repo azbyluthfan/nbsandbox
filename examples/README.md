@@ -69,7 +69,7 @@ Each run creates a new space named `example <date time>`; delete it in the web U
 
 ## From an AI agent
 
-The same API is available to AI agents (Claude Code, Claude Desktop, others) as MCP tools: `nbsandbox-mcp` lets an agent write a notebook into a space, run it and read the result, as its user. With the development stack and the same variables as above:
+The same API is available to AI agents (Claude Code, Claude Desktop, others) as MCP tools: `nbsandbox-mcp` lets an agent write a notebook into a space, run it and read the result, as its user, or open a notebook's interactive session and run cells in it one by one, its variables kept between calls (`open_session`, `run_cell`, `end_session`). With the development stack and the same variables as above:
 
 ```bash
 claude mcp add nbsandbox -e NBSANDBOX_URL=http://127.0.0.1:8080 -e NBSANDBOX_USER=alice -e NBSANDBOX_PASSWORD=alice-dev-password -- go run ./cmd/nbsandbox-mcp
