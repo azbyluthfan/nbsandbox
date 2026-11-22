@@ -24,6 +24,7 @@ manifest=$(docker image inspect "$IMAGE" --format '{{index .Config.Labels "io.nb
 check "manifest label present"      '[ -n "$manifest" ]'
 check "manifest is valid JSON"      'printf "%s" "$manifest" | python3 -c "import json,sys; m=json.load(sys.stdin); assert m[\"status_schema_version\"]==2 and \"pandas\" in m[\"distributions\"] and m[\"import_names\"][\"sklearn\" if \"sklearn\" in m[\"import_names\"] else \"pandas\"]"'
 check "manifest maps imports"       'printf "%s" "$manifest" | python3 -c "import json,sys; m=json.load(sys.stdin); assert m[\"import_names\"][\"yaml\"]==[\"pyyaml\"], m[\"import_names\"].get(\"yaml\")"'
-check "wrapper unit tests pass"     'docker run --rm --network none -v "$(cd "$(dirname "$0")/.." && pwd)":/src:ro --entrypoint python "$IMAGE" -B -m unittest discover -s /src/tests -q >/dev/null 2>&1'
+# Their output only when they fail (the last 40 lines: the failures).
+check "wrapper unit tests pass"     'out=$(docker run --rm --network none -v "$(cd "$(dirname "$0")/.." && pwd)":/src:ro --entrypoint python "$IMAGE" -B -m unittest discover -s /src/tests -q 2>&1) || { printf "%s\n" "$out" | tail -n 40; false; }'
 
 [ $fail -eq 0 ] && echo "runner image tests: ok" || { echo "runner image tests: FAILED"; exit 1; }

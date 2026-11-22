@@ -48,6 +48,9 @@ MAX_MESSAGE = int(os.environ.get("NBSANDBOX_SESSION_MAX_MESSAGE", str(2 << 20)))
 OUTPUT_TYPES = {"stream", "display_data", "update_display_data", "execute_result", "error"}
 # How long a pump waits on one poll of a kernel socket before polling again.
 PUMP_POLL = 1.0
+# How long an interrupt that came before its cell's code started is held at
+# most (a silent cell, such as the variables panel's, announces no start).
+INTERRUPT_HOLD = 1.0
 
 
 def _default(o):
@@ -66,6 +69,11 @@ class Bridge:
         self.kc = None
         self.pumps = []
         self.restarting = False
+        # The cell running (its execute_request's msg_id), whether its code
+        # has started (execute_input seen), and an interrupt held until it has.
+        self.running = None
+        self.started = False
+        self.held = None
 
     async def emit(self, msg):
         line = json.dumps(msg, default=_default, separators=(",", ":"))
@@ -96,6 +104,9 @@ class Bridge:
         for t in self.pumps:
             t.cancel()
         self.pumps = []
+        if self.held is not None:
+            self.held.cancel()
+        self.running, self.started, self.held = None, False, None
         if self.kc is not None:
             self.kc.stop_channels()
         if self.km is not None:
@@ -139,10 +150,55 @@ class Bridge:
                 await asyncio.sleep(PUMP_POLL / 10)
                 continue
             mt = msg["header"]["msg_type"]
+            if name == "iopub":
+                await self.track(msg)
             if mt not in ALLOWED_OUT[name]:
                 continue
             await self.emit({"channel": name, "header": msg["header"], "parent_header": msg["parent_header"],
                              "metadata": msg.get("metadata", {}), "content": msg["content"]})
+
+    async def track(self, msg):
+        """Follows which cell runs and whether its code has started, so an
+        interrupt is never lost.
+
+        The kernel says "busy" before it is ready to be interrupted: until
+        its handler starts, it ignores SIGINT (ipykernel's dispatch_shell),
+        so an interrupt sent right after "busy" is dropped and the cell runs
+        on. execute_input comes once SIGINT raises KeyboardInterrupt."""
+        mt, parent = msg["header"]["msg_type"], msg.get("parent_header") or {}
+        if parent.get("msg_type") != "execute_request":
+            return
+        pid = parent.get("msg_id")
+        if mt == "status" and msg["content"].get("execution_state") == "busy":
+            self.running, self.started = pid, False
+        elif mt == "execute_input" and pid == self.running:
+            self.started = True
+            if self.held is not None:
+                self.held.cancel()
+                self.held = None
+                await self.km.interrupt_kernel()
+        elif mt == "status" and msg["content"].get("execution_state") == "idle" and pid == self.running:
+            self.running, self.started = None, False
+            if self.held is not None:
+                self.held.cancel()
+                self.held = None
+
+    async def interrupt(self):
+        """Interrupts the running cell: now if its code has started (or no
+        cell runs), else as soon as it starts (INTERRUPT_HOLD at most)."""
+        if self.km is None:
+            return
+        if self.running is None or self.started:
+            await self.km.interrupt_kernel()
+            return
+        if self.held is None:
+            self.held = asyncio.create_task(self._interrupt_later())
+
+    async def _interrupt_later(self):
+        await asyncio.sleep(INTERRUPT_HOLD)
+        self.held = None
+        if self.km is not None:
+            await self.km.interrupt_kernel()
 
     async def watch(self):
         """Starts the kernel again if it dies (out of memory, os._exit)."""
@@ -166,8 +222,7 @@ class Bridge:
             return
         content = m.get("content") or {}
         if mt == "interrupt_request":
-            if self.km is not None:
-                await self.km.interrupt_kernel()
+            await self.interrupt()
             await self.emit(_reply("control", "interrupt_reply", header, {"status": "ok"}))
             return
         if mt == "shutdown_request":
