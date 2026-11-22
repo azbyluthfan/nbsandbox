@@ -7,7 +7,7 @@
 # published images (every other test builds them from source). Runs in the
 # weekly workflow and before announcing a release (docs/releasing.md).
 #
-#   scripts/check-published.sh [VERSION]    # e.g. 0.2.1; default: the newest v* tag
+#   scripts/check-published.sh [VERSION]    # e.g. 0.3.0; default: the newest v* tag
 #
 # Uses that release's own Compose file, settings and client from its tag, a
 # throwaway data directory and users file, and a Compose project of its own

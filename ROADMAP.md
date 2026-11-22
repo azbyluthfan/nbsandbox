@@ -43,9 +43,17 @@ Security and operations for real deployments, and a space's own packages. The [C
 
 A patch release: the runner images published on GHCR up to 0.2.0 had a broken manifest label, so nbsandboxd's Docker backend refused them; 0.2.1 fixes the release workflow and checks the published label. A weekly job now deploys the newest release from its published images, as [deployment.md](docs/deployment.md) does, and runs notebooks through it (`scripts/check-published.sh`).
 
+## Released in v0.3.0
+
+Interactive mode. The [CHANGELOG](CHANGELOG.md) has the details and upgrade notes:
+
+- **Interactive sessions:** a notebook's live kernel with a run's isolation (no network, the run limits, the runtime, the space's packages). Run cells one by one and keep the variables, as in Jupyter, on Docker, Kubernetes and clusters ([sessions.md](docs/sessions.md)).
+- **In the editor:** a session bar (run all, interrupt, restart, save files, end), outputs with tables and charts, completion, signatures and docs from the live kernel (`df.` lists the columns), and a variables panel.
+- **Through the API and for agents:** REST, a WebSocket of Jupyter messages, gRPC's `SessionService` ([api.md](docs/api.md)), and MCP tools to open a session, run cells and read their output ([mcp.md](docs/mcp.md)).
+- **Checked like runs:** sessions are in the isolation reports, `nbsandbox-report check`, the soak, and the weekly check of the published release.
+
 ## Next
 
-- **Interactive mode:** built, in the next release ([docs/sessions.md](docs/sessions.md)): run cells live in the editor, with completion, signatures and docs from the live kernel (`df.` lists the columns), on Docker, Kubernetes and clusters. Next for it: a variables panel.
 - **Authentication against Entra ID, end to end.** Keycloak is tested end to end (tokens, scopes, audience, token exchange); Entra ID is unit-tested against a local issuer and documented, and needs the same end-to-end test with a real tenant.
 - **Sandboxes on real clusters.** Run the suite under GKE Sandbox (gVisor) and AKS Pod Sandboxing (Kata), and add a GKE Terraform example beside the AKS one. `nbsandbox-report check` makes each one a deploy, a check and a teardown.
 

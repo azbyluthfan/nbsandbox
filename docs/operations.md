@@ -89,7 +89,7 @@ Runs that were active when the backup was taken end as `interrupted` when nbsand
 2. **Back up first** (see above).
 3. **Optional: drain**, so no run is interrupted: no queued run starts, running ones finish, and new runs still queue. No interactive session starts either; open ones keep running through the upgrade and are re-attached ([sessions.md](sessions.md#for-operators)). Wait until `running_runs` is 0. The drain is stored in the database, so it holds across the restart; resume afterwards (step 7). A long drain may set off the queue-backlog alert.
    ```bash
-   curl -su root -X PUT "https://$HOST/v1/admin/drain" -H 'Content-Type: application/json' -d '{"draining":true,"reason":"upgrade to 0.2.1"}'
+   curl -su root -X PUT "https://$HOST/v1/admin/drain" -H 'Content-Type: application/json' -d '{"draining":true,"reason":"upgrade to 0.3.0"}'
    curl -su root "https://$HOST/v1/admin/drain"     # {"draining":true, ..., "queued_runs":3,"running_runs":0}
    ```
 4. Check out the new release and update `NBSANDBOX_IMAGE` and `NBSANDBOX_RUNNER_IMAGE` in `deploy/.env`.
@@ -151,6 +151,12 @@ Retention (`runs.retention`, 30 days) deletes old runs automatically. Raise `run
 
 - **Find it:** `GET /v1/admin/runs?status=running` lists every owner's running runs, with the owner and start time (metadata only: administrators don't see results or outputs).
 - **Stop it:** `POST /v1/admin/runs/{run_id}/cancel` with `{"reason": "..."}`. The owner sees `cancelled_by` (the administrator) and the reason on the run. The cancel is in the audit log.
+
+### A session holding resources
+
+An interactive session ([sessions.md](sessions.md)) holds a container (or Pod) and its run limits for as long as it is open: until its user ends it, after `sessions.idle` with no cell running and nobody connected (30 minutes), or `sessions.max` after it started (8 hours).
+- **Find it:** `GET /v1/admin/sessions` lists every open session: owner, worker, notebook, mode, since when.
+- **End it:** `POST /v1/admin/sessions/{session_id}/end`, optionally with `{"reason": "..."}`. A read-write session's changes are written to the space first; its user sees who ended it. In the audit log.
 
 ### Queue backlog
 - **Symptom:** alert `NbsandboxQueueBacklog`.

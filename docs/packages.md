@@ -34,7 +34,7 @@ This is off unless the operator turns it on ([below](#for-operators)). While it'
 
 **Functions keep their packages.** Publishing waits for the space's packages and records their exact versions and hashes. Every invocation of that version gets exactly those, whatever `requirements.txt` says later.
 
-**Not yet:** the editor's completions don't include a space's own packages.
+**Interactive sessions** get the space's package set too, built when the session starts ([sessions.md](sessions.md)); while a session is open, completion comes from its kernel, so it knows the space's packages. **Not yet:** without a session, the editor's completions cover only the runner image's packages.
 
 ## How it works
 

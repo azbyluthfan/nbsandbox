@@ -1,6 +1,6 @@
 # Threat Model
 
-Status: **reviewed for v0.2.0** (2026-11-15: sign-in, revocation, the web UI login, the audit log and package sets added; interactive sessions added 2026-11-21, for v0.3.0; first reviewed for v0.1.0 on 2026-11-08; see the [security review](review.md)). Every mitigation below names the automated check behind it. The check names match the rows of the isolation reports ([Docker](../isolation-report.md), [Linux with runc and gVisor](../isolation-report-linux.md), [Kubernetes](../isolation-report-kubernetes.md)), or are Go test and fuzz target names. Revisit this when the trust model changes: less trusted users, shared spaces, or network policy.
+Status: **reviewed for v0.3.0** (2026-11-21: interactive sessions added; 2026-11-15, for v0.2.0: sign-in, revocation, the web UI login, the audit log and package sets; first reviewed for v0.1.0 on 2026-11-08; see the [security review](review.md)). Every mitigation below names the automated check behind it. The check names match the rows of the isolation reports ([Docker](../isolation-report.md), [Linux with runc and gVisor](../isolation-report-linux.md), [Kubernetes](../isolation-report-kubernetes.md)), or are Go test and fuzz target names. Revisit this when the trust model changes: less trusted users, shared spaces, or network policy.
 
 ## What we protect
 

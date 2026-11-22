@@ -16,7 +16,7 @@ Run Jupyter notebooks headless, each in its own isolated sandbox, with live logs
 
 Every run executes in a **fresh, locked-down container or Pod**. Code in one space can't see another space's files, processes or memory, can't reach the network, and can't use up another run's resources. An automated test suite checks each of these and writes a report: Docker ([report](docs/isolation-report.md)), Linux with Docker Engine with `runc` and gVisor side by side ([report](docs/isolation-report-linux.md)), and Kubernetes ([report](docs/isolation-report-kubernetes.md)).
 
-> **Status:** v0.2, pre-1.0: the API is versioned (`/v1`) and follows the compatibility policy in [docs/api.md](docs/api.md), but expect changes between minor versions. See [Limitations](#limitations).
+> **Status:** v0.3, pre-1.0: the API is versioned (`/v1`) and follows the compatibility policy in [docs/api.md](docs/api.md), but expect changes between minor versions. See [Limitations](#limitations).
 
 **See it working:** [docs/tour.md](docs/tour.md) walks through the web editor and the API step by step, with a screenshot or the real output of each step.
 

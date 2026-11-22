@@ -20,6 +20,8 @@ Interactive sessions are the new surface: a notebook's live kernel, reached over
 | Attach | Docker: the socket proxy now allows `attach` for any container, as it allowed stop and kill: a compromised nbsandboxd could talk to another container's stdin (it is out of scope, as before). Kubernetes: `pods/attach` only in the runs namespace |
 | Session isolation | A session is a run's container or Pod, with the same settings pinned by the same tests, and passes the report's new checks on Docker and on kind: `session-network`, `session-isolation`, `session-memory-limit`, `session-read-only`, `session-reattach` |
 
+**Before the tag (2026-11-22).** Changed since the review: MCP tools for sessions (`nbsandbox-mcp`: the same session API, as the agent's user, with the same scopes), and two fixes in the session bridge (a shell channel that could go silent; an interrupt sent as a cell started was lost). No new dependency: `go.mod`, the runner's `requirements.txt` and its Dockerfile are as reviewed. Repeated: `govulncheck` none reached (the same one in a required module, not called); `pip-audit` none; `gitleaks` the same four test values. Trivy on nbsandboxd and the runner: no HIGH or CRITICAL with a fix, in the weekly run on `13b5440` (2026-11-22), the code this release ships; the builder's inputs are unchanged since the review.
+
 ## v0.2.1 (2026-11-16)
 
 A release workflow fix only (the runner image's manifest label); the code, the dependencies and the pinned base images are those of 0.2.0, so the v0.2.0 review below applies.
