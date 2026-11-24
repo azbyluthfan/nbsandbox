@@ -118,6 +118,7 @@ run 42 — one private network, removed with the run
 - **One trust domain per run:** the orchestrator and workers run the same user's code with the same rights, so data shared among them crosses no boundary. The boundary is between runs.
 - **The private network:** a run's runners reach each other and their fetcher, nothing else (not other runs, nbsandboxd, the host or the internet). In injected mode, also the egress gateway.
 - **Each runner and fetcher gets a token bound to its run**, so a worker of run 42 can't fetch for run 43.
+- **Elastic start:** workers take tasks (splits) as they become free, so a run doesn't need all its workers to begin. It starts once its orchestrator, its fetcher and a **minimum fraction of its requested workers** can be placed (for example `0.5`: half of them), and the rest join as capacity appears. `1.0` means all of them, for engines that need a fixed number of peers. nbsandbox's own admission decides this, extending today's run queue; no external scheduler.
 - **Limits** apply per runner and to the run as a whole. Sizes per run, the ROADMAP's "resource tiers", become a choice of runner sizes and counts.
 - **Everything ends with the run:** runners, fetcher, network and intermediate data.
 - Interactive sessions get the same shape: a session's kernel is its orchestrator, with a fetcher of its own.
@@ -126,7 +127,8 @@ run 42 — one private network, removed with the run
 
 - **Its own image, one Pod per run**, with the run's limits. It never runs notebook code. It holds only that run's resolved credentials.
 - **DuckDB** as the engine, with **external access locked** (no reading local files or arbitrary URLs from SQL, configuration locked, no community extensions), since its SQL comes from the notebook. DuckDB's own docs say SQL from untrusted sources needs sandboxing; the fetcher Pod is that sandbox.
-- **Reads in place:** Parquet and Iceberg statistics skip files and row groups, and only the needed columns are read. Databases through DuckDB's scanners or ADBC drivers (verify SQL Server and MySQL support before promising them; ODBC is the fallback).
+- **Reads in place:** Parquet and Iceberg statistics skip files and row groups, and only the needed columns are read.
+- **Databases:** PostgreSQL and MySQL through DuckDB's own core extensions; databases DuckDB has no connector for, SQL Server first, through ODBC (DuckDB's ODBC extension with the database vendor's driver, Microsoft's for SQL Server). The same connectors can write later.
 - **Simple reads by default:** a source receives only generated scans (these columns, these filters), and joins and aggregation run in DuckDB, so nbsandbox controls exactly what each source sees. Passing more SQL through to a source can be enabled per connection, relying on its database role.
 - **Serves Arrow over Flight SQL** to the run's runners. A query's result can be split, one stream per worker, which is the basis of distributed mode.
 - **The source's own permissions are the real boundary.** Each connection's database user should be **read-only and least-privilege in the database**. nbsandbox's table lists help users; they are not the security guarantee, and the docs and the connection form say so.
@@ -204,6 +206,8 @@ Shared spaces and their per-member connections follow the shared-spaces item.
 - A run = an orchestrator, workers and a fetcher, on a private network per run.
 - The broker (resolving names and permissions, auditing) inside nbsandboxd; the fetcher a per-run Pod of its own image.
 - DuckDB first; other engines only for the cases above.
+- Databases: DuckDB's core extensions (PostgreSQL, MySQL); ODBC for those DuckDB has no connector for (SQL Server first).
+- Runs with workers start elastically, once a minimum fraction of their requested workers can be placed; nbsandbox's own admission, no external scheduler.
 - Simple reads by default; pass-through per connection.
 - Egress through our own Go gateway (one per cluster, with replicas; a role of the nbsandboxd binary), with each run's allowed endpoints in a signed token, so plain NetworkPolicy is enough everywhere.
 - Object storage: any credential that is a secret (access keys, connection strings, SAS tokens). Workload identity (AKS) is parked: it changes how the fetcher Pod is set up, not the design.
