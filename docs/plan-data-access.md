@@ -135,7 +135,10 @@ run 42 — one private network, removed with the run
 
 Kubernetes NetworkPolicy works on IP addresses. DNS-name rules exist only in some engines (Cilium; on AKS, an add-on), so they aren't portable. Instead:
 - **Runs and fetchers may reach only the egress gateway** (plus their run's private network): plain NetworkPolicy, enforced by every engine AKS offers and by Calico or Cilium on-premises. nbsandbox already refuses to run where network policies aren't enforced.
-- **The egress gateway** is a small trusted proxy per worker node, or per cluster. It **resolves names itself** and allows only the run's connection endpoints: HTTPS by name (`CONNECT`), databases as a TCP forward per connection (the fetcher, or in injected mode the notebook, connects to the gateway's address for `crm`). Each connection is logged.
+- **The egress gateway** is our own small proxy in Go: a role of the nbsandboxd binary (`role: gateway`), **one per cluster**, run with several replicas. It **resolves names itself** and allows only the run's connection endpoints: HTTPS by name (`CONNECT`), databases as a TCP tunnel per connection. Each connection is logged.
+- **A run's allowed endpoints reach the gateway in a signed token.** When a run starts, nbsandboxd issues it a token naming the run, its allowed `host:port` list and an expiry. The gateway only checks the signature: it keeps no state and makes no lookup per connection, and the token dies with the run.
+- **Injected mode:** notebook database clients can't talk to a proxy, so the runner starts a small forwarder inside the run, and `nbsandbox.connection("crm")` gives the notebook a local address (`127.0.0.1:15432`) that tunnels through the gateway. HTTP clients use `HTTPS_PROXY`.
+- It can later move to one gateway per node, or to Envoy, if traffic calls for it, without changing the rest of the design.
 - No dependency on a particular CNI, no DNS inside runs, and endpoints whose addresses change (cloud storage) work.
 
 ### Results and writes
@@ -202,6 +205,7 @@ Shared spaces and their per-member connections follow the shared-spaces item.
 - The broker (resolving names and permissions, auditing) inside nbsandboxd; the fetcher a per-run Pod of its own image.
 - DuckDB first; other engines only for the cases above.
 - Simple reads by default; pass-through per connection.
-- Egress through a gateway, so plain NetworkPolicy is enough everywhere.
+- Egress through our own Go gateway (one per cluster, with replicas; a role of the nbsandboxd binary), with each run's allowed endpoints in a signed token, so plain NetworkPolicy is enough everywhere.
+- Object storage: any credential that is a secret (access keys, connection strings, SAS tokens). Workload identity (AKS) is parked: it changes how the fetcher Pod is set up, not the design.
 - Results streamed or written as artifacts; external writes later.
 - Live data is the source's concern: for repeatable results, read a snapshot.
