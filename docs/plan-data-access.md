@@ -119,6 +119,9 @@ run 42 — one private network, removed with the run
 - **The private network:** a run's runners reach each other and their fetcher, nothing else (not other runs, nbsandboxd, the host or the internet). In injected mode, also the egress gateway.
 - **Each runner and fetcher gets a token bound to its run**, so a worker of run 42 can't fetch for run 43.
 - **Elastic start:** workers take tasks (splits) as they become free, so a run doesn't need all its workers to begin. It starts once its orchestrator, its fetcher and a **minimum fraction of its requested workers** can be placed (for example `0.5`: half of them), and the rest join as capacity appears. `1.0` means all of them, for engines that need a fixed number of peers. nbsandbox's own admission decides this, extending today's run queue; no external scheduler.
+  - **Rounded up:** `0.5` of 3 workers means 2.
+  - **A minimum that can never fit is refused when the run is submitted** (larger than the cluster or the per-run cap), with a clear error; a queued run waits at most a set time.
+  - **The operator sets the default fraction, `0.5`;** a run or function can override it within the operator's limits.
 - **Limits** apply per runner and to the run as a whole. Sizes per run, the ROADMAP's "resource tiers", become a choice of runner sizes and counts.
 - **Everything ends with the run:** runners, fetcher, network and intermediate data.
 - Interactive sessions get the same shape: a session's kernel is its orchestrator, with a fetcher of its own.
