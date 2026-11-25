@@ -6,6 +6,7 @@ package grpcapi
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -29,8 +30,10 @@ import (
 	"github.com/azbyluthfan/nbsandbox/internal/audit"
 	"github.com/azbyluthfan/nbsandbox/internal/auth"
 	"github.com/azbyluthfan/nbsandbox/internal/blob"
+	"github.com/azbyluthfan/nbsandbox/internal/connections"
 	"github.com/azbyluthfan/nbsandbox/internal/isolation"
 	"github.com/azbyluthfan/nbsandbox/internal/runs"
+	"github.com/azbyluthfan/nbsandbox/internal/secrets"
 	"github.com/azbyluthfan/nbsandbox/internal/sessions"
 	"github.com/azbyluthfan/nbsandbox/internal/sessions/sessiontest"
 	"github.com/azbyluthfan/nbsandbox/internal/spaces"
@@ -80,6 +83,7 @@ type clients struct {
 	runs   nbsandboxv1connect.RunServiceClient
 	admin  nbsandboxv1connect.AdminServiceClient
 	sess   nbsandboxv1connect.SessionServiceClient
+	conns  nbsandboxv1connect.ConnectionServiceClient
 }
 
 // newServer serves the gRPC API over HTTP/2 and returns clients speaking
@@ -120,7 +124,12 @@ func newServer(t *testing.T) func(user string) clients {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { sess.Shutdown(context.Background()) })
-	h := Handler(Deps{Sessions: sess, Auth: &auth.Authenticator{Users: us, Limiter: auth.NewLoginLimiter(3, time.Minute), LimitByAddress: true}, Spaces: svc, Runs: mgr, Logger: log, Shutdown: make(chan struct{}),
+	builtin, err := secrets.NewBuiltin(base64.StdEncoding.EncodeToString(bytes.Repeat([]byte("k"), 32)), db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conns := connections.New(connections.Deps{DB: db, Secrets: builtin, Allowed: connections.NewAllowed([]string{"*.internal"}), Log: log})
+	h := Handler(Deps{Sessions: sess, Connections: conns, Auth: &auth.Authenticator{Users: us, Limiter: auth.NewLoginLimiter(3, time.Minute), LimitByAddress: true}, Spaces: svc, Runs: mgr, Logger: log, Shutdown: make(chan struct{}),
 		Audit: rec,
 		Runtime: func() (api.RuntimeInfo, error) {
 			var ri api.RuntimeInfo
@@ -142,6 +151,7 @@ func newServer(t *testing.T) func(user string) clients {
 			runs:   nbsandboxv1connect.NewRunServiceClient(srv.Client(), srv.URL, opts...),
 			admin:  nbsandboxv1connect.NewAdminServiceClient(srv.Client(), srv.URL, opts...),
 			sess:   nbsandboxv1connect.NewSessionServiceClient(srv.Client(), srv.URL, opts...),
+			conns:  nbsandboxv1connect.NewConnectionServiceClient(srv.Client(), srv.URL, opts...),
 		}
 	}
 }

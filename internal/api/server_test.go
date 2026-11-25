@@ -6,6 +6,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,10 +24,12 @@ import (
 	"github.com/azbyluthfan/nbsandbox/internal/auth"
 	"github.com/azbyluthfan/nbsandbox/internal/auth/authtest"
 	"github.com/azbyluthfan/nbsandbox/internal/blob"
+	"github.com/azbyluthfan/nbsandbox/internal/connections"
 	"github.com/azbyluthfan/nbsandbox/internal/isolation"
 	"github.com/azbyluthfan/nbsandbox/internal/obs"
 	"github.com/azbyluthfan/nbsandbox/internal/packages"
 	"github.com/azbyluthfan/nbsandbox/internal/runs"
+	"github.com/azbyluthfan/nbsandbox/internal/secrets"
 	"github.com/azbyluthfan/nbsandbox/internal/sessions"
 	"github.com/azbyluthfan/nbsandbox/internal/sessions/sessiontest"
 	"github.com/azbyluthfan/nbsandbox/internal/spaces"
@@ -121,7 +124,12 @@ func newEnvFull(t *testing.T, idp *authtest.IDP, pkgs func(db *store.DB, dataDir
 	}
 	t.Cleanup(func() { sess.Shutdown(context.Background()) })
 	rec := audit.New(audit.Config{Enabled: true, Retention: time.Hour, Downloads: true}, db, logger, m.AuditFailures)
-	deps := Deps{Auth: authn, Users: us, Health: health, Metrics: m, Logger: logger, Spaces: svc, MaxUpload: testMaxSpace + 64<<10, Audit: rec,
+	builtin, err := secrets.NewBuiltin(base64.StdEncoding.EncodeToString(bytes.Repeat([]byte("k"), 32)), db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conns := connections.New(connections.Deps{DB: db, Secrets: builtin, Allowed: connections.NewAllowed([]string{"*.internal"}), Log: logger})
+	deps := Deps{Connections: conns, Auth: authn, Users: us, Health: health, Metrics: m, Logger: logger, Spaces: svc, MaxUpload: testMaxSpace + 64<<10, Audit: rec,
 		Runs: mgr, Sessions: sess, Shutdown: shutdown, StreamHeartbeat: 50 * time.Millisecond, Runtime: func() (RuntimeInfo, error) {
 			var ri RuntimeInfo
 			ri.Image.Ref, ri.PythonVersion, ri.Packages, ri.Runtime = "nbsandbox-runner:test", "3.13.18", map[string]string{"pandas": "3.1.1"}, "runc"

@@ -4,6 +4,14 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+### Added
+
+- **Connections, the first part of reading data outside nbsandbox** ([docs/plan-data-access.md](docs/plan-data-access.md)): a user's data sources (PostgreSQL, MySQL, SQL Server, object storage, HTTP APIs), created through the API and gRPC (`ConnectionService`) and bound to a space's names per environment (dev, prod). Secrets go to a secret provider (Kubernetes Secrets, or a built-in encrypted store for development) and are never returned. Connections may point only where the operator allows (`connections.allowed`). Off by default (`connections.enabled`); notebooks read them in a later release. A new scope, `nbsandbox.connections`, for changing them.
+
+### Upgrading
+
+- **Database migration 13** runs at startup: connections, their bindings, and the built-in secret store.
+
 ## [0.3.0] - 2026-11-22
 
 ### Upgrading from 0.2.1

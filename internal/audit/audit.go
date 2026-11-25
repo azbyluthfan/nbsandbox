@@ -64,6 +64,10 @@ var (
 		// its cells run.
 		auth.OpOpenSession: true, auth.OpEndSession: true, auth.OpInterruptSession: true, auth.OpRestartSession: true,
 		auth.OpSyncSession: true,
+		// Connections: who created, changed, deleted or bound them; never
+		// their secrets.
+		auth.OpCreateConnection: true, auth.OpUpdateConnection: true, auth.OpDeleteConnection: true,
+		auth.OpSetSpaceConnections: true,
 	}
 	downloads = map[auth.Op]bool{
 		auth.OpGetFile: true, auth.OpGetRunNotebook: true, auth.OpGetRunHTML: true, auth.OpGetArtifact: true, auth.OpGetRunLog: true,

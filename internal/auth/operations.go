@@ -24,6 +24,14 @@ const (
 	OpDeleteFile   Op = "DeleteFile"
 	OpCreateFolder Op = "CreateFolder"
 
+	OpCreateConnection    Op = "CreateConnection"
+	OpListConnections     Op = "ListConnections"
+	OpGetConnection       Op = "GetConnection"
+	OpUpdateConnection    Op = "UpdateConnection"
+	OpDeleteConnection    Op = "DeleteConnection"
+	OpGetSpaceConnections Op = "GetSpaceConnections"
+	OpSetSpaceConnections Op = "SetSpaceConnections"
+
 	OpGetSpacePackages   Op = "GetSpacePackages"
 	OpBuildSpacePackages Op = "BuildSpacePackages"
 
@@ -162,6 +170,17 @@ var opScopes = map[Op]string{
 
 	OpAdminListSessions: ScopeAdmin,
 	OpAdminEndSession:   ScopeAdmin,
+
+	// Connections hold credentials: changing them, or which ones a space
+	// uses, needs their own scope; reading them (never their secrets)
+	// needs read.
+	OpCreateConnection:    ScopeConnections,
+	OpListConnections:     ScopeRead,
+	OpGetConnection:       ScopeRead,
+	OpUpdateConnection:    ScopeConnections,
+	OpDeleteConnection:    ScopeConnections,
+	OpGetSpaceConnections: ScopeRead,
+	OpSetSpaceConnections: ScopeConnections,
 
 	OpFollowRunResult:      ScopeRead,
 	OpInvokeFunctionStream: ScopeFunctionsInvoke,

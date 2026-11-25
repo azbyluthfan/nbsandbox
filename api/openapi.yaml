@@ -48,6 +48,13 @@ tags:
       (no network, the run limits, the space's package set). Run a cell, see
       its output, keep the variables; completion and docs from the real
       objects. Jupyter messages over a WebSocket (docs/sessions.md).
+  - name: connections
+    description: |
+      A user's data sources (PostgreSQL, MySQL, SQL Server, object storage, an
+      HTTP API), named in their spaces per environment, read where the data
+      lives (docs/plan-data-access.md). A connection's secret goes to the
+      configured secret provider and is never returned. Off unless
+      connections.enabled; while off, every route here is 404.
   - name: admin
     description: Every owner's spaces and runs, draining, and the audit log, for administrators (scope nbsandbox.admin)
 
@@ -524,6 +531,149 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+
+  /v1/connections:
+    post:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.connections] }]
+      tags: [connections]
+      summary: Create a connection
+      description: |
+        A data source of the caller's. Settings depend on the type; unknown
+        settings are refused (a secret never goes in them). The host must be
+        one the operator allows (connections.allowed); loopback and
+        link-local addresses never are. The secret is its value (stored by
+        nbsandbox's secret provider: managed) or a reference to a secret the
+        provider already holds (Kubernetes: name#key, a Secret in the runs
+        namespace). Databases need one; an open API doesn't.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, type, settings]
+              properties:
+                name: { type: string, pattern: "^[a-z][a-z0-9_-]{0,62}$" }
+                type: { type: string, enum: [postgresql, mysql, sqlserver, s3, azureblob, http] }
+                settings: { $ref: "#/components/schemas/ConnectionSettings" }
+                secret: { $ref: "#/components/schemas/ConnectionSecretInput" }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Connection" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [connections]
+      summary: The caller's connections
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ConnectionList" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/connections/{connection_id}:
+    parameters:
+      - $ref: "#/components/parameters/ConnectionID"
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [connections]
+      summary: A connection, with where it is used
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Connection" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.connections] }]
+      tags: [connections]
+      summary: Rename a connection, replace its settings, or replace its secret
+      description: Settings, when given, replace them all. A new secret replaces the old one at once, for every space using the connection.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                name: { type: string, pattern: "^[a-z][a-z0-9_-]{0,62}$" }
+                settings: { $ref: "#/components/schemas/ConnectionSettings" }
+                secret: { $ref: "#/components/schemas/ConnectionSecretInput" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Connection" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.connections] }]
+      tags: [connections]
+      summary: Delete a connection, and its managed secret
+      description: Refused (409) while a space binds it.
+      responses:
+        "204": { description: Deleted }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /v1/spaces/{id}/connections:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [connections]
+      summary: What names mean in the space, per environment
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SpaceConnections" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.connections] }]
+      tags: [connections]
+      summary: Replace the space's environments and bindings
+      description: |
+        Each environment binds names (used in SQL: crm.orders) to the caller's
+        connections, by name or ID. Every environment must bind the same
+        names. default_environment is required with several environments.
+        An empty environments object unbinds everything.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                default_environment: { type: string }
+                environments:
+                  type: object
+                  description: environment -> { name -> connection name or ID }
+                  additionalProperties:
+                    type: object
+                    additionalProperties: { type: string }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SpaceConnections" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /v1/spaces/{id}/packages:
     parameters:
@@ -1439,6 +1589,12 @@ components:
       required: true
       description: Run UUID (lowercase). Anything else is 400.
       schema: { type: string, format: uuid }
+    ConnectionID:
+      name: connection_id
+      in: path
+      required: true
+      description: Connection UUID (lowercase). Anything else is 400.
+      schema: { type: string, format: uuid }
     SessionID:
       name: session_id
       in: path
@@ -1488,6 +1644,75 @@ components:
               status: { type: string, enum: [queued, running] }
 
   schemas:
+    ConnectionSettings:
+      type: object
+      description: |
+        By type. postgresql, mysql, sqlserver: host, port (5432, 3306, 1433),
+        database, user. s3: endpoint (host[:port]), bucket, region
+        (us-east-1), access_key_id, use_ssl (true), url_style (vhost or path).
+        azureblob: account, container, endpoint, auth (connection_string,
+        account_key or sas: what the secret is). http: url, auth_header
+        (Authorization), auth_prefix ("Bearer ").
+      additionalProperties: true
+    ConnectionSecretInput:
+      type: object
+      additionalProperties: false
+      description: "The secret's value, a reference to an existing secret (name#key), or none: true. Never returned."
+      properties:
+        value: { type: string, minLength: 1 }
+        ref: { type: string }
+        none: { type: boolean }
+    Connection:
+      type: object
+      required: [id, name, type, settings, secret, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        type: { type: string, enum: [postgresql, mysql, sqlserver, s3, azureblob, http] }
+        settings: { $ref: "#/components/schemas/ConnectionSettings" }
+        secret:
+          type: object
+          required: [mode]
+          description: How the secret is kept; never its value
+          properties:
+            mode: { type: string, enum: [none, managed, referenced] }
+            provider: { type: string, description: builtin or kubernetes }
+            ref: { type: string, description: A referenced secret's name#key }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        used_by:
+          type: array
+          description: Where it is bound (one connection only)
+          items:
+            type: object
+            required: [space_id, space_name, environment, name]
+            properties:
+              space_id: { type: string, format: uuid }
+              space_name: { type: string }
+              environment: { type: string }
+              name: { type: string }
+    ConnectionList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Connection" } }
+    SpaceConnections:
+      type: object
+      required: [default_environment, environments]
+      properties:
+        default_environment: { type: string, description: "Used when a run doesn't choose one ('' when there are no environments)" }
+        environments:
+          type: object
+          description: environment -> { name -> its connection }
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: object
+              required: [id, name, type]
+              properties:
+                id: { type: string, format: uuid }
+                name: { type: string }
+                type: { type: string }
     Session:
       type: object
       required: [id, space_id, notebook, mode, status, created_at]

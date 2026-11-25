@@ -17,6 +17,7 @@ import (
 	"github.com/azbyluthfan/nbsandbox/internal/audit"
 	"github.com/azbyluthfan/nbsandbox/internal/auth"
 	"github.com/azbyluthfan/nbsandbox/internal/completions"
+	"github.com/azbyluthfan/nbsandbox/internal/connections"
 	"github.com/azbyluthfan/nbsandbox/internal/obs"
 	"github.com/azbyluthfan/nbsandbox/internal/runs"
 	"github.com/azbyluthfan/nbsandbox/internal/sessions"
@@ -46,6 +47,8 @@ type Deps struct {
 	Runs       *runs.Manager
 	// Sessions are interactive sessions (nil: turned off).
 	Sessions *sessions.Manager
+	// Connections are users' data sources (nil: turned off).
+	Connections *connections.Service
 	// Runtime describes the runner image and limits (GET /v1/runtime).
 	Runtime func() (RuntimeInfo, error)
 	// Completions opens a stored completion index (gzipped JSON); nil:
@@ -99,6 +102,9 @@ func wrapRoute(rt Route, d Deps) http.Handler {
 	if rt.SessionScoped {
 		h = requireValidSessionID(h)
 	}
+	if rt.ConnectionScoped {
+		h = requireValidConnectionID(h)
+	}
 	if rt.SpaceScoped || rt.AnySpace {
 		h = requireValidSpaceID(h)
 	}
@@ -130,6 +136,8 @@ func pathTarget(r *http.Request) string {
 	switch {
 	case r.PathValue("session_id") != "":
 		return r.PathValue("session_id")
+	case r.PathValue("connection_id") != "":
+		return r.PathValue("connection_id")
 	case run != "" && p != "":
 		return run + "/" + p
 	case run != "":

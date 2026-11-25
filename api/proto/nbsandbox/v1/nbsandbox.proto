@@ -795,3 +795,97 @@ message AdminEndSessionRequest {
   string session_id = 1;
   string reason = 2;
 }
+
+// Connections: a user's data sources (PostgreSQL, MySQL, SQL Server, object
+// storage, an HTTP API), named in their spaces per environment, read where
+// the data lives (docs/plan-data-access.md). A secret goes in and never
+// comes back out. Off unless connections.enabled (every call: NOT_FOUND).
+service ConnectionService {
+  rpc CreateConnection(CreateConnectionRequest) returns (Connection);
+  rpc ListConnections(ListConnectionsRequest) returns (ListConnectionsResponse);
+  // A connection, with where it is bound.
+  rpc GetConnection(GetConnectionRequest) returns (Connection);
+  // Rename it, replace its settings, or replace its secret.
+  rpc UpdateConnection(UpdateConnectionRequest) returns (Connection);
+  // Refused (FAILED_PRECONDITION) while a space binds it.
+  rpc DeleteConnection(GetConnectionRequest) returns (DeleteConnectionResponse);
+  rpc GetSpaceConnections(GetSpaceConnectionsRequest) returns (SpaceConnections);
+  // Replaces the space's environments and bindings at once.
+  rpc SetSpaceConnections(SetSpaceConnectionsRequest) returns (SpaceConnections);
+}
+
+// A secret: its value (stored by nbsandbox's secret provider), a reference
+// to one the provider holds (Kubernetes: name#key), or none.
+message ConnectionSecretInput {
+  oneof kind {
+    string value = 1;
+    string ref = 2;
+    bool none = 3;
+  }
+}
+message CreateConnectionRequest {
+  string name = 1;
+  string type = 2; // postgresql, mysql, sqlserver, s3, azureblob or http
+  google.protobuf.Struct settings = 3;
+  ConnectionSecretInput secret = 4;
+}
+// How a secret is kept; never its value.
+message ConnectionSecret {
+  string mode = 1; // none, managed or referenced
+  string provider = 2;
+  string ref = 3; // a referenced secret's name#key
+}
+message ConnectionUse {
+  string space_id = 1;
+  string space_name = 2;
+  string environment = 3;
+  string name = 4;
+}
+message Connection {
+  string id = 1;
+  string name = 2;
+  string type = 3;
+  google.protobuf.Struct settings = 4;
+  ConnectionSecret secret = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+  repeated ConnectionUse used_by = 8; // GetConnection only
+}
+message ListConnectionsRequest {}
+message ListConnectionsResponse {
+  repeated Connection items = 1;
+}
+message GetConnectionRequest {
+  string connection_id = 1;
+}
+message UpdateConnectionRequest {
+  string connection_id = 1;
+  optional string name = 2;
+  google.protobuf.Struct settings = 3; // replaces them all, when given
+  ConnectionSecretInput secret = 4; // replaces the secret, when given
+}
+message DeleteConnectionResponse {}
+message GetSpaceConnectionsRequest {
+  string space_id = 1;
+}
+// One environment's bindings: name -> a connection's name or ID.
+message EnvironmentBindings {
+  map<string, string> names = 1;
+}
+message SetSpaceConnectionsRequest {
+  string space_id = 1;
+  string default_environment = 2;
+  map<string, EnvironmentBindings> environments = 3;
+}
+message BoundConnection {
+  string id = 1;
+  string name = 2;
+  string type = 3;
+}
+message BoundEnvironment {
+  map<string, BoundConnection> names = 1;
+}
+message SpaceConnections {
+  string default_environment = 1;
+  map<string, BoundEnvironment> environments = 2;
+}

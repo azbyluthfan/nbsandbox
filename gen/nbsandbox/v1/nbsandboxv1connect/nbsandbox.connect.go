@@ -40,6 +40,8 @@ const (
 	RunServiceName = "nbsandbox.v1.RunService"
 	// SessionServiceName is the fully-qualified name of the SessionService service.
 	SessionServiceName = "nbsandbox.v1.SessionService"
+	// ConnectionServiceName is the fully-qualified name of the ConnectionService service.
+	ConnectionServiceName = "nbsandbox.v1.ConnectionService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -206,6 +208,27 @@ const (
 	// SessionServiceSessionChannelProcedure is the fully-qualified name of the SessionService's
 	// SessionChannel RPC.
 	SessionServiceSessionChannelProcedure = "/nbsandbox.v1.SessionService/SessionChannel"
+	// ConnectionServiceCreateConnectionProcedure is the fully-qualified name of the ConnectionService's
+	// CreateConnection RPC.
+	ConnectionServiceCreateConnectionProcedure = "/nbsandbox.v1.ConnectionService/CreateConnection"
+	// ConnectionServiceListConnectionsProcedure is the fully-qualified name of the ConnectionService's
+	// ListConnections RPC.
+	ConnectionServiceListConnectionsProcedure = "/nbsandbox.v1.ConnectionService/ListConnections"
+	// ConnectionServiceGetConnectionProcedure is the fully-qualified name of the ConnectionService's
+	// GetConnection RPC.
+	ConnectionServiceGetConnectionProcedure = "/nbsandbox.v1.ConnectionService/GetConnection"
+	// ConnectionServiceUpdateConnectionProcedure is the fully-qualified name of the ConnectionService's
+	// UpdateConnection RPC.
+	ConnectionServiceUpdateConnectionProcedure = "/nbsandbox.v1.ConnectionService/UpdateConnection"
+	// ConnectionServiceDeleteConnectionProcedure is the fully-qualified name of the ConnectionService's
+	// DeleteConnection RPC.
+	ConnectionServiceDeleteConnectionProcedure = "/nbsandbox.v1.ConnectionService/DeleteConnection"
+	// ConnectionServiceGetSpaceConnectionsProcedure is the fully-qualified name of the
+	// ConnectionService's GetSpaceConnections RPC.
+	ConnectionServiceGetSpaceConnectionsProcedure = "/nbsandbox.v1.ConnectionService/GetSpaceConnections"
+	// ConnectionServiceSetSpaceConnectionsProcedure is the fully-qualified name of the
+	// ConnectionService's SetSpaceConnections RPC.
+	ConnectionServiceSetSpaceConnectionsProcedure = "/nbsandbox.v1.ConnectionService/SetSpaceConnections"
 )
 
 // SpaceServiceClient is a client for the nbsandbox.v1.SpaceService service.
@@ -2004,4 +2027,238 @@ func (UnimplementedSessionServiceHandler) SyncSession(context.Context, *connect.
 
 func (UnimplementedSessionServiceHandler) SessionChannel(context.Context, *connect.BidiStream[v1.SessionChannelRequest, v1.SessionMessage]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.SessionService.SessionChannel is not implemented"))
+}
+
+// ConnectionServiceClient is a client for the nbsandbox.v1.ConnectionService service.
+type ConnectionServiceClient interface {
+	CreateConnection(context.Context, *connect.Request[v1.CreateConnectionRequest]) (*connect.Response[v1.Connection], error)
+	ListConnections(context.Context, *connect.Request[v1.ListConnectionsRequest]) (*connect.Response[v1.ListConnectionsResponse], error)
+	// A connection, with where it is bound.
+	GetConnection(context.Context, *connect.Request[v1.GetConnectionRequest]) (*connect.Response[v1.Connection], error)
+	// Rename it, replace its settings, or replace its secret.
+	UpdateConnection(context.Context, *connect.Request[v1.UpdateConnectionRequest]) (*connect.Response[v1.Connection], error)
+	// Refused (FAILED_PRECONDITION) while a space binds it.
+	DeleteConnection(context.Context, *connect.Request[v1.GetConnectionRequest]) (*connect.Response[v1.DeleteConnectionResponse], error)
+	GetSpaceConnections(context.Context, *connect.Request[v1.GetSpaceConnectionsRequest]) (*connect.Response[v1.SpaceConnections], error)
+	// Replaces the space's environments and bindings at once.
+	SetSpaceConnections(context.Context, *connect.Request[v1.SetSpaceConnectionsRequest]) (*connect.Response[v1.SpaceConnections], error)
+}
+
+// NewConnectionServiceClient constructs a client for the nbsandbox.v1.ConnectionService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewConnectionServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ConnectionServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	connectionServiceMethods := v1.File_nbsandbox_v1_nbsandbox_proto.Services().ByName("ConnectionService").Methods()
+	return &connectionServiceClient{
+		createConnection: connect.NewClient[v1.CreateConnectionRequest, v1.Connection](
+			httpClient,
+			baseURL+ConnectionServiceCreateConnectionProcedure,
+			connect.WithSchema(connectionServiceMethods.ByName("CreateConnection")),
+			connect.WithClientOptions(opts...),
+		),
+		listConnections: connect.NewClient[v1.ListConnectionsRequest, v1.ListConnectionsResponse](
+			httpClient,
+			baseURL+ConnectionServiceListConnectionsProcedure,
+			connect.WithSchema(connectionServiceMethods.ByName("ListConnections")),
+			connect.WithClientOptions(opts...),
+		),
+		getConnection: connect.NewClient[v1.GetConnectionRequest, v1.Connection](
+			httpClient,
+			baseURL+ConnectionServiceGetConnectionProcedure,
+			connect.WithSchema(connectionServiceMethods.ByName("GetConnection")),
+			connect.WithClientOptions(opts...),
+		),
+		updateConnection: connect.NewClient[v1.UpdateConnectionRequest, v1.Connection](
+			httpClient,
+			baseURL+ConnectionServiceUpdateConnectionProcedure,
+			connect.WithSchema(connectionServiceMethods.ByName("UpdateConnection")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteConnection: connect.NewClient[v1.GetConnectionRequest, v1.DeleteConnectionResponse](
+			httpClient,
+			baseURL+ConnectionServiceDeleteConnectionProcedure,
+			connect.WithSchema(connectionServiceMethods.ByName("DeleteConnection")),
+			connect.WithClientOptions(opts...),
+		),
+		getSpaceConnections: connect.NewClient[v1.GetSpaceConnectionsRequest, v1.SpaceConnections](
+			httpClient,
+			baseURL+ConnectionServiceGetSpaceConnectionsProcedure,
+			connect.WithSchema(connectionServiceMethods.ByName("GetSpaceConnections")),
+			connect.WithClientOptions(opts...),
+		),
+		setSpaceConnections: connect.NewClient[v1.SetSpaceConnectionsRequest, v1.SpaceConnections](
+			httpClient,
+			baseURL+ConnectionServiceSetSpaceConnectionsProcedure,
+			connect.WithSchema(connectionServiceMethods.ByName("SetSpaceConnections")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// connectionServiceClient implements ConnectionServiceClient.
+type connectionServiceClient struct {
+	createConnection    *connect.Client[v1.CreateConnectionRequest, v1.Connection]
+	listConnections     *connect.Client[v1.ListConnectionsRequest, v1.ListConnectionsResponse]
+	getConnection       *connect.Client[v1.GetConnectionRequest, v1.Connection]
+	updateConnection    *connect.Client[v1.UpdateConnectionRequest, v1.Connection]
+	deleteConnection    *connect.Client[v1.GetConnectionRequest, v1.DeleteConnectionResponse]
+	getSpaceConnections *connect.Client[v1.GetSpaceConnectionsRequest, v1.SpaceConnections]
+	setSpaceConnections *connect.Client[v1.SetSpaceConnectionsRequest, v1.SpaceConnections]
+}
+
+// CreateConnection calls nbsandbox.v1.ConnectionService.CreateConnection.
+func (c *connectionServiceClient) CreateConnection(ctx context.Context, req *connect.Request[v1.CreateConnectionRequest]) (*connect.Response[v1.Connection], error) {
+	return c.createConnection.CallUnary(ctx, req)
+}
+
+// ListConnections calls nbsandbox.v1.ConnectionService.ListConnections.
+func (c *connectionServiceClient) ListConnections(ctx context.Context, req *connect.Request[v1.ListConnectionsRequest]) (*connect.Response[v1.ListConnectionsResponse], error) {
+	return c.listConnections.CallUnary(ctx, req)
+}
+
+// GetConnection calls nbsandbox.v1.ConnectionService.GetConnection.
+func (c *connectionServiceClient) GetConnection(ctx context.Context, req *connect.Request[v1.GetConnectionRequest]) (*connect.Response[v1.Connection], error) {
+	return c.getConnection.CallUnary(ctx, req)
+}
+
+// UpdateConnection calls nbsandbox.v1.ConnectionService.UpdateConnection.
+func (c *connectionServiceClient) UpdateConnection(ctx context.Context, req *connect.Request[v1.UpdateConnectionRequest]) (*connect.Response[v1.Connection], error) {
+	return c.updateConnection.CallUnary(ctx, req)
+}
+
+// DeleteConnection calls nbsandbox.v1.ConnectionService.DeleteConnection.
+func (c *connectionServiceClient) DeleteConnection(ctx context.Context, req *connect.Request[v1.GetConnectionRequest]) (*connect.Response[v1.DeleteConnectionResponse], error) {
+	return c.deleteConnection.CallUnary(ctx, req)
+}
+
+// GetSpaceConnections calls nbsandbox.v1.ConnectionService.GetSpaceConnections.
+func (c *connectionServiceClient) GetSpaceConnections(ctx context.Context, req *connect.Request[v1.GetSpaceConnectionsRequest]) (*connect.Response[v1.SpaceConnections], error) {
+	return c.getSpaceConnections.CallUnary(ctx, req)
+}
+
+// SetSpaceConnections calls nbsandbox.v1.ConnectionService.SetSpaceConnections.
+func (c *connectionServiceClient) SetSpaceConnections(ctx context.Context, req *connect.Request[v1.SetSpaceConnectionsRequest]) (*connect.Response[v1.SpaceConnections], error) {
+	return c.setSpaceConnections.CallUnary(ctx, req)
+}
+
+// ConnectionServiceHandler is an implementation of the nbsandbox.v1.ConnectionService service.
+type ConnectionServiceHandler interface {
+	CreateConnection(context.Context, *connect.Request[v1.CreateConnectionRequest]) (*connect.Response[v1.Connection], error)
+	ListConnections(context.Context, *connect.Request[v1.ListConnectionsRequest]) (*connect.Response[v1.ListConnectionsResponse], error)
+	// A connection, with where it is bound.
+	GetConnection(context.Context, *connect.Request[v1.GetConnectionRequest]) (*connect.Response[v1.Connection], error)
+	// Rename it, replace its settings, or replace its secret.
+	UpdateConnection(context.Context, *connect.Request[v1.UpdateConnectionRequest]) (*connect.Response[v1.Connection], error)
+	// Refused (FAILED_PRECONDITION) while a space binds it.
+	DeleteConnection(context.Context, *connect.Request[v1.GetConnectionRequest]) (*connect.Response[v1.DeleteConnectionResponse], error)
+	GetSpaceConnections(context.Context, *connect.Request[v1.GetSpaceConnectionsRequest]) (*connect.Response[v1.SpaceConnections], error)
+	// Replaces the space's environments and bindings at once.
+	SetSpaceConnections(context.Context, *connect.Request[v1.SetSpaceConnectionsRequest]) (*connect.Response[v1.SpaceConnections], error)
+}
+
+// NewConnectionServiceHandler builds an HTTP handler from the service implementation. It returns
+// the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewConnectionServiceHandler(svc ConnectionServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	connectionServiceMethods := v1.File_nbsandbox_v1_nbsandbox_proto.Services().ByName("ConnectionService").Methods()
+	connectionServiceCreateConnectionHandler := connect.NewUnaryHandler(
+		ConnectionServiceCreateConnectionProcedure,
+		svc.CreateConnection,
+		connect.WithSchema(connectionServiceMethods.ByName("CreateConnection")),
+		connect.WithHandlerOptions(opts...),
+	)
+	connectionServiceListConnectionsHandler := connect.NewUnaryHandler(
+		ConnectionServiceListConnectionsProcedure,
+		svc.ListConnections,
+		connect.WithSchema(connectionServiceMethods.ByName("ListConnections")),
+		connect.WithHandlerOptions(opts...),
+	)
+	connectionServiceGetConnectionHandler := connect.NewUnaryHandler(
+		ConnectionServiceGetConnectionProcedure,
+		svc.GetConnection,
+		connect.WithSchema(connectionServiceMethods.ByName("GetConnection")),
+		connect.WithHandlerOptions(opts...),
+	)
+	connectionServiceUpdateConnectionHandler := connect.NewUnaryHandler(
+		ConnectionServiceUpdateConnectionProcedure,
+		svc.UpdateConnection,
+		connect.WithSchema(connectionServiceMethods.ByName("UpdateConnection")),
+		connect.WithHandlerOptions(opts...),
+	)
+	connectionServiceDeleteConnectionHandler := connect.NewUnaryHandler(
+		ConnectionServiceDeleteConnectionProcedure,
+		svc.DeleteConnection,
+		connect.WithSchema(connectionServiceMethods.ByName("DeleteConnection")),
+		connect.WithHandlerOptions(opts...),
+	)
+	connectionServiceGetSpaceConnectionsHandler := connect.NewUnaryHandler(
+		ConnectionServiceGetSpaceConnectionsProcedure,
+		svc.GetSpaceConnections,
+		connect.WithSchema(connectionServiceMethods.ByName("GetSpaceConnections")),
+		connect.WithHandlerOptions(opts...),
+	)
+	connectionServiceSetSpaceConnectionsHandler := connect.NewUnaryHandler(
+		ConnectionServiceSetSpaceConnectionsProcedure,
+		svc.SetSpaceConnections,
+		connect.WithSchema(connectionServiceMethods.ByName("SetSpaceConnections")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/nbsandbox.v1.ConnectionService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case ConnectionServiceCreateConnectionProcedure:
+			connectionServiceCreateConnectionHandler.ServeHTTP(w, r)
+		case ConnectionServiceListConnectionsProcedure:
+			connectionServiceListConnectionsHandler.ServeHTTP(w, r)
+		case ConnectionServiceGetConnectionProcedure:
+			connectionServiceGetConnectionHandler.ServeHTTP(w, r)
+		case ConnectionServiceUpdateConnectionProcedure:
+			connectionServiceUpdateConnectionHandler.ServeHTTP(w, r)
+		case ConnectionServiceDeleteConnectionProcedure:
+			connectionServiceDeleteConnectionHandler.ServeHTTP(w, r)
+		case ConnectionServiceGetSpaceConnectionsProcedure:
+			connectionServiceGetSpaceConnectionsHandler.ServeHTTP(w, r)
+		case ConnectionServiceSetSpaceConnectionsProcedure:
+			connectionServiceSetSpaceConnectionsHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedConnectionServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedConnectionServiceHandler struct{}
+
+func (UnimplementedConnectionServiceHandler) CreateConnection(context.Context, *connect.Request[v1.CreateConnectionRequest]) (*connect.Response[v1.Connection], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.ConnectionService.CreateConnection is not implemented"))
+}
+
+func (UnimplementedConnectionServiceHandler) ListConnections(context.Context, *connect.Request[v1.ListConnectionsRequest]) (*connect.Response[v1.ListConnectionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.ConnectionService.ListConnections is not implemented"))
+}
+
+func (UnimplementedConnectionServiceHandler) GetConnection(context.Context, *connect.Request[v1.GetConnectionRequest]) (*connect.Response[v1.Connection], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.ConnectionService.GetConnection is not implemented"))
+}
+
+func (UnimplementedConnectionServiceHandler) UpdateConnection(context.Context, *connect.Request[v1.UpdateConnectionRequest]) (*connect.Response[v1.Connection], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.ConnectionService.UpdateConnection is not implemented"))
+}
+
+func (UnimplementedConnectionServiceHandler) DeleteConnection(context.Context, *connect.Request[v1.GetConnectionRequest]) (*connect.Response[v1.DeleteConnectionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.ConnectionService.DeleteConnection is not implemented"))
+}
+
+func (UnimplementedConnectionServiceHandler) GetSpaceConnections(context.Context, *connect.Request[v1.GetSpaceConnectionsRequest]) (*connect.Response[v1.SpaceConnections], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.ConnectionService.GetSpaceConnections is not implemented"))
+}
+
+func (UnimplementedConnectionServiceHandler) SetSpaceConnections(context.Context, *connect.Request[v1.SetSpaceConnectionsRequest]) (*connect.Response[v1.SpaceConnections], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.ConnectionService.SetSpaceConnections is not implemented"))
 }
