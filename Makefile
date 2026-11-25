@@ -150,6 +150,23 @@ runner-lock: ## Re-lock runner-image/requirements.txt with hashes (Docker needed
 	docker run --rm -v "$(CURDIR)/runner-image":/work -w /work $(PY_BASE) sh -c \
 		'pip install -q --root-user-action=ignore pip-tools && pip-compile -q --generate-hashes --allow-unsafe --strip-extras --no-header --output-file requirements.txt requirements.in'
 
+FETCHER_IMAGE ?= nbsandbox-fetcher:dev
+
+.PHONY: fetcher-image
+fetcher-image: ## Build the fetcher image: reads runs' external data (Docker needed)
+	docker build -q -t $(FETCHER_IMAGE) fetcher-image >/dev/null
+	@echo "built $(FETCHER_IMAGE)"
+
+.PHONY: fetcher-test
+fetcher-test: ## Fetcher gate and lockdown tests, inside the image (Docker needed)
+	docker run --rm --network none --read-only --tmpfs /tmp -v "$(CURDIR)/fetcher-image/tests":/tests:ro \
+		--entrypoint python $(FETCHER_IMAGE) -m unittest discover -s /tests -v
+
+.PHONY: fetcher-lock
+fetcher-lock: ## Re-lock fetcher-image/requirements.txt with hashes (Docker needed)
+	docker run --rm -v "$(CURDIR)/fetcher-image":/work -w /work $(PY_BASE) sh -c \
+		'pip install -q --root-user-action=ignore pip-tools && pip-compile -q --generate-hashes --allow-unsafe --strip-extras --no-header --output-file requirements.txt requirements.in'
+
 .PHONY: workloads
 workloads: ## Regenerate test workload notebooks (runner image needed)
 	docker run --rm --user "$$(id -u):$$(id -g)" -v "$(CURDIR)/tests/workloads":/w -w /w --entrypoint python $(RUNNER_IMAGE) make_notebooks.py

@@ -1,0 +1,6 @@
+# The fetcher's packages: DuckDB reads the sources, pyarrow serves Arrow
+# Flight. Locked with hashes into requirements.txt (make fetcher-lock).
+# DuckDB stays on 1.5.x: 2.0 was slower in the spike and changed the API
+# the fetcher uses (docs/plan-data-access.md).
+duckdb==1.5.6
+pyarrow==22.0.0
