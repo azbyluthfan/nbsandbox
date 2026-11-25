@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -187,11 +188,15 @@ func runDocker(args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
+// connSeq keeps connection names apart within a test binary (the time alone
+// repeated: two tests made the same name in one run).
+var connSeq atomic.Int64
+
 // connection creates one of alice's connections, removed after the test
 // (after its space: cleanups run last first).
 func connection(t *testing.T, name, typ string, settings map[string]any, secret string) string {
 	t.Helper()
-	name = fmt.Sprintf("%s-%d", name, time.Now().UnixNano()%1_000_000)
+	name = fmt.Sprintf("%s-%d", name, connSeq.Add(1)+time.Now().UnixNano()%1_000_000*1000)
 	r := jsonCall(t, "POST", "/v1/connections", "alice", map[string]any{"name": name, "type": typ, "settings": settings,
 		"secret": map[string]any{"value": secret}}, nil)
 	if r.Code != http.StatusCreated {

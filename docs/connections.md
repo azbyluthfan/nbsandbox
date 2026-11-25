@@ -141,6 +141,17 @@ Functions are called by their space's owner today, so they read the space's own 
 
 The integration tests check each row (`make test-connections`).
 
+## When something fails
+
+| What fails | What a notebook sees |
+|---|---|
+| A source stops | Its queries raise `nbsandbox.QueryError` with the source's error; they work again once it is back. |
+| The gateway restarts | Queries work again once it is back: its tokens are signed, not stored. |
+| The fetcher stops (out of memory, its Pod deleted) | Every query raises `QueryError`: "the fetcher can't be reached". A run carries on without its data; a session needs starting again. A fetcher whose network vanishes without closing its connections (a lost node) fails a waiting query within about six and a half minutes. |
+| nbsandboxd restarts | A session reconnects and reads through the same fetcher; a run ends as interrupted. Either way, a fetcher and its network don't outlive their run or session. |
+
+The integration tests check each row (`TestConnectionsFetcherDies`, `TestConnectionsSessionFailures`, `TestConnectionsRunInterrupted`).
+
 ## For operators
 
 ### On Kubernetes (Helm)

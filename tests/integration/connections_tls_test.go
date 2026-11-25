@@ -174,7 +174,9 @@ func TestConnectionsTLS(t *testing.T) {
 	needConnections(t)
 	sources(t)
 	tlsSources(t)
-	conn := func(t *testing.T, name, typ string, s map[string]any) string { return connection(t, name, typ, s, readerPass) }
+	conn := func(t *testing.T, name, typ string, s map[string]any) string {
+		return connection(t, name, typ, s, readerPass)
+	}
 	pgVerify := conn(t, "pg-verify", "postgresql", tlsPG(srcTLSPG, "verify", testCA))
 	pgRequire := conn(t, "pg-require", "postgresql", tlsPG(srcTLSPG, "require", ""))
 	myVerify := conn(t, "my-verify", "mysql", tlsMySQL(srcTLSMySQL, testCA))

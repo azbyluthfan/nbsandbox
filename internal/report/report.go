@@ -79,7 +79,9 @@ var Sections = []Section{
 		"connections-other_bucket", "connections-dotdot", "connections-settings", "connections-db_role",
 		"connections-shop_role", "connections-shop_pass_through", "connections-erp_role", "connections-erp_pass_through", "connections-erp_write",
 		"connections-tls_pg_system", "connections-tls_pg_otherca", "connections-tls_pg_name", "connections-tls_pg_off",
-		"connections-tls_my_name", "connections-tls_my_otherca", "connections-tls_lake_noca"}},
+		"connections-tls_my_name", "connections-tls_my_otherca", "connections-tls_lake_noca",
+		"connections-fetcher_dies", "connections-session_fetcher_dies", "connections-source_restarts", "connections-gateway_restarts",
+		"connections-nbsandboxd_restarts_session", "connections-run_interrupted"}},
 	{"Network plugin (make test-k8s-cni-refuses)", []string{"cni-refuses"}},
 }
 
