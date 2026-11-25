@@ -13,10 +13,10 @@ Runs still have no network. Each reading run gets a **fetcher**: a second contai
 This is off unless the operator turns it on ([below](#for-operators)).
 
 **What works today:**
-- PostgreSQL databases, and S3-compatible object storage (AWS S3, MinIO, Ceph, RustFS), with CSV and Parquet files.
-- Runs, on Docker and on Kubernetes.
+- PostgreSQL, MySQL and SQL Server databases, and S3-compatible object storage (AWS S3, MinIO, Ceph, RustFS), with CSV and Parquet files.
+- Runs, interactive sessions and published functions, on Docker and on Kubernetes.
 
-**Not yet:** MySQL and SQL Server, Azure Blob storage, HTTP APIs (connections of those types can be created and bound, but runs can't read them yet); interactive sessions and published functions (a function will read with its caller's connections); connections in the web UI.
+**Not yet:** Azure Blob storage and HTTP APIs (connections of those types can be created and bound, but nothing reads them yet); connections in the web UI.
 
 ## For users
 
@@ -36,6 +36,8 @@ curl -u alice:… -X POST https://nbsandbox.example/v1/connections -H 'Content-T
 | Type | Settings | The secret |
 |---|---|---|
 | `postgresql` | `host`, `port` (5432), `database`, `user` | the password |
+| `mysql` | `host`, `port` (3306), `database`, `user` | the password |
+| `sqlserver` | `host`, `port` (1433), `database`, `user` (a SQL login) | the password |
 | `s3` | `endpoint` (`host[:port]`, no scheme), `bucket`, `region` (us-east-1), `access_key_id`, `use_ssl` (true), `url_style` (`vhost`, or `path` for MinIO, Ceph, RustFS) | the secret access key |
 
 **Give nbsandbox a read-only user.** The database's own permissions are what really limits a query: nbsandbox refuses writes and more, but a role that can only `SELECT` the tables a notebook needs is the guarantee.
@@ -93,6 +95,21 @@ Without `environment`, the space's default. The run records which environment it
 **If the fetcher can't start** (a wrong password, a database down), the run fails at start, `platform_error`, with the fetcher's message; its log shows the fetcher's output, prefixed `[fetcher]`. A connection deleted while a run waited fails it the same way.
 
 **Live data:** a run reads the source as it is at that moment. For results you can reproduce, read a snapshot (a dated table, a versioned Parquet folder).
+
+### 5. In an interactive session
+
+A session reads the same names, from its cells ([sessions.md](sessions.md)): open it with `"environment"` (the space's default otherwise). Its fetcher starts with it and goes when it ends; an open session keeps the environment it was opened in.
+
+```sh
+curl -u alice:… -X POST https://nbsandbox.example/v1/spaces/$SPACE/sessions -H 'Content-Type: application/json' \
+  -d '{"notebook": "explore.ipynb", "environment": "dev"}'
+```
+
+### 6. In a published function
+
+A version records the names its space bound when it was published, and their types: `"connections": {"crm": "postgresql"}` on the version. A call names the environment (`"environment"` on `…/invoke`, the space's default otherwise), which must bind every one of those names to a connection of the same type; otherwise the call is refused (`400`) before anything runs, saying which names are missing. The run reads only the names its version declared.
+
+Functions are called by their space's owner today, so they read the space's own bindings. With shared spaces, each caller's own connections will stand behind the same names.
 
 ## What a run can and can't reach
 
