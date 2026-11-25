@@ -52,9 +52,16 @@ Interactive mode. The [CHANGELOG](CHANGELOG.md) has the details and upgrade note
 - **Through the API and for agents:** REST, a WebSocket of Jupyter messages, gRPC's `SessionService` ([api.md](docs/api.md)), and MCP tools to open a session, run cells and read their output ([mcp.md](docs/mcp.md)).
 - **Checked like runs:** sessions are in the isolation reports, `nbsandbox-report check`, the soak, and the weekly check of the published release.
 
-## Next
+## Built, not yet released
 
-- **Data outside nbsandbox.** Notebooks read the user's data where it lives (PostgreSQL, MySQL, SQL Server, object storage with Parquet and Iceberg, and the user's own APIs), at any size, without copying it in and without secrets in notebook code. Connections defined once per user, named per space with dev and prod environments; credentials in Kubernetes Secrets or Vault; a per-run fetcher (DuckDB, Arrow Flight) on a private network per run; designed to grow into distributed runs. Kubernetes (AKS and on-premises). Design under discussion: [docs/plan-data-access.md](docs/plan-data-access.md).
+Data outside nbsandbox, the first phase of [plan-data-access.md](docs/plan-data-access.md). The [CHANGELOG](CHANGELOG.md) has the details and upgrade notes:
+
+- **Notebooks read the user's data where it lives,** without copying it in and without secrets in notebook code: `nbsandbox.sql("SELECT … FROM crm.orders")` returns a DataFrame, `nbsandbox.stream(…)` Arrow batches. PostgreSQL, MySQL, SQL Server, and CSV and Parquet in S3-compatible storage, joined in one query if need be ([connections.md](docs/connections.md)).
+- **Connections** are defined once per user and named per space, with environments (dev, prod); runs, interactive sessions and published functions pick one. Through the API, gRPC, MCP and the web UI.
+- **Credentials** in Kubernetes Secrets (mounted into the fetcher), Vault or OpenBao (the fetcher logs in itself), or a built-in store for development; nbsandboxd never reads them when a run starts.
+- **Each reading run gets a fetcher** (DuckDB, Arrow Flight) on a network of the run's own, locked to one `SELECT` on the run's sources, reaching them only through nbsandbox's egress gateway with a token for exactly their endpoints. On Docker and Kubernetes; the isolation report has a Connections section.
+
+## Next
 - **Authentication against Entra ID, end to end.** Keycloak is tested end to end (tokens, scopes, audience, token exchange); Entra ID is unit-tested against a local issuer and documented, and needs the same end-to-end test with a real tenant.
 - **Sandboxes on real clusters.** Run the suite under GKE Sandbox (gVisor) and AKS Pod Sandboxing (Kata), and add a GKE Terraform example beside the AKS one. `nbsandbox-report check` makes each one a deploy, a check and a teardown.
 
@@ -70,6 +77,9 @@ Interactive mode. The [CHANGELOG](CHANGELOG.md) has the details and upgrade note
 | Other notebook languages | R first, then Julia if asked for. One runner image per language, chosen from the notebook's kernel against an allow-list (smaller and patched separately, rather than one image with every language): the language's kernel, parameter injection (papermill supports R and Julia), a `nbsandbox.output()` equivalent writing the same status file, its package list for the missing-import check, and editor highlighting. Until then, non-Python notebooks are refused | runner images, runs, web UI |
 | Resource tiers | e.g. small and large runs, chosen from a configured list; with data access, a choice of runner sizes and counts per run ([plan](docs/plan-data-access.md#a-run-with-several-runners)) | isolation, runs |
 | Distributed runs | One run over several machines: an orchestrator and workers on the run's private network, each reading its share of the data; DuckDB per worker first, a distributed engine (DataFusion with Ballista, or Daft on Ray) when a workload needs one ([plan](docs/plan-data-access.md#distributed-mode)) | isolation, runs, Helm |
+| APIs from notebook code | Injected mode: a connection's credential given to the notebook's own code (HTTP and SSE APIs, vendor SDKs, a storage layer without a built-in type), redacted from logs, outputs and results, with the run's network open to that endpoint only, through the gateway ([plan](docs/plan-data-access.md#two-modes-mediated-and-injected)) | runs, runner image, gateway |
+| Iceberg and Azure Blob | Iceberg tables and their catalogs, and Azure Blob Storage, read like the other sources | fetcher |
+| Writes to external sources | Results written back to a database or object store, through the same connections; today a run writes artifacts | fetcher, runs |
 | Scheduled runs | Run a notebook on a schedule with fixed parameters | runs |
 | Filesystem quotas | Quotas enforced by the filesystem, not just checked every few seconds | host setup, spaces |
 | Firecracker backend | Same `Backend` interface; must pass `internal/isolation/backendtest` | isolation |

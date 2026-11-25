@@ -88,7 +88,7 @@ for i, region in enumerate(regions):
 ### What a run gets
 
 Each run starts in a **fresh container** from the server's runner image:
-- **No network.** Packages can't be installed at run time; a space's `requirements.txt` can add them before it, when the operator has turned that on ([packages.md](packages.md)).
+- **No network.** Packages can't be installed at run time; a space's `requirements.txt` can add them before it, when the operator has turned that on ([packages.md](packages.md)). Databases and object storage are read through the space's connections, by name, when the operator has turned them on ([connections.md](connections.md)).
 - **Only its own space's files**, at `/space`, its working directory: a copy taken when the run starts (read-only for function calls, or when the run asks for it). A run that can write the space has its changes written back when it ends; a file you edited meanwhile keeps your edit, and the run's version is kept beside it (`name.conflict-<run>.ext`). See [api.md](api.md#3-edit-a-file-without-overwriting-someone-elses-changes). Its outputs go to `/run`, its own folder: other runs and published functions don't exist inside. The rest of the file system is read-only, except `/tmp`.
 - **Limits** (defaults; see `GET /v1/runtime` for this server's):
 
