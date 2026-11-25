@@ -183,6 +183,38 @@ A possible order, each phase usable on its own:
 
 Shared spaces and their per-member connections follow the shared-spaces item.
 
+## Spike results (M0, 2026-11-25)
+
+Measured on Docker Desktop (Apple Silicon, 4 CPUs, 3 GB) and the local kind cluster (Kubernetes 1.37, Cilium), with 10 million rows of Parquet (88 MB; 467 MB as Arrow) and a PostgreSQL 17 source.
+
+**The fetcher's language.** The same fetcher (DuckDB, an Arrow Flight server, one CPU, 1 GiB):
+
+| | Stream 10 M rows | Aggregate to 4 rows | Image |
+|---|---|---|---|
+| Python (`duckdb`, `pyarrow.flight`) | **0.6–1.1 s** | 0.16 s | 592 MB (with the PostgreSQL extension; not slimmed) |
+| Go (`duckdb-go`, `arrow-go`) | 14–25 s | 0.4–0.9 s | 256 MB |
+
+Go's cost is `duckdb-go`'s Arrow export itself: 22 s for the 10 M rows with no network at all (4.5 s for one integer column), in 2,048-row records; merging them into larger batches didn't help. Python's `duckdb` uses DuckDB's own C++ Arrow export, and `pyarrow`'s Flight is C++ too.
+
+**DuckDB versions.** In one process, streaming the 10 M rows: 1.5.6 0.64 s; 2.0.1 1.5–3.6 s; under the Flight server, 2.0.1 took 38 s (2.0 also changed the Python API: `fetch_record_batch` and `fetchone` on relations are gone). 1.5.6 behaves like 1.4.2 in every test below.
+
+**The lockdown, attacked with 26 queries** (the same results on 1.4.2, 1.5.6 and 2.0.1):
+- **Turning external access off also blocks the fetcher's own sources,** since views are read when queried: the sources must be allowed explicitly (`allowed_directories`, set before external access is turned off).
+- **Blocked:** reading files (`/etc/passwd`, the mounted secret, `/proc/self/environ`, path traversal, globbing), environment variables (DuckDB has no `getenv`), unlocking the configuration, loading or installing extensions, HTTP, writing files, attaching other databases, tables the database role can't read, writes through a read-only attachment, `pg_read_file` (the role lacks it).
+- **A leak, fixed:** `duckdb_databases()` shows an attachment's connection string, password included. With DuckDB's secret manager (`CREATE SECRET … TYPE postgres`, attached by name) the path is empty and the secret shows only redacted (`password=redacted`); unredacted display is refused.
+- **Open by default:** raw SQL to the source (`postgres_query`, `postgres_execute`), and statements other than queries (`CREATE TABLE`, `PRAGMA`).
+- **A gate closes both:** DuckDB's own parser (`json_serialize_sql`) serializes only a single `SELECT`, and its output names every function called, so the fetcher refuses anything else, and pass-through functions, before running it.
+- So three layers: the gate (one query, no pass-through); DuckDB's settings (only the run's sources, no network, no extensions, configuration locked); the database role (read-only, least privilege).
+
+**SQL Server through ODBC.** Microsoft's ODBC Driver 18 installs and loads on arm64 (Debian 12); its licence is in the package. DuckDB's ODBC extension (1.5/2.0) has no `ATTACH`, only query text (`odbc_query`), so no pushdown: a view over a table transfers the whole table. With PostgreSQL's ODBC driver it crashed (a segmentation fault) on integer and numeric columns. No real SQL Server could run here (its image is amd64-only and needs over 2 GB beside the kind cluster).
+
+**Egress on kind, with plain NetworkPolicy only** (a deny-all policy, one policy per run, fetchers to the gateway; a 15 MB Go gateway with HMAC-signed run tokens):
+- the fetcher reaches its source only through the gateway, and only the source in its token (another one: 403; an expired or forged token: 407; each decision logged);
+- the fetcher can't connect to the source directly, and can't resolve names (no DNS in runs);
+- a runner reaches its own fetcher, but not another run's runner or fetcher, nor the gateway (mediated mode), the Kubernetes API or nbsandbox's own Pods.
+
+Verified with Cilium; the policies use only standard NetworkPolicy, still to be checked with Calico and Azure's policy engine.
+
 ## What others do (research, 2026-11-24)
 
 - **Spark:** splits data into partitions read in parallel by executors directly from storage, spills to disk, recomputes lost work. Executors hold the source credentials (cloud roles, keytabs, JDBC passwords). Spark Connect separates a thin client from the engine (plans over gRPC, Arrow results).
