@@ -26,6 +26,15 @@ storage:
   s3: { endpoint: "rustfs:9000", bucket: nbsandbox, tls: false, createBucket: true, existingSecret: nbsandbox-s3 }
 auth: { basic: true, usersSecret: nbsandbox-users }
 sessions: { secretName: nbsandbox-sessions }
+# Reading external data: the integration tests' sources are containers on
+# kind's Docker network (tests/integration/connections_test.go).
+connections:
+  enabled: true
+  allowed: [nbsandbox-src-pg, nbsandbox-src-s3]
+  fetcherImage: nbsandbox-fetcher:dev
+  fetcherMemory: 384MiB   # beside 1GiB runs on kind's one small node
+  fetcherCpus: 0.5
+  gateway: { keySecret: nbsandbox-gateway, replicas: 1 }
 extraEnv:
   - { name: NBSANDBOX_SHUTDOWN_GRACE, value: 5s }
 podDisruptionBudget: { enabled: false }

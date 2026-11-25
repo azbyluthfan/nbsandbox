@@ -46,6 +46,19 @@ data:
       per_user: {{ .Values.sessions.perUser }}
       per_worker: {{ .Values.sessions.perWorker }}
       listen: ":8091"
+    {{- if .Values.connections.enabled }}
+    connections:
+      enabled: true
+      allowed: {{ toJson .Values.connections.allowed }}
+      secrets:
+        provider: {{ .Values.connections.secretsProvider | quote }}
+        namespace: {{ .Values.runs.namespace | quote }}
+      gateway:
+        address: {{ printf "%s-gateway.%s.svc:3128" (include "nbsandbox.fullname" .) .Release.Namespace | quote }}
+      fetcher_image: {{ .Values.connections.fetcherImage | quote }}
+      fetcher_memory: {{ .Values.connections.fetcherMemory | quote }}
+      fetcher_cpus: {{ .Values.connections.fetcherCpus }}
+    {{- end }}
     {{- if .Values.ui.enabled }}
     ui:
       enabled: true

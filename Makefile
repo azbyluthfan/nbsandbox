@@ -278,10 +278,11 @@ CALICO_VERSION := 3.29.3
 # those stop them (they keep their state; make k8s-up starts one again).
 STOP_KIND := scripts/stop-kind.sh
 
-K8S_TEST_ENV := NBSANDBOX_CLUSTER=1 NBSANDBOX_K8S=1 NBSANDBOX_KIND_NODE=$(KIND_NODE) NBSANDBOX_SHUTDOWN_GRACE=5s NBSANDBOX_RUN_TIMEOUT=150s
+K8S_TEST_ENV := NBSANDBOX_CLUSTER=1 NBSANDBOX_K8S=1 NBSANDBOX_KIND_NODE=$(KIND_NODE) NBSANDBOX_SHUTDOWN_GRACE=5s NBSANDBOX_RUN_TIMEOUT=150s \
+	NBSANDBOX_TEST_CONNECTIONS=1
 
 .PHONY: k8s-images k8s-cluster k8s-up k8s-logs k8s-down test-k8s test-k8s-conformance test-k8s-cni-refuses
-k8s-images: runner-image
+k8s-images: runner-image fetcher-image
 	docker build -q -f deploy/nbsandboxd.Dockerfile -t nbsandboxd:dev . >/dev/null
 
 # The cluster and its network plugin, with the images, PostgreSQL and RustFS.
@@ -309,7 +310,7 @@ else ifneq ($(K8S_CNI),kindnet)
 	$(error K8S_CNI must be cilium, calico or kindnet)
 endif
 	$(KUBECTL) wait --for=condition=Ready nodes --all --timeout=300s
-	$(KIND) load docker-image nbsandboxd:dev nbsandbox-runner:dev --name $(KIND_NAME)
+	$(KIND) load docker-image nbsandboxd:dev nbsandbox-runner:dev nbsandbox-fetcher:dev --name $(KIND_NAME)
 	$(KUBECTL) apply -f - < $(KIND_DIR)/deps.yaml
 	$(KUBECTL) -n nbsandbox delete secret nbsandbox-users --ignore-not-found
 	$(KUBECTL) -n nbsandbox create secret generic nbsandbox-users --from-file=users.yaml=/dev/stdin < config/users.yaml
@@ -338,7 +339,8 @@ test-k8s-conformance: k8s-up ## The backend conformance suite against the local 
 	NBSANDBOX_TEST_KUBECONFIG=$(KIND_CONFIG) $(GO) test -count=1 -timeout 20m -run Conformance $(TESTFLAGS) ./internal/isolation/kubernetes/
 
 test-k8s: k8s-up ## Integration tests through the local Kubernetes stack (K8S_CNI=cilium|calico)
-	$(K8S_TEST_ENV) $(GO) test -tags integration -count=1 -timeout 40m $(TESTFLAGS) ./tests/integration/
+	$(K8S_TEST_ENV) $(GO) test -tags integration -count=1 -timeout 40m $(TESTFLAGS) ./tests/integration/; \
+		status=$$?; docker rm -f nbsandbox-src-pg nbsandbox-src-s3 >/dev/null 2>&1; exit $$status
 
 # kind's own network plugin (kindnet) doesn't enforce the deny-all policy
 # (run Pods reach the API server, kubelet, workers, internet): the workers must notice and refuse runs.

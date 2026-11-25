@@ -49,6 +49,16 @@ rules:
   - apiGroups: [""]
     resources: [namespaces]
     verbs: [get]
+  {{- if .Values.connections.enabled }}
+  # A reading run's fetcher: its configuration Secret and its network
+  # policies (its runner may reach it, and nothing else may).
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create, get, list, delete]
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies]
+    verbs: [create, get, list, delete]
+  {{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -93,3 +103,56 @@ subjects:
   - kind: ServiceAccount
     name: {{ include "nbsandbox.fullname" . }}-worker
     namespace: {{ .Release.Namespace }}
+{{- if .Values.connections.enabled }}
+---
+# Fetchers (one per reading run) may reach the egress gateway's port, and
+# nothing else beyond their run. Each run's own policies (made by the
+# worker) let only its runner in.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fetchers-to-gateway
+  namespace: {{ .Values.runs.namespace }}
+  labels: {{- include "nbsandbox.labels" . | nindent 4 }}
+spec:
+  podSelector: { matchLabels: { nbsandbox.role: fetcher } }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: {{ .Release.Namespace }} } }
+          podSelector:
+            matchLabels: {{- include "nbsandbox.selector" . | nindent 14 }}
+              app.kubernetes.io/component: gateway
+      ports: [{ port: 3128, protocol: TCP }]
+{{- end }}
+{{- if include "nbsandbox.apiManagesSecrets" . }}
+---
+# The API processes write managed connections' Secrets, check referenced
+# ones, and remove their own (labelled) ones: Secrets only, in the runs
+# namespace only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "nbsandbox.fullname" . }}-api-secrets
+  namespace: {{ .Values.runs.namespace }}
+  labels: {{- include "nbsandbox.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create, get, update, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "nbsandbox.fullname" . }}-api-secrets
+  namespace: {{ .Values.runs.namespace }}
+  labels: {{- include "nbsandbox.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "nbsandbox.fullname" . }}-api-secrets
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "nbsandbox.fullname" . }}-api
+    namespace: {{ .Release.Namespace }}
+{{- end }}

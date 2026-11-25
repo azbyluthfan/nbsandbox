@@ -44,6 +44,8 @@ type Backend struct {
 	MaxCopyOut int64
 	// poll is how often Pod state is read while waiting.
 	poll time.Duration
+	// lookup resolves the gateway's name (default: the worker's DNS).
+	lookup func(ctx context.Context, host string) ([]string, error)
 }
 
 // NewBackend creates the backend. restCfg is used for exec (copying files).
@@ -67,15 +69,24 @@ func freshContext(ctx context.Context) (context.Context, context.CancelFunc) {
 // back out through the files container, and the Pod is deleted.
 func (b *Backend) Run(ctx context.Context, spec isolation.RunSpec, out isolation.LineSink) (isolation.RunResult, error) {
 	var res isolation.RunResult
+	runPod := buildPod(b.cfg, spec)
 	if spec.Fetcher != nil {
-		// The fetcher Pod, its Secret and NetworkPolicy come with the
-		// Kubernetes milestone (docs/plan-data-access.md).
-		return res, fmt.Errorf("%w: reading connections isn't available on the kubernetes backend yet", isolation.ErrStart)
+		// The fetcher first: the runner is told its address.
+		addr, cleanup, err := b.startFetcher(ctx, spec, out)
+		defer cleanup()
+		if err != nil {
+			if ctx.Err() != nil {
+				res.Stopped = true
+				return res, nil
+			}
+			return res, err
+		}
+		withFetcher(runPod, addr, spec.Fetcher.Token)
 	}
 	pods := b.client.CoreV1().Pods(b.cfg.Namespace)
 	name := PodName(spec.RunID)
 	cctx, cancel := freshContext(ctx)
-	pod, err := pods.Create(cctx, buildPod(b.cfg, spec), metav1.CreateOptions{})
+	pod, err := pods.Create(cctx, runPod, metav1.CreateOptions{})
 	cancel()
 	if err != nil {
 		return res, fmt.Errorf("%w: create pod: %w", isolation.ErrStart, err)
@@ -539,9 +550,21 @@ func (b *Backend) Orphans(ctx context.Context) ([]isolation.Orphan, error) {
 		return nil, err
 	}
 	out := make([]isolation.Orphan, 0, len(list.Items))
+	seen := map[string]bool{}
 	for _, p := range list.Items {
 		out = append(out, isolation.Orphan{RunID: p.Labels[LabelRun], SpaceID: p.Labels[LabelSpace], ContainerID: string(p.UID),
 			Running: p.Status.Phase == corev1.PodRunning || p.Status.Phase == corev1.PodPending})
+		seen[p.Labels[LabelRun]] = true
+	}
+	// Fetchers whose run Pod is gone (or was never created).
+	fetchers, err := b.fetcherOrphans(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for run, space := range fetchers {
+		if run != "" && !seen[run] {
+			out = append(out, isolation.Orphan{RunID: run, SpaceID: space})
+		}
 	}
 	return out, nil
 }
@@ -551,9 +574,9 @@ func (b *Backend) Kill(ctx context.Context, runID string) error {
 	zero := int64(0)
 	err := b.client.CoreV1().Pods(b.cfg.Namespace).Delete(ctx, PodName(runID), metav1.DeleteOptions{GracePeriodSeconds: &zero})
 	if apierrors.IsNotFound(err) {
-		return nil
+		err = nil
 	}
-	return err
+	return errors.Join(err, b.killFetcher(ctx, runID))
 }
 
 // workerOwned is the file in the run's folder that the worker writes (the

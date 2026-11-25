@@ -23,7 +23,8 @@ spec:
         {{- with .Values.api.podAnnotations }}{{ toYaml . | nindent 8 }}{{ end }}
     spec:
       serviceAccountName: {{ include "nbsandbox.fullname" . }}-api
-      automountServiceAccountToken: false
+      # No API credentials, unless connections' Secrets are kept in Kubernetes.
+      automountServiceAccountToken: {{ if include "nbsandbox.apiManagesSecrets" . }}true{{ else }}false{{ end }}
       securityContext: { runAsNonRoot: true, fsGroup: 1000, seccompProfile: { type: RuntimeDefault } }
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets: {{- toYaml . | nindent 8 }}
