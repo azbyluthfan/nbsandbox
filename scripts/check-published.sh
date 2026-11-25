@@ -148,7 +148,9 @@ run packages.ipynb
 if [ -f "$SRC/docs/sessions.md" ]; then
 	step "An interactive session, with the release's example (examples/python/interactive_session.py)"
 	python3 -m venv "$WORK/venv"
-	"$WORK/venv/bin/pip" install -q requests websocket-client
+	# Without the local CA: pip's requests honours CURL_CA_BUNDLE too, and
+	# would then trust only Caddy's local authority, not PyPI's certificate.
+	env -u CURL_CA_BUNDLE "$WORK/venv/bin/pip" install -q requests websocket-client
 	out=$(WEBSOCKET_CLIENT_CA_BUNDLE=$CURL_CA_BUNDLE "$WORK/venv/bin/python" "$SRC/examples/python/interactive_session.py" 2>&1) ||
 		{ echo "$out" >&2; exit 1; }
 	echo "$out"
