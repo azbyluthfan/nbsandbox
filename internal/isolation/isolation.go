@@ -69,9 +69,26 @@ type Fetcher struct {
 	// (NBSANDBOX_FETCHER_TOKEN).
 	Token string
 	// Gateway is the gateway's container (Docker): joined to the run's
-	// network so the fetcher can reach it.
+	// network so the fetcher can reach it. On Kubernetes, the gateway's
+	// address (connections.gateway.address), which the worker resolves:
+	// fetchers have no DNS.
 	Gateway string
+	// Mounts are credentials the fetcher reads from files, mounted from
+	// the platform's secrets (Kubernetes Secrets): nbsandboxd never reads
+	// them. The configuration names each file (FetcherSecretsDir/Path).
+	Mounts []SecretMount
+	// MemoryBytes and NanoCPUs are the fetcher's own limits.
+	MemoryBytes, NanoCPUs int64
 }
+
+// SecretMount is one credential mounted into the fetcher: the Secret's
+// name and key, at FetcherSecretsDir/Path.
+type SecretMount struct {
+	Secret, Key, Path string
+}
+
+// FetcherSecretsDir is where a fetcher's mounted credentials are.
+const FetcherSecretsDir = "/etc/nbsandbox-fetcher/secrets" //nolint:gosec // a folder, not a credential
 
 // The fetcher's port, and the environment variables that tell a run where
 // its fetcher is (a grpc:// URL) and the token it presents.

@@ -62,6 +62,13 @@ type Revealer interface {
 	Reveal(ctx context.Context, ref string) ([]byte, error)
 }
 
+// Mounter is a secret provider whose values the platform mounts into the
+// fetcher itself (Kubernetes Secrets): nbsandboxd names them, never reads
+// them.
+type Mounter interface {
+	Mount(ref string) (secret, key string, err error)
+}
+
 // FetcherSettings are the operator's settings a fetcher is made with
 // (Deps.Fetcher).
 type FetcherSettings struct {
@@ -69,6 +76,8 @@ type FetcherSettings struct {
 	GatewayAddress   string // host:port the fetcher reaches the gateway at
 	GatewayContainer string // Docker: the gateway's container, joined to the run's network
 	GatewayKey       []byte
+	MemoryBytes      int64 // each fetcher's limits
+	NanoCPUs         int64
 }
 
 // ErrUnavailable is a run whose connections can't be given to it now: a
@@ -81,6 +90,8 @@ type fetcherSource struct {
 	Type     string         `json:"type"`
 	Settings map[string]any `json:"settings"`
 	Secret   string         `json:"secret,omitempty"`
+	// SecretFile: the credential is mounted there instead (Kubernetes).
+	SecretFile string `json:"secret_file,omitempty"`
 }
 
 type fetcherConfig struct {
@@ -103,6 +114,7 @@ func (s *Service) Fetcher(ctx context.Context, runID, owner string, names map[st
 	fs := s.d.Fetcher
 	var cfg fetcherConfig
 	var allow []string
+	var mounts []isolation.SecretMount
 	keys := make([]string, 0, len(names))
 	for n := range names {
 		keys = append(keys, n)
@@ -129,16 +141,28 @@ func (s *Service) Fetcher(ctx context.Context, runID, owner string, names map[st
 		}
 		src := fetcherSource{Name: name, Type: c.Type, Settings: settings}
 		if c.SecretMode != store.SecretNone {
-			rv, ok := s.d.Secrets.(Revealer)
-			if !ok || c.SecretProvider != s.d.Secrets.Name() {
-				return nil, fmt.Errorf("%w: %q's credentials are kept by the %s provider, which can't give them to a run here",
+			if c.SecretProvider != s.d.Secrets.Name() {
+				return nil, fmt.Errorf("%w: %q's credentials are kept by the %s provider, which this nbsandbox no longer uses",
 					ErrUnavailable, name, c.SecretProvider)
 			}
-			v, err := rv.Reveal(ctx, c.SecretRef)
-			if err != nil {
-				return nil, fmt.Errorf("%w: %q's credentials: %w", ErrUnavailable, name, err)
+			switch p := s.d.Secrets.(type) {
+			case Revealer:
+				v, err := p.Reveal(ctx, c.SecretRef)
+				if err != nil {
+					return nil, fmt.Errorf("%w: %q's credentials: %w", ErrUnavailable, name, err)
+				}
+				src.Secret = string(v)
+			case Mounter:
+				secret, key, err := p.Mount(c.SecretRef)
+				if err != nil {
+					return nil, fmt.Errorf("%w: %q's credentials: %w", ErrUnavailable, name, err)
+				}
+				file := strconv.Itoa(len(mounts))
+				mounts = append(mounts, isolation.SecretMount{Secret: secret, Key: key, Path: file})
+				src.SecretFile = isolation.FetcherSecretsDir + "/" + file
+			default:
+				return nil, fmt.Errorf("%w: the %s provider can't give a run its credentials", ErrUnavailable, c.SecretProvider)
 			}
-			src.Secret = string(v)
 		}
 		cfg.Sources = append(cfg.Sources, src)
 		allow = append(allow, targets(c.Type, settings)...)
@@ -153,7 +177,8 @@ func (s *Service) Fetcher(ctx context.Context, runID, owner string, names map[st
 	if err != nil {
 		return nil, err
 	}
-	return &isolation.Fetcher{Image: fs.Image, Config: b, Token: cfg.Token, Gateway: fs.GatewayContainer}, nil
+	return &isolation.Fetcher{Image: fs.Image, Config: b, Token: cfg.Token, Gateway: fs.GatewayContainer, Mounts: mounts,
+		MemoryBytes: fs.MemoryBytes, NanoCPUs: fs.NanoCPUs}, nil
 }
 
 // targets are the host:port endpoints a source's fetcher connects to,

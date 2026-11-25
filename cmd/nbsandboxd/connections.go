@@ -48,7 +48,13 @@ func newConnections(cfg config.Settings, db *store.DB, logger *slog.Logger) (*co
 	if err != nil {
 		return nil, err
 	}
-	gwHost, _, _ := net.SplitHostPort(c.Gateway.Address)
-	fs := connections.FetcherSettings{Image: c.FetcherImage, GatewayAddress: c.Gateway.Address, GatewayContainer: gwHost, GatewayKey: key}
+	// Docker joins the gateway's container (the address's host) to each
+	// run's network; on Kubernetes the worker resolves the whole address.
+	gw, _, _ := net.SplitHostPort(c.Gateway.Address)
+	if cfg.Backend == "kubernetes" {
+		gw = c.Gateway.Address
+	}
+	fs := connections.FetcherSettings{Image: c.FetcherImage, GatewayAddress: c.Gateway.Address, GatewayContainer: gw, GatewayKey: key,
+		MemoryBytes: int64(c.FetcherMemory), NanoCPUs: int64(c.FetcherCPUs * 1e9)}
 	return connections.New(connections.Deps{DB: db, Secrets: provider, Allowed: connections.NewAllowed(c.Allowed), Fetcher: fs, Log: logger}), nil
 }

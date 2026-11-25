@@ -53,6 +53,7 @@ func buildFetcherConfig(spec isolation.RunSpec) (*container.Config, *container.H
 			"PYTHONUNBUFFERED=1",
 			"NBSANDBOX_FETCHER_LISTEN=grpc://0.0.0.0:" + strconv.Itoa(isolation.FetcherPort),
 			"NBSANDBOX_FETCHER_CONFIG_JSON=" + string(spec.Fetcher.Config),
+			"NBSANDBOX_FETCHER_MEMORY=" + strconv.FormatInt(fetcherMemory(spec), 10),
 		},
 		Labels: map[string]string{LabelFetcher: spec.RunID, LabelSpace: spec.SpaceID},
 	}
@@ -71,9 +72,9 @@ func buildFetcherConfig(spec isolation.RunSpec) (*container.Config, *container.H
 		Runtime:    spec.Runtime,
 		AutoRemove: false,
 		Resources: container.Resources{
-			Memory:     spec.Limits.MemoryBytes,
-			MemorySwap: spec.Limits.MemoryBytes,
-			NanoCPUs:   spec.Limits.NanoCPUs,
+			Memory:     fetcherMemory(spec),
+			MemorySwap: fetcherMemory(spec),
+			NanoCPUs:   fetcherCPUs(spec),
 			PidsLimit:  &pids,
 		},
 	}
@@ -196,4 +197,20 @@ func (b *Backend) killFetcher(ctx context.Context, runID string) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// fetcherMemory and fetcherCPUs are the fetcher's own limits (the run's
+// when not set).
+func fetcherMemory(spec isolation.RunSpec) int64 {
+	if spec.Fetcher.MemoryBytes > 0 {
+		return spec.Fetcher.MemoryBytes
+	}
+	return spec.Limits.MemoryBytes
+}
+
+func fetcherCPUs(spec isolation.RunSpec) int64 {
+	if spec.Fetcher.NanoCPUs > 0 {
+		return spec.Fetcher.NanoCPUs
+	}
+	return spec.Limits.NanoCPUs
 }

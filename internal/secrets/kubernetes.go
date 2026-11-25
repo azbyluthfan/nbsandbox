@@ -126,3 +126,9 @@ func (k *Kubernetes) Check(ctx context.Context, ref string) error {
 	}
 	return nil
 }
+
+// Mount implements connections.Mounter: the Secret and key a reference
+// names, for the fetcher Pod to mount. The value is never read.
+func (k *Kubernetes) Mount(ref string) (secret, key string, err error) {
+	return ParseRef(ref)
+}

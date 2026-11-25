@@ -180,12 +180,18 @@ def connect(cfg):
             "allow_persistent_secrets": "false",
         }
     )
-    gw = cfg["gateway"]
+    gw = dict(cfg["gateway"])
+    # On Kubernetes the worker resolves the gateway (fetchers have no DNS).
+    gw["address"] = os.environ.get("NBSANDBOX_FETCHER_GATEWAY") or gw["address"]
     allowed = []
     served = []
     loaded = set()
     for i, src in enumerate(cfg.get("sources", [])):
-        name, typ, s, secret = src["name"], src["type"], src.get("settings", {}), src.get("secret") or ""
+        name, typ, s = src["name"], src["type"], src.get("settings", {})
+        secret = src.get("secret") or ""
+        if src.get("secret_file"):  # a mounted Secret (Kubernetes): nbsandboxd never read it
+            with open(src["secret_file"]) as f:
+                secret = f.read().strip()
         sec = f"nbs_{i}"
         if typ == "postgresql":
             if "postgres" not in loaded:
@@ -221,6 +227,12 @@ def connect(cfg):
         else:
             continue  # served elsewhere (injected mode), or not yet
         served.append({"name": name, "type": typ})
+    # Under the container's limit, with room for Arrow buffers and Python:
+    # past it DuckDB spills to /tmp rather than being killed.
+    mem = int(os.environ.get("NBSANDBOX_FETCHER_MEMORY", "0") or 0)
+    if mem > 0:
+        con.execute(f"SET memory_limit = '{mem * 3 // 4 // (1 << 20)}MiB'")
+        con.execute("SET temp_directory = '/tmp/duckdb'")
     if "httpfs" in loaded:
         con.execute(f"SET http_proxy = {_lit(gw['address'])}")
         con.execute("SET http_proxy_username = 'run'")

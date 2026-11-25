@@ -204,6 +204,8 @@ connections:
     key: ""                         # NBSANDBOX_GATEWAY_KEY: signs run tokens, the gateway's key too;
                                     # openssl rand -base64 32
   fetcher_image: nbsandbox-fetcher:dev  # NBSANDBOX_FETCHER_IMAGE: reads a run's sources (make fetcher-image)
+  fetcher_memory: 1GiB              # each fetcher's limits, beside its run's; DuckDB spills past 3/4 of it
+  fetcher_cpus: 1
 
 # Who may call the API (docs/auth.md). Basic auth uses users_file; bearer
 # tokens come from an OpenID Connect provider. Spaces belong to the caller's ID.
