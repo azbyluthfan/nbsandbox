@@ -140,6 +140,25 @@ run 42 — one private network, removed with the run
 - **Serves Arrow over Flight** (plain Flight, the query in the ticket; there is no Python Flight SQL server) to the run's runners. A query's result can be split, one stream per worker, which is the basis of distributed mode.
 - **The source's own permissions are the real boundary.** Each connection's database user should be **read-only and least-privilege in the database**. nbsandbox's table lists help users; they are not the security guarantee, and the docs and the connection form say so.
 
+### The fetcher contract
+
+How a notebook talks to its fetcher, so that any image can, not only nbsandbox's runner (custom images are on the ROADMAP):
+- **Plain Arrow Flight,** an open standard with clients in Python (`pyarrow`), R (`arrow`), Julia, Go, Java and more.
+- **Two environment variables** in the run: `NBSANDBOX_FETCHER` (the fetcher's address, `grpc://fetcher:8815`) and `NBSANDBOX_FETCHER_TOKEN` (the run's token, sent as `authorization: Bearer …` on every call).
+- **A query is a `DoGet` whose ticket is the SQL text,** answered with Arrow record batches. The action `connections` lists the run's names and their type.
+- **The `nbsandbox` Python helper** (`sql`, `stream`, `connections`) is a thin layer over this, needing only `pyarrow` (in nbsandbox's runner image; a custom Python image installs `nbsandbox` and `pyarrow`).
+
+### Object storage in SQL
+
+Each object-storage name is a schema with two table functions, paths relative to the connection's bucket, which the notebook never sees:
+
+```python
+nbsandbox.sql("SELECT region, sum(amount) FROM lake.parquet('sales/2026/*.parquet') GROUP BY 1")
+nbsandbox.sql("SELECT * FROM lake.csv('exports/latest.csv')")
+```
+
+DuckDB's allow-list keeps reads inside the bucket. Databases are ordinary tables: `crm.orders`, or `crm.public.orders`.
+
 ### Egress on AKS and on-premises
 
 Kubernetes NetworkPolicy works on IP addresses. DNS-name rules exist only in some engines (Cilium; on AKS, an add-on), so they aren't portable. Instead:
@@ -148,6 +167,7 @@ Kubernetes NetworkPolicy works on IP addresses. DNS-name rules exist only in som
 - **A run's allowed endpoints reach the gateway in a signed token.** When a run starts, nbsandboxd issues it a token naming the run, its allowed `host:port` list and an expiry. The gateway only checks the signature: it keeps no state and makes no lookup per connection, and the token dies with the run.
 - **Injected mode:** notebook database clients can't talk to a proxy, so the runner starts a small forwarder inside the run, and `nbsandbox.connection("crm")` gives the notebook a local address (`127.0.0.1:15432`) that tunnels through the gateway. HTTP clients use `HTTPS_PROXY`.
 - It can later move to one gateway per node, or to Envoy, if traffic calls for it, without changing the rest of the design.
+- **The same on Docker:** the gateway is a container of the stack (`role: gateway`), and nbsandboxd connects it to each run's private network. The fetcher has no way out of its own there either, so both backends have one egress path and one set of isolation tests.
 - No dependency on a particular CNI, no DNS inside runs, and endpoints whose addresses change (cloud storage) work.
 
 ### Results and writes
@@ -252,4 +272,8 @@ Verified with Cilium; the policies use only standard NetworkPolicy, still to be 
 - Egress through our own Go gateway (one per cluster, with replicas; a role of the nbsandboxd binary), with each run's allowed endpoints in a signed token, so plain NetworkPolicy is enough everywhere.
 - Object storage: any credential that is a secret (access keys, connection strings, SAS tokens). Workload identity (AKS) is parked: it changes how the fetcher Pod is set up, not the design.
 - Results streamed or written as artifacts; external writes later.
+- On Docker, a private `internal` network per run (runner and fetcher; it works under gVisor, unlike a shared Unix socket), and the gateway as on Kubernetes: one egress path for both backends. The socket proxy allows creating, connecting and removing networks.
+- The run ↔ fetcher contract is plain Arrow Flight with two environment variables, so any image can use it; `pyarrow` joins the runner image.
+- Runs choose an environment (`"environment"`, the space's default otherwise) and record which connection each name meant; the fetcher starts only for runs whose space binds names.
+- M2 covers runs; sessions and functions get their fetchers in M4.
 - Live data is the source's concern: for repeatable results, read a snapshot.
