@@ -113,6 +113,9 @@ jobs:
           go-version-file: go.mod
       - name: Isolation report on kind (Cilium)
         run: make report-k8s K8S_VERSION=${{ matrix.k8s }} K8S_RUNTIME_CLASS=${{ matrix.runtime_class }}
+      - name: Connections with secrets in Vault (OpenBao)
+        if: matrix.k8s == '1.37' && matrix.runtime_class == ''
+        run: make test-k8s-vault TESTFLAGS=-v
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:

@@ -84,8 +84,10 @@ func NewVault(cfg VaultConfig) (*Vault, error) {
 	if cfg.Token == "" && cfg.Role == "" {
 		return nil, errors.New("vault: a role (Kubernetes auth) or a token is needed")
 	}
-	tr := http.DefaultTransport.(*http.Transport).Clone()
-	tr.Proxy = nil
+	// Its own transport: no proxy from the environment (Vault is reached
+	// directly, never through anything a variable points to).
+	tr := &http.Transport{ForceAttemptHTTP2: true, MaxIdleConns: 10, IdleConnTimeout: 90 * time.Second,
+		TLSHandshakeTimeout: 10 * time.Second}
 	if cfg.CACertFile != "" {
 		pem, err := os.ReadFile(cfg.CACertFile)
 		if err != nil {
