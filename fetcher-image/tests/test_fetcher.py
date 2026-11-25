@@ -151,6 +151,78 @@ class MemoryTest(unittest.TestCase):
         self.assertEqual(n, 6000000)
 
 
+class VaultTest(unittest.TestCase):
+    """The fetcher reads Vault through the gateway: a stand-in proxy that
+    checks the run's token and answers as Vault would."""
+
+    def test_reads_through_the_gateway(self):
+        import base64
+        import http.server
+        import os
+        import tempfile
+
+        seen = []
+
+        class Proxy(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def _answer(self, code, body):
+                b = json.dumps(body).encode()
+                self.send_response(code)
+                self.send_header("Content-Length", str(len(b)))
+                self.end_headers()
+                self.wfile.write(b)
+
+            def _route(self):
+                auth = self.headers.get("Proxy-Authorization", "")
+                if auth != "Basic " + base64.b64encode(b"run:run-token").decode():
+                    return self._answer(407, {})
+                seen.append((self.command, self.path))
+                n = int(self.headers.get("Content-Length") or 0)
+                body = json.loads(self.rfile.read(n) or b"{}")
+                if self.path == "http://vault.internal:8200/v1/auth/kubernetes/login":
+                    ok = body == {"role": "fetchers", "jwt": "sa-jwt"}
+                    return self._answer(200 if ok else 403, {"auth": {"client_token": "vt"}} if ok else {"errors": ["denied"]})
+                if self.headers.get("X-Vault-Token") != "vt":
+                    return self._answer(403, {"errors": ["permission denied"]})
+                if self.path == "http://vault.internal:8200/v1/secret/data/nbsandbox/connections/conn-1":
+                    return self._answer(200, {"data": {"data": {"secret": "s3-from-vault"}}})
+                if self.path == "http://vault.internal:8200/v1/auth/token/revoke-self":
+                    return self._answer(204, {})
+                return self._answer(404, {"errors": []})
+
+            do_GET = do_POST = _route
+
+        srv = http.server.HTTPServer(("127.0.0.1", 0), Proxy)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.shutdown)
+        tok = tempfile.NamedTemporaryFile("w", dir="/tmp", delete=False)
+        tok.write("sa-jwt\n")
+        tok.close()
+        cfg = json.loads(json.dumps(CFG))
+        cfg["gateway"] = {"address": f"127.0.0.1:{srv.server_port}", "token": "run-token"}
+        cfg["sources"][0].pop("secret")
+        cfg["sources"][0]["secret_vault"] = {"path": "nbsandbox/connections/conn-1", "key": "secret"}
+        cfg["vault"] = {"address": "http://vault.internal:8200", "mount": "secret", "auth_mount": "kubernetes",
+                        "role": "fetchers", "token_file": tok.name}
+        con, served = fetcher.connect(cfg)
+        self.assertEqual(served, [{"name": "lake", "type": "s3"}])
+        self.assertEqual([p for _, p in seen], [
+            "http://vault.internal:8200/v1/auth/kubernetes/login",
+            "http://vault.internal:8200/v1/secret/data/nbsandbox/connections/conn-1",
+            "http://vault.internal:8200/v1/auth/token/revoke-self",
+        ])
+        os.unlink(tok.name)
+
+    def test_refused_login_fails_the_start(self):
+        cfg = json.loads(json.dumps(CFG))
+        cfg["vault"] = {"address": "http://127.0.0.1:9", "mount": "secret", "auth_mount": "kubernetes",
+                        "role": "r", "token_file": "/nonexistent"}
+        with self.assertRaises(OSError):
+            fetcher.connect(cfg)
+
+
 class FlightTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

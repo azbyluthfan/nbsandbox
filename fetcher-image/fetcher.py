@@ -97,6 +97,58 @@ def _ident(v):
     return '"' + str(v).replace('"', '""') + '"'
 
 
+class Vault:
+    """Reads the run's secrets from Vault, as the fetchers' role: it logs in
+    with its own service account token (Kubernetes auth), reaches Vault
+    through the gateway like any source, and revokes its token when done."""
+
+    def __init__(self, cfg, gw):
+        import ssl
+        import urllib.request
+
+        self.cfg = cfg
+        proxy = f"http://run:{gw['token']}@{gw['address']}"
+        ctx = ssl.create_default_context(cadata=cfg["ca_pem"]) if cfg.get("ca_pem") else ssl.create_default_context()
+        self.opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({"http": proxy, "https": proxy}), urllib.request.HTTPSHandler(context=ctx)
+        )
+        with open(cfg["token_file"]) as f:
+            jwt = f.read().strip()
+        auth = self._call("POST", f"/v1/auth/{cfg['auth_mount']}/login", {"role": cfg["role"], "jwt": jwt})
+        self.token = auth["auth"]["client_token"]
+
+    def _call(self, method, path, body=None):
+        import urllib.error
+        import urllib.request
+
+        req = urllib.request.Request(
+            self.cfg["address"].rstrip("/") + path, method=method,
+            data=json.dumps(body).encode() if body is not None else None,
+            headers={"Content-Type": "application/json"},
+        )
+        if getattr(self, "token", None):
+            req.add_header("X-Vault-Token", self.token)
+        try:
+            with self.opener.open(req, timeout=15) as r:
+                raw = r.read()
+        except urllib.error.HTTPError as e:
+            errs = json.loads(e.read() or b"{}").get("errors") or []
+            raise OSError(f"vault {method} {path.split('?')[0]}: {e.code} {'; '.join(errs)}") from None
+        return json.loads(raw) if raw else {}
+
+    def read(self, path, key):
+        data = self._call("GET", f"/v1/{self.cfg['mount']}/data/{path}")["data"]["data"]
+        if key not in data:
+            raise OSError(f"vault: no key {key!r} at {path}")
+        return str(data[key])
+
+    def close(self):
+        try:
+            self._call("POST", "/v1/auth/token/revoke-self")
+        except OSError:
+            pass
+
+
 class Forwarder:
     """A local TCP port tunnelled to host:port through the gateway (CONNECT).
 
@@ -190,9 +242,20 @@ def connect(cfg):
     allowed = []
     served = []
     loaded = set()
+    # Secrets in Vault: read now, all at once, and the token revoked.
+    from_vault = {}
+    if cfg.get("vault"):
+        vault = Vault(cfg["vault"], gw)
+        try:
+            for src in cfg.get("sources", []):
+                if src.get("secret_vault"):
+                    v = src["secret_vault"]
+                    from_vault[src["name"]] = vault.read(v["path"], v["key"])
+        finally:
+            vault.close()
     for i, src in enumerate(cfg.get("sources", [])):
         name, typ, s = src["name"], src["type"], src.get("settings", {})
-        secret = src.get("secret") or ""
+        secret = src.get("secret") or from_vault.get(name, "")
         if src.get("secret_file"):  # a mounted Secret (Kubernetes): nbsandboxd never read it
             with open(src["secret_file"]) as f:
                 secret = f.read().strip()

@@ -237,11 +237,12 @@ type Gateway struct {
 const (
 	SecretsBuiltin    = "builtin"    // encrypted in nbsandbox's database; development only
 	SecretsKubernetes = "kubernetes" // Kubernetes Secrets in the runs namespace
+	SecretsVault      = "vault"      // Vault or OpenBao (KV v2); fetchers log in themselves
 )
 
 // ConnectionSecrets configures where connections' credentials are kept.
 type ConnectionSecrets struct {
-	// Provider is builtin (development) or kubernetes.
+	// Provider is builtin (development), kubernetes or vault.
 	Provider string `yaml:"provider"`
 	// MasterKey encrypts the built-in store: 32 random bytes, base64
 	// (NBSANDBOX_CONNECTIONS_MASTER_KEY). Never logged. Losing it loses
@@ -251,6 +252,27 @@ type ConnectionSecrets struct {
 	// connections refer to: the runs namespace by default, since a Pod can
 	// mount only its own namespace's Secrets.
 	Namespace string `yaml:"namespace"`
+	// Vault is the vault provider's settings.
+	Vault VaultSettings `yaml:"vault"`
+}
+
+// VaultSettings configure the vault provider (docs/connections.md): where
+// secrets live, and how nbsandboxd and fetchers log in (Kubernetes auth).
+type VaultSettings struct {
+	Address     string   `yaml:"address"`      // NBSANDBOX_VAULT_ADDRESS, e.g. https://vault.example:8200
+	Mount       string   `yaml:"mount"`        // KV v2 mount (default secret)
+	Prefix      string   `yaml:"prefix"`       // where nbsandbox writes managed secrets (default nbsandbox/connections)
+	AuthMount   string   `yaml:"auth_mount"`   // Kubernetes auth mount (default kubernetes)
+	Role        string   `yaml:"role"`         // nbsandboxd's role
+	FetcherRole string   `yaml:"fetcher_role"` // the fetchers' role
+	References  []string `yaml:"references"`   // path prefixes references may be under (empty: none)
+	CAFile      string   `yaml:"ca_file"`      // the CA of Vault's certificate, if not a public one
+	// Token is used instead of Kubernetes auth by nbsandboxd
+	// (NBSANDBOX_VAULT_TOKEN; testing). Never logged.
+	Token string `yaml:"token"`
+	// FetcherServiceAccount is the fetchers' service account in the runs
+	// namespace (the Vault role's bound service account).
+	FetcherServiceAccount string `yaml:"fetcher_service_account"`
 }
 
 // GatewayKey decodes the gateway's signing key: 32 bytes or more, base64.
@@ -657,6 +679,8 @@ func applyEnv(s *Settings, getenv func(string) string) error {
 		"NBSANDBOX_GATEWAY_ADDRESS":         &s.Connections.Gateway.Address,
 		"NBSANDBOX_GATEWAY_KEY":             &s.Connections.Gateway.Key,
 		"NBSANDBOX_FETCHER_IMAGE":           &s.Connections.FetcherImage,
+		"NBSANDBOX_VAULT_ADDRESS":           &s.Connections.Secrets.Vault.Address,
+		"NBSANDBOX_VAULT_TOKEN":             &s.Connections.Secrets.Vault.Token,
 	}
 	for k, p := range str {
 		if v := getenv(k); v != "" {
@@ -944,8 +968,19 @@ func (s Settings) Validate() error {
 			if s.Backend != "kubernetes" {
 				add("connections.secrets.provider: kubernetes needs the Kubernetes backend")
 			}
+		case SecretsVault:
+			v := c.Secrets.Vault
+			if s.Backend != "kubernetes" {
+				add("connections.secrets.provider: vault needs the Kubernetes backend (fetchers log in with their service account)")
+			}
+			if u, err := url.Parse(v.Address); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+				add("connections.secrets.vault.address: an http(s) URL, got %q", v.Address)
+			}
+			if v.FetcherRole == "" || v.FetcherServiceAccount == "" || (v.Role == "" && v.Token == "") {
+				add("connections.secrets.vault: fetcher_role, fetcher_service_account, and role (or token) are needed")
+			}
 		default:
-			add("connections.secrets.provider: must be %s or %s, got %q", SecretsBuiltin, SecretsKubernetes, c.Secrets.Provider)
+			add("connections.secrets.provider: must be %s, %s or %s, got %q", SecretsBuiltin, SecretsKubernetes, SecretsVault, c.Secrets.Provider)
 		}
 		if _, err := GatewayKey(c.Gateway.Key); err != nil {
 			add("connections.gateway.key: %v", err)

@@ -34,6 +34,14 @@ func newConnections(cfg config.Settings, db *store.DB, logger *slog.Logger) (*co
 			ns = cfg.Kubernetes.Namespace // the runs namespace: a Pod mounts only its own namespace's Secrets
 		}
 		provider = secrets.NewKubernetes(client, ns)
+	case config.SecretsVault:
+		v := c.Secrets.Vault
+		vp, err := secrets.NewVault(secrets.VaultConfig{Address: v.Address, Mount: v.Mount, Prefix: v.Prefix, AuthMount: v.AuthMount,
+			Role: v.Role, FetcherRole: v.FetcherRole, Token: v.Token, References: v.References, CACertFile: v.CAFile})
+		if err != nil {
+			return nil, err
+		}
+		provider = vp
 	default:
 		b, err := secrets.NewBuiltin(c.Secrets.MasterKey, db)
 		if err != nil {
@@ -56,7 +64,8 @@ func newConnections(cfg config.Settings, db *store.DB, logger *slog.Logger) (*co
 		gw = c.Gateway.Address
 	}
 	fs := connections.FetcherSettings{Image: c.FetcherImage, GatewayAddress: c.Gateway.Address, GatewayContainer: gw, GatewayKey: key,
-		MemoryBytes: int64(c.FetcherMemory), NanoCPUs: int64(c.FetcherCPUs * 1e9)}
+		MemoryBytes: int64(c.FetcherMemory), NanoCPUs: int64(c.FetcherCPUs * 1e9),
+		ServiceAccount: c.Secrets.Vault.FetcherServiceAccount, FetcherRole: c.Secrets.Vault.FetcherRole}
 	return connections.New(connections.Deps{DB: db, Secrets: provider, Allowed: connections.NewAllowed(c.Allowed), Fetcher: fs, Log: logger}), nil
 }
 

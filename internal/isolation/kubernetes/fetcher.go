@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -142,6 +143,16 @@ func buildFetcherPod(cfg Config, spec isolation.RunSpec, kind fetcherKind, gatew
 			Projected: &corev1.ProjectedVolumeSource{Sources: sources, DefaultMode: &mode}}})
 		mounts = append(mounts, corev1.VolumeMount{Name: "secrets", MountPath: isolation.FetcherSecretsDir, ReadOnly: true})
 	}
+	if spec.Fetcher.VaultLogin {
+		// A token of its service account for Vault's audience only: the
+		// API server refuses it; Vault's Kubernetes auth accepts it.
+		exp := int64(600)
+		volumes = append(volumes, corev1.Volume{Name: "vault-token", VolumeSource: corev1.VolumeSource{Projected: &corev1.ProjectedVolumeSource{
+			Sources: []corev1.VolumeProjection{{ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
+				Audience: isolation.FetcherVaultAudience, ExpirationSeconds: &exp, Path: "token"}}},
+			DefaultMode: &mode}}})
+		mounts = append(mounts, corev1.VolumeMount{Name: "vault-token", MountPath: path.Dir(isolation.FetcherVaultTokenPath), ReadOnly: true})
+	}
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: FetcherName(spec.RunID), Namespace: cfg.Namespace,
@@ -189,6 +200,9 @@ func buildFetcherPod(cfg Config, spec isolation.RunSpec, kind fetcherKind, gatew
 	}
 	if cfg.RuntimeClass != "" {
 		pod.Spec.RuntimeClassName = &cfg.RuntimeClass
+	}
+	if spec.Fetcher.VaultLogin {
+		pod.Spec.ServiceAccountName = spec.Fetcher.ServiceAccount
 	}
 	return pod
 }
