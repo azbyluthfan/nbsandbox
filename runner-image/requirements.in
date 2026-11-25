@@ -13,3 +13,6 @@ ipykernel
 numpy
 pandas
 matplotlib
+
+# External data: nbsandbox.sql and stream speak Arrow Flight to the run's fetcher
+pyarrow

@@ -47,6 +47,17 @@ send more than 10 a second.
 
 progress() never affects the result.
 
+A notebook reads external data by the names its space binds (crm, lake...),
+never a host or a password (docs/connections.md):
+
+    df = nbsandbox.sql("SELECT region, sum(amount) FROM crm.orders GROUP BY 1")  # a DataFrame
+    for batch in nbsandbox.stream("SELECT * FROM lake.parquet('events/*.parquet')"):
+        ...                                     # pyarrow RecordBatches, a few MB each
+    nbsandbox.connections()                     # [{"name": "crm", "type": "postgresql"}, ...]
+
+One SELECT per call; the run's fetcher holds the credentials and answers
+over Arrow Flight (NBSANDBOX_FETCHER, NBSANDBOX_FETCHER_TOKEN).
+
 In an interactive session (NBSANDBOX_SESSION is set) there is no caller:
 output(), emit() and progress() also show, under the cell, what a run would
 return, and write it to a scratch folder in /tmp, as a run would to its
@@ -60,7 +71,7 @@ import math as _math
 import os as _os
 import time as _time
 
-__all__ = ["parameters", "output", "emit", "progress"]
+__all__ = ["parameters", "output", "emit", "progress", "sql", "stream", "connections", "QueryError"]
 
 _MAX_DEPTH = 64
 
@@ -217,3 +228,68 @@ def progress(fraction, message=""):
     _append_event({"kind": "progress", "fraction": float(fraction), "message": message[:1000]})
     if _in_session():
         print(f"[nbsandbox.progress] {fraction:.0%} {message[:200]}".rstrip())
+
+
+class QueryError(Exception):
+    """A query the fetcher refused or its source failed; the message says why."""
+
+
+_flight = []
+
+
+def _fetcher():
+    addr = _os.environ.get("NBSANDBOX_FETCHER", "")
+    if not addr:
+        raise QueryError("this run reads no connections: its space binds no names, or connections are off")
+    if not _flight:
+        import pyarrow.flight as fl
+
+        token = _os.environ.get("NBSANDBOX_FETCHER_TOKEN", "")
+        opts = fl.FlightCallOptions(headers=[(b"authorization", ("Bearer " + token).encode())])
+        _flight.append((fl, fl.FlightClient(addr), opts))
+    return _flight[0]
+
+
+def _reader(query):
+    if not isinstance(query, str) or not query.strip():
+        raise TypeError("nbsandbox.sql: query must be a non-empty string")
+    fl, client, opts = _fetcher()
+    try:
+        return client.do_get(fl.Ticket(query.encode()), opts)
+    except fl.FlightError as e:
+        raise QueryError(_flight_message(e)) from None
+
+
+def _flight_message(e):
+    msg = str(e).split(". Detail:")[0].split("gRPC client debug context")[0].strip()
+    return msg.removeprefix("Flight error: ").strip() or "the fetcher failed"
+
+
+def sql(query):
+    """Run one SELECT on the space's names; the result as a pandas DataFrame."""
+    fl, _, _ = _fetcher()
+    try:
+        return _reader(query).read_pandas()
+    except fl.FlightError as e:
+        raise QueryError(_flight_message(e)) from None
+
+
+def stream(query):
+    """Run one SELECT and yield its result as pyarrow RecordBatches, as they come."""
+    fl, _, _ = _fetcher()
+    reader = _reader(query)
+    try:
+        for chunk in reader:
+            yield chunk.data
+    except fl.FlightError as e:
+        raise QueryError(_flight_message(e)) from None
+
+
+def connections():
+    """The names this run can read, and their type: [{"name": ..., "type": ...}]."""
+    fl, client, opts = _fetcher()
+    try:
+        results = list(client.do_action(fl.Action("connections", b""), opts))
+    except fl.FlightError as e:
+        raise QueryError(_flight_message(e)) from None
+    return _json.loads(results[0].body.to_pybytes()) if results else []
