@@ -90,6 +90,15 @@ func buildContainerConfig(spec isolation.RunSpec) (*container.Config, *container
 	if spec.Runtime == "runsc" {
 		gvisorPIDs(host, spec.Limits.PIDs)
 	}
+	if spec.Fetcher != nil {
+		// Reading external data: the run's own network, an internal one
+		// shared only with its fetcher (and the gateway, which only the
+		// fetcher has a token for). Still no way out.
+		host.NetworkMode = container.NetworkMode(NetworkName(spec.RunID))
+		cfg.Env = append(cfg.Env,
+			isolation.FetcherEnv+"=grpc://"+FetcherName(spec.RunID)+":"+strconv.Itoa(isolation.FetcherPort),
+			isolation.FetcherTokenEnv+"="+spec.Fetcher.Token)
+	}
 	return cfg, host
 }
 

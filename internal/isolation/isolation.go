@@ -51,8 +51,9 @@ type RunSpec struct {
 	// after the image's own packages.
 	PackagesDir string
 	// Fetcher, if set, is the run's reader of external data: a second
-	// container the run reaches at FetcherAddress, on a network only the
-	// two and the gateway share. Nil: the run reads nothing outside.
+	// container the run reaches at the address in FetcherEnv, on a
+	// network only the two and the gateway share. Nil: the run reads
+	// nothing outside.
 	Fetcher *Fetcher
 }
 
@@ -72,11 +73,10 @@ type Fetcher struct {
 	Gateway string
 }
 
-// Where a run reaches its fetcher, and the environment variables that say so.
+// The fetcher's port, and the environment variables that tell a run where
+// its fetcher is (a grpc:// URL) and the token it presents.
 const (
-	FetcherHost     = "fetcher"
 	FetcherPort     = 8815
-	FetcherAddress  = "grpc://fetcher:8815"
 	FetcherEnv      = "NBSANDBOX_FETCHER"
 	FetcherTokenEnv = "NBSANDBOX_FETCHER_TOKEN"
 )

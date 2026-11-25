@@ -272,9 +272,14 @@ class Fetcher(fl.FlightServerBase):
 
 
 def main():
-    path = os.environ.get("NBSANDBOX_FETCHER_CONFIG", "/etc/nbsandbox-fetcher/config.json")
-    with open(path) as f:
-        cfg = json.load(f)
+    # The configuration comes in the environment (Docker) or a file (a
+    # mounted Secret); from the environment, it is dropped once read.
+    raw = os.environ.pop("NBSANDBOX_FETCHER_CONFIG_JSON", "")
+    if raw:
+        cfg = json.loads(raw)
+    else:
+        with open(os.environ.get("NBSANDBOX_FETCHER_CONFIG", "/etc/nbsandbox-fetcher/config.json")) as f:
+            cfg = json.load(f)
     listen = os.environ.get("NBSANDBOX_FETCHER_LISTEN", "grpc://0.0.0.0:8815")
     server = Fetcher(listen, cfg)
     print(f"fetcher: serving {len(server.served)} source(s) on {listen}", file=sys.stderr)

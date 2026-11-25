@@ -131,6 +131,15 @@ services:
       # Clients reach nbsandboxd through Caddy: its X-Forwarded-For names the
       # client, so failed sign-ins are limited per client address too.
       NBSANDBOX_TRUSTED_PROXIES: ${NBSANDBOX_TRUSTED_PROXIES:-caddy}
+      # Connections: notebooks read data where it lives (docs/connections.md).
+      # Off unless set to true; then start the gateway too
+      # (docker compose --profile connections up -d), and set both keys
+      # (openssl rand -base64 32) and where connections may point.
+      NBSANDBOX_CONNECTIONS_ENABLED: ${NBSANDBOX_CONNECTIONS_ENABLED:-false}
+      NBSANDBOX_CONNECTIONS_MASTER_KEY: ${NBSANDBOX_CONNECTIONS_MASTER_KEY:-}
+      NBSANDBOX_CONNECTIONS_ALLOWED: ${NBSANDBOX_CONNECTIONS_ALLOWED:-}
+      NBSANDBOX_GATEWAY_KEY: ${NBSANDBOX_GATEWAY_KEY:-}
+      NBSANDBOX_FETCHER_IMAGE: ${NBSANDBOX_FETCHER_IMAGE:-ghcr.io/azbyluthfan/nbsandbox-fetcher:0.3.0}
     volumes:
       # Same absolute path inside and outside: Docker resolves the run
       # containers' bind mounts on the host.
@@ -164,13 +173,32 @@ services:
       - -allowfrom=nbsandboxd
       - -loglevel=info
       - -allowHEAD=(/v[0-9.]+)?/_ping
-      - -allowGET=(/v[0-9.]+)?/(_ping|version|info|containers/json|containers/[a-zA-Z0-9_.-]+/(json|logs|stats)|images/.+/json)
-      - -allowPOST=(/v[0-9.]+)?/containers/(create|[a-zA-Z0-9_.-]+/(start|stop|kill|wait|attach))
-      - -allowDELETE=(/v[0-9.]+)?/containers/[a-zA-Z0-9_.-]+
+      - -allowGET=(/v[0-9.]+)?/(_ping|version|info|containers/json|containers/[a-zA-Z0-9_.-]+/(json|logs|stats)|images/.+/json|networks)
+      - -allowPOST=(/v[0-9.]+)?/(containers/(create|[a-zA-Z0-9_.-]+/(start|stop|kill|wait|attach))|networks/(create|[a-zA-Z0-9_.-]+/(connect|disconnect)))
+      - -allowDELETE=(/v[0-9.]+)?/(containers|networks)/[a-zA-Z0-9_.-]+
       - -allowbindmountfrom=${NBSANDBOX_DATA_DIR:-/srv/nbsandbox}/spaces,${NBSANDBOX_DATA_DIR:-/srv/nbsandbox}/packages
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks: [docker-api]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  # The egress gateway for connections: docker compose --profile connections up -d.
+  # The only way out for runs' fetchers, and only to the endpoints a run's
+  # token names; alone on its own network. The fixed name is how fetchers
+  # find it (connections.gateway.address).
+  gateway:
+    profiles: [connections]
+    image: ${NBSANDBOX_IMAGE:-ghcr.io/azbyluthfan/nbsandboxd:0.3.0}
+    container_name: nbsandbox-gateway
+    command: ["gateway"]
+    user: "1000:1000"
+    environment:
+      NBSANDBOX_GATEWAY_KEY: ${NBSANDBOX_GATEWAY_KEY:-} # required: it refuses to start without one
+      NBSANDBOX_LOG_LEVEL: ${NBSANDBOX_LOG_LEVEL:-info}
+    networks: [egress]
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
@@ -197,6 +225,8 @@ networks:
   # Only nbsandboxd reaches the database.
   db:
     internal: true
+  # The gateway's way out, shared with nothing else of nbsandbox's.
+  egress: {}
 
 volumes:
   pgdata: {}
