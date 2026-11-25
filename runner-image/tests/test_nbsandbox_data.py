@@ -96,6 +96,19 @@ class DataTest(unittest.TestCase):
         with self.assertRaises(nbsandbox.QueryError):
             nbsandbox.connections()
 
+    def test_fetcher_gone(self):
+        import socket
+
+        with socket.socket() as sock:  # a port nothing listens on
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        with mock.patch.dict(os.environ, {"NBSANDBOX_FETCHER": f"grpc://127.0.0.1:{port}", "NBSANDBOX_FETCHER_TOKEN": "tok"}):
+            for call in (lambda: nbsandbox.sql("SELECT 1"), lambda: list(nbsandbox.stream("SELECT 1")), nbsandbox.connections):
+                with self.assertRaises(nbsandbox.QueryError) as e:
+                    call()
+                self.assertIn("the fetcher can't be reached", str(e.exception))
+                self.assertNotIn("127.0.0.1", str(e.exception))
+
     def test_no_fetcher(self):
         with mock.patch.dict(os.environ, {"NBSANDBOX_FETCHER": ""}):
             with self.assertRaisesRegex(nbsandbox.QueryError, "binds no names"):

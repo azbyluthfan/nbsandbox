@@ -246,7 +246,13 @@ def _fetcher():
 
         token = _os.environ.get("NBSANDBOX_FETCHER_TOKEN", "")
         opts = fl.FlightCallOptions(headers=[(b"authorization", ("Bearer " + token).encode())])
-        _flight.append((fl, fl.FlightClient(addr), opts))
+        # Keepalive: a fetcher that vanishes without closing its connections
+        # (a lost node, a force-deleted Pod) fails a waiting query within
+        # minutes, not at the run's time limit. Not more often than gRPC
+        # servers accept on a quiet stream (5 minutes): a long query that
+        # sends nothing for a while must not be cut off.
+        _flight.append((fl, fl.FlightClient(addr, generic_options=[
+            ("grpc.keepalive_time_ms", 360_000), ("grpc.keepalive_timeout_ms", 20_000)]), opts))
     return _flight[0]
 
 
@@ -261,6 +267,13 @@ def _reader(query):
 
 
 def _flight_message(e):
+    import pyarrow.flight as fl
+
+    if isinstance(e, fl.FlightUnavailableError):
+        # The transport, not the query: gRPC's own words (and addresses)
+        # tell a notebook nothing it can act on.
+        return ("the fetcher can't be reached: it stopped (for example, it ran out of memory) or its connection broke. "
+                "This run's queries can't work any more; a session's work again once you start a new session")
     msg = str(e).split(". Detail:")[0].split("gRPC client debug context")[0].strip()
     return msg.removeprefix("Flight error: ").strip() or "the fetcher failed"
 
