@@ -83,6 +83,11 @@ func containerIP(t *testing.T, name string) string {
 	return docker(t, "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", name)
 }
 
+// withSQLServer: SQL Server is a test source (on by default). It needs about
+// 2 GB of memory, emulated on arm64: NBSANDBOX_TEST_SQLSERVER=0 leaves it out
+// where that doesn't fit beside kind.
+var withSQLServer = os.Getenv("NBSANDBOX_TEST_SQLSERVER") != "0"
+
 var sourcesOnce sync.Once
 
 // sources starts the data sources once per test binary (and leaves them for
@@ -94,9 +99,11 @@ func sources(t *testing.T) {
 		docker(t, "run", "-d", "--name", srcMySQL, "--network", sourcesNet(), "-e", "MYSQL_ROOT_PASSWORD=owner-pw", "-e", "MYSQL_DATABASE=crm",
 			"mysql:8.4@sha256:8c233bad33d520a7aae1c1e619c3a9775f4a1ba2d463d692fada04ec7f40be00")
 		// SQL Server publishes amd64 images only (emulated on arm64 hosts).
-		docker(t, "run", "-d", "--name", srcMSSQL, "--network", sourcesNet(), "--platform", "linux/amd64",
-			"-e", "ACCEPT_EULA=Y", "-e", "MSSQL_SA_PASSWORD="+mssqlSA,
-			"mcr.microsoft.com/mssql/server:2022-latest@sha256:4525e3efac9f3e241cb003bb2ff2a82818b502f37e12049d788b1a9fa7e13b7f")
+		if withSQLServer {
+			docker(t, "run", "-d", "--name", srcMSSQL, "--network", sourcesNet(), "--platform", "linux/amd64",
+				"-e", "ACCEPT_EULA=Y", "-e", "MSSQL_SA_PASSWORD="+mssqlSA,
+				"mcr.microsoft.com/mssql/server:2022-latest@sha256:4525e3efac9f3e241cb003bb2ff2a82818b502f37e12049d788b1a9fa7e13b7f")
+		}
 		docker(t, "run", "-d", "--name", srcPG, "--network", sourcesNet(), "-e", "POSTGRES_PASSWORD=owner-pw", "-e", "POSTGRES_DB=crm",
 			"postgres:17-alpine@sha256:3540c0362c809df084ffac0ae69fe794515f9de92692f02178bcdce0ef0302ac")
 		docker(t, "run", "-d", "--name", srcS3, "--network", sourcesNet(), "-p", "127.0.0.1::9000",
@@ -137,16 +144,18 @@ func sources(t *testing.T) {
 		sqlcmd := func(db, q string) (string, error) {
 			return runDocker("exec", srcMSSQL, "/opt/mssql-tools18/bin/sqlcmd", "-C", "-b", "-S", "localhost", "-U", "sa", "-P", mssqlSA, "-d", db, "-Q", q)
 		}
-		retry(t, "source SQL Server", 180*time.Second, func() (string, error) { return sqlcmd("master", "CREATE DATABASE crm") })
-		retry(t, "source SQL Server tables", 30*time.Second, func() (string, error) {
-			return sqlcmd("crm", `CREATE TABLE orders (id int, region nvarchar(10), amount int);
+		if withSQLServer {
+			retry(t, "source SQL Server", 180*time.Second, func() (string, error) { return sqlcmd("master", "CREATE DATABASE crm") })
+			retry(t, "source SQL Server tables", 30*time.Second, func() (string, error) {
+				return sqlcmd("crm", `CREATE TABLE orders (id int, region nvarchar(10), amount int);
 				INSERT INTO orders SELECT n, CASE WHEN n % 2 = 0 THEN 'eu' ELSE 'us' END, n
 				  FROM (SELECT TOP 1000 ROW_NUMBER() OVER (ORDER BY (SELECT 1)) AS n FROM sys.all_objects a CROSS JOIN sys.all_objects b) s;
 				CREATE TABLE payroll (name nvarchar(10), salary int);
 				CREATE LOGIN reader WITH PASSWORD = '`+readerPass+`', CHECK_POLICY = OFF;
 				CREATE USER reader FOR LOGIN reader;
 				GRANT SELECT ON orders TO reader;`)
-		})
+			})
+		}
 		// The object store: a CSV in the bound bucket, another bucket beside it.
 		port := strings.TrimPrefix(docker(t, "port", srcS3, "9000/tcp"), "127.0.0.1:")
 		for bucket, obj := range map[string][2]string{
@@ -479,6 +488,9 @@ func TestConnectionsMoreDatabases(t *testing.T) {
 	sources(t)
 	pgc := connection(t, "crm", "postgresql", pgSettings(), readerPass)
 	my := connection(t, "shop", "mysql", map[string]any{"host": srcMySQL, "database": "crm", "user": "reader"}, readerPass)
+	if !withSQLServer {
+		t.Skip("NBSANDBOX_TEST_SQLSERVER=0: no SQL Server source")
+	}
 	ms := connection(t, "erp", "sqlserver", map[string]any{"host": srcMSSQL, "database": "crm", "user": "reader"}, readerPass)
 	sp := space(t, "alice")
 	upload(t, "alice", sp, "", map[string]string{"read.ipynb": codeNotebook(`import nbsandbox
