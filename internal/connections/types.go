@@ -4,7 +4,10 @@
 package connections
 
 import (
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
+	"net"
 	"net/url"
 	"sort"
 	"strconv"
@@ -19,6 +22,14 @@ const (
 	TypeS3         = "s3"
 	TypeAzureBlob  = "azureblob"
 	TypeHTTP       = "http"
+)
+
+// A database connection's tls: how the fetcher talks to it.
+const (
+	TLSOff     = "off"     // never encrypt
+	TLSPrefer  = "prefer"  // encrypt if the server offers it, without checking its certificate
+	TLSRequire = "require" // always encrypt, without checking the certificate
+	TLSVerify  = "verify"  // encrypt, and check the certificate and the host name
 )
 
 // field is one setting of a connection type.
@@ -47,6 +58,7 @@ var types = map[string]typeSpec{
 		"access_key_id": {kind: "string"},
 		"use_ssl":       {kind: "bool", def: true},
 		"url_style":     {kind: "string", def: "vhost"}, // vhost or path (MinIO, Ceph, RustFS: path)
+		"ca":            {kind: "pem"},                  // a private CA to trust as well as the system's
 	}, secretIs: "the secret access key"},
 	TypeAzureBlob: {fields: map[string]field{
 		"account":   {kind: "string", required: true},
@@ -67,6 +79,8 @@ func dbSpec(port int) typeSpec {
 		"port":     {kind: "int", def: port},
 		"database": {kind: "string", required: true},
 		"user":     {kind: "string", required: true},
+		"tls":      {kind: "string", def: TLSPrefer},
+		"ca":       {kind: "pem"}, // with tls verify: the CA to trust instead of the system's
 	}, secretNeeded: true, secretIs: "the password"}
 }
 
@@ -148,6 +162,18 @@ func coerce(name, kind string, v any) (any, error) {
 			}
 		}
 		return nil, invalid("%q must be a port number (1 to 65535)", name)
+	case "pem":
+		s, ok := v.(string)
+		if !ok || len(s) > 64<<10 {
+			return nil, invalid("%q must be PEM certificates (at most 64 KiB)", name)
+		}
+		s = strings.TrimSpace(s)
+		if s != "" {
+			if err := checkPEM(s); err != nil {
+				return nil, invalid("%q: %v", name, err)
+			}
+		}
+		return s, nil
 	case "bool":
 		if b, ok := v.(bool); ok {
 			return b, nil
@@ -162,8 +188,17 @@ func coerce(name, kind string, v any) (any, error) {
 func endpoint(typ string, s map[string]any) (host string, err error) {
 	switch typ {
 	case TypePostgreSQL, TypeMySQL, TypeSQLServer:
-		return hostOnly(str(s, "host"))
+		h, err := hostOnly(str(s, "host"))
+		if err != nil {
+			return "", err
+		}
+		return h, checkTLS(typ, h, s)
 	case TypeS3:
+		if str(s, "ca") != "" {
+			if ssl, _ := s["use_ssl"].(bool); !ssl {
+				return "", invalid("ca is the authority for https: it needs use_ssl true")
+			}
+		}
 		if st := str(s, "url_style"); st != "vhost" && st != "path" {
 			return "", invalid("url_style must be vhost or path, got %q", st)
 		}
@@ -199,6 +234,57 @@ func endpoint(typ string, s map[string]any) (host string, err error) {
 func str(s map[string]any, k string) string {
 	v, _ := s[k].(string)
 	return v
+}
+
+// checkTLS checks a database connection's tls and ca.
+func checkTLS(typ, host string, s map[string]any) error {
+	mode := str(s, "tls")
+	if mode == "" {
+		mode = TLSPrefer // a connection made before tls existed
+	}
+	switch mode {
+	case TLSOff, TLSPrefer, TLSRequire, TLSVerify:
+	default:
+		return invalid("tls must be off, prefer, require or verify, got %q", mode)
+	}
+	if str(s, "ca") != "" && mode != TLSVerify {
+		return invalid("ca is the authority tls verify checks the server's certificate against: it needs tls verify")
+	}
+	if mode == TLSVerify {
+		switch {
+		case typ == TypeSQLServer:
+			// DuckDB's mssql extension (0.2.5) accepts any certificate.
+			return invalid("sqlserver connections can't check the server's certificate yet: use tls require (encrypted, not checked)")
+		case typ == TypeMySQL && net.ParseIP(host) != nil:
+			// MySQL's client checks the name it connected to; an address
+			// can't be pointed at the fetcher's forwarder.
+			return invalid("tls verify for mysql needs the server's host name, not an address")
+		}
+	}
+	return nil
+}
+
+// checkPEM: one or more PEM certificates, and nothing else.
+func checkPEM(s string) error {
+	rest, n := []byte(s), 0
+	for {
+		var b *pem.Block
+		b, rest = pem.Decode(rest)
+		if b == nil {
+			break
+		}
+		if b.Type != "CERTIFICATE" {
+			return fmt.Errorf("a %s, not a CERTIFICATE (never a key)", b.Type)
+		}
+		if _, err := x509.ParseCertificate(b.Bytes); err != nil {
+			return fmt.Errorf("certificate %d: %w", n+1, err)
+		}
+		n++
+	}
+	if n == 0 || strings.TrimSpace(string(rest)) != "" {
+		return fmt.Errorf("must be PEM certificates (-----BEGIN CERTIFICATE-----)")
+	}
+	return nil
 }
 
 func hostOnly(h string) (string, error) {

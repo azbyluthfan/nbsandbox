@@ -95,7 +95,7 @@ var sourcesOnce sync.Once
 func sources(t *testing.T) {
 	t.Helper()
 	sourcesOnce.Do(func() {
-		_, _ = runDocker("rm", "-f", srcPG, srcS3, srcMySQL, srcMSSQL)
+		_, _ = runDocker("rm", "-fv", srcPG, srcS3, srcMySQL, srcMSSQL)
 		docker(t, "run", "-d", "--name", srcMySQL, "--network", sourcesNet(), "-e", "MYSQL_ROOT_PASSWORD=owner-pw", "-e", "MYSQL_DATABASE=crm",
 			"mysql:8.4@sha256:8c233bad33d520a7aae1c1e619c3a9775f4a1ba2d463d692fada04ec7f40be00")
 		// SQL Server publishes amd64 images only (emulated on arm64 hosts).

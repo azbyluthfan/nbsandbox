@@ -77,6 +77,10 @@ type Fetcher struct {
 	// the platform's secrets (Kubernetes Secrets): nbsandboxd never reads
 	// them. The configuration names each file (FetcherSecretsDir/Path).
 	Mounts []SecretMount
+	// Hosts are names the fetcher resolves to its own loopback addresses
+	// (name → 127.0.0.x), where it forwards them to the gateway: drivers
+	// that check a certificate against the name they connected to.
+	Hosts map[string]string
 	// MemoryBytes and NanoCPUs are the fetcher's own limits.
 	MemoryBytes, NanoCPUs int64
 	// VaultLogin: the fetcher logs in to Vault itself (Kubernetes auth), as

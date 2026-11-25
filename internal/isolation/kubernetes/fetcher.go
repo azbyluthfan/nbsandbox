@@ -8,8 +8,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -197,6 +199,9 @@ func buildFetcherPod(cfg Config, spec isolation.RunSpec, kind fetcherKind, gatew
 				VolumeMounts: mounts,
 			}},
 		},
+	}
+	for _, name := range slices.Sorted(maps.Keys(spec.Fetcher.Hosts)) {
+		pod.Spec.HostAliases = append(pod.Spec.HostAliases, corev1.HostAlias{IP: spec.Fetcher.Hosts[name], Hostnames: []string{name}})
 	}
 	if cfg.RuntimeClass != "" {
 		pod.Spec.RuntimeClassName = &cfg.RuntimeClass

@@ -1654,8 +1654,12 @@ components:
       type: object
       description: |
         By type. postgresql, mysql, sqlserver: host, port (5432, 3306, 1433),
-        database, user. s3: endpoint (host[:port]), bucket, region
-        (us-east-1), access_key_id, use_ssl (true), url_style (vhost or path).
+        database, user, tls (prefer: off, prefer, require or verify; verify
+        checks the certificate and host name, not for sqlserver), ca (PEM
+        certificates verify trusts instead of the system's). s3: endpoint
+        (host[:port]), bucket, region (us-east-1), access_key_id, use_ssl
+        (true), url_style (vhost or path), ca (PEM certificates trusted beside
+        the system's).
         azureblob: account, container, endpoint, auth (connection_string,
         account_key or sas: what the secret is). http: url, auth_header
         (Authorization), auth_prefix ("Bearer ").

@@ -150,3 +150,15 @@ func TestFetcherOwnLimits(t *testing.T) {
 		t.Fatalf("limits: %d %d %v", host.Memory, host.NanoCPUs, cfg.Env)
 	}
 }
+
+func TestFetcherHostAliases(t *testing.T) {
+	spec := fetcherSpec()
+	spec.Fetcher.Hosts = map[string]string{"my.internal": "127.0.0.2", "a.internal": "127.0.0.3"}
+	_, host := buildFetcherConfig(spec, runFetcher)
+	if !slices.Equal(host.ExtraHosts, []string{"a.internal:127.0.0.3", "my.internal:127.0.0.2"}) {
+		t.Fatalf("extra hosts: %v", host.ExtraHosts)
+	}
+	if _, plain := buildFetcherConfig(fetcherSpec(), runFetcher); len(plain.ExtraHosts) != 0 {
+		t.Fatalf("extra hosts without aliases: %v", plain.ExtraHosts)
+	}
+}

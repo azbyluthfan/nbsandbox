@@ -137,6 +137,42 @@ class MountedSecretTest(unittest.TestCase):
         self.assertEqual(rows, [("10.96.0.9:3128",)])
 
 
+class TLSTest(unittest.TestCase):
+    """A source's ca reaches the queries: each runs on a cursor of its own,
+    and some settings (ca_cert_file) are per connection."""
+
+    def _ca(self):
+        import glob
+
+        with open(sorted(glob.glob("/etc/ssl/certs/*.pem"))[0]) as f:
+            return f.read()
+
+    def test_s3_ca_reaches_every_cursor(self):
+        cfg = json.loads(json.dumps(CFG))
+        cfg["sources"][0]["settings"].update(use_ssl=True, ca=self._ca())
+        con, _ = fetcher.connect(cfg)
+        path = con.cursor().execute("SELECT current_setting('ca_cert_file')").fetchone()[0]
+        self.assertTrue(path.startswith("/tmp/nbsandbox-ca/"), path)
+        with open(path) as f:
+            bundle = f.read()
+        self.assertIn(self._ca().strip(), bundle)
+        with open(fetcher.SYSTEM_CAS) as f:
+            self.assertIn(f.read().strip(), bundle)  # the system's too
+        with self.assertRaises(duckdb.Error):
+            con.cursor().execute("SET ca_cert_file = '/etc/passwd'")
+
+    def test_no_ca_no_setting(self):
+        con, _ = fetcher.connect(CFG)
+        self.assertEqual(con.cursor().execute("SELECT current_setting('ca_cert_file')").fetchone()[0], "")
+
+    def test_modes_in_each_driver(self):
+        for mode in ("off", "prefer", "require", "verify"):
+            self.assertIn(mode, fetcher.PG_SSLMODE)
+            self.assertIn(mode, fetcher.MYSQL_SSL_MODE)
+        self.assertEqual(fetcher.PG_SSLMODE["verify"], "verify-full")
+        self.assertEqual(fetcher.MYSQL_SSL_MODE["verify"], "VERIFY_IDENTITY")
+
+
 class MemoryTest(unittest.TestCase):
     def test_spills_under_its_limit(self):
         import os

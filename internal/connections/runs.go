@@ -113,6 +113,10 @@ type fetcherSource struct {
 	SecretFile string `json:"secret_file,omitempty"`
 	// SecretVault: the fetcher reads it from Vault itself.
 	SecretVault *vaultSecret `json:"secret_vault,omitempty"`
+	// Listen: the loopback address of the source's forwarder, which its host
+	// name resolves to in the fetcher (MySQL with tls verify: its client
+	// checks the name it connected to, and skips the check for 127.0.0.1).
+	Listen string `json:"listen,omitempty"`
 }
 
 type vaultSecret struct {
@@ -152,6 +156,7 @@ func (s *Service) Fetcher(ctx context.Context, runID, owner string, names map[st
 	var cfg fetcherConfig
 	var allow []string
 	var mounts []isolation.SecretMount
+	hosts := map[string]string{}
 	keys := make([]string, 0, len(names))
 	for n := range names {
 		keys = append(keys, n)
@@ -213,6 +218,13 @@ func (s *Service) Fetcher(ctx context.Context, runID, owner string, names map[st
 				return nil, fmt.Errorf("%w: the %s provider can't give a run its credentials", ErrUnavailable, c.SecretProvider)
 			}
 		}
+		if c.Type == TypeMySQL && str(settings, "tls") == TLSVerify {
+			h := strings.ToLower(str(settings, "host"))
+			if hosts[h] == "" {
+				hosts[h] = fmt.Sprintf("127.0.0.%d", len(hosts)+2)
+			}
+			src.Listen = hosts[h]
+		}
 		cfg.Sources = append(cfg.Sources, src)
 		allow = append(allow, targets(c.Type, settings)...)
 	}
@@ -226,7 +238,7 @@ func (s *Service) Fetcher(ctx context.Context, runID, owner string, names map[st
 	if err != nil {
 		return nil, err
 	}
-	return &isolation.Fetcher{Image: fs.Image, Config: b, Token: cfg.Token, Gateway: fs.GatewayContainer, Mounts: mounts,
+	return &isolation.Fetcher{Image: fs.Image, Config: b, Token: cfg.Token, Gateway: fs.GatewayContainer, Mounts: mounts, Hosts: hosts,
 		MemoryBytes: fs.MemoryBytes, NanoCPUs: fs.NanoCPUs, VaultLogin: cfg.Vault != nil, ServiceAccount: fs.ServiceAccount}, nil
 }
 
