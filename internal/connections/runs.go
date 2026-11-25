@@ -11,6 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,6 +20,7 @@ import (
 
 	"github.com/azbyluthfan/nbsandbox/internal/gateway"
 	"github.com/azbyluthfan/nbsandbox/internal/isolation"
+	"github.com/azbyluthfan/nbsandbox/internal/secrets"
 	"github.com/azbyluthfan/nbsandbox/internal/spaces"
 	"github.com/azbyluthfan/nbsandbox/internal/store"
 )
@@ -91,6 +94,9 @@ type FetcherSettings struct {
 	GatewayKey       []byte
 	MemoryBytes      int64 // each fetcher's limits
 	NanoCPUs         int64
+	// ServiceAccount is the fetchers' service account (Vault's Kubernetes
+	// auth binds its role to it); FetcherRole that role.
+	ServiceAccount, FetcherRole string
 }
 
 // ErrUnavailable is a run whose connections can't be given to it now: a
@@ -105,6 +111,23 @@ type fetcherSource struct {
 	Secret   string         `json:"secret,omitempty"`
 	// SecretFile: the credential is mounted there instead (Kubernetes).
 	SecretFile string `json:"secret_file,omitempty"`
+	// SecretVault: the fetcher reads it from Vault itself.
+	SecretVault *vaultSecret `json:"secret_vault,omitempty"`
+}
+
+type vaultSecret struct {
+	Path string `json:"path"`
+	Key  string `json:"key"`
+}
+
+// fetcherVault is how a fetcher logs in to Vault and where it reads.
+type fetcherVault struct {
+	Address   string `json:"address"`
+	Mount     string `json:"mount"`
+	AuthMount string `json:"auth_mount"`
+	Role      string `json:"role"`
+	TokenFile string `json:"token_file"`
+	CAPEM     string `json:"ca_pem,omitempty"`
 }
 
 type fetcherConfig struct {
@@ -114,6 +137,7 @@ type fetcherConfig struct {
 		Token   string `json:"token"`
 	} `json:"gateway"`
 	Sources []fetcherSource `json:"sources"`
+	Vault   *fetcherVault   `json:"vault,omitempty"`
 }
 
 // served are the types a fetcher reads; the others (http) reach notebooks
@@ -159,6 +183,18 @@ func (s *Service) Fetcher(ctx context.Context, runID, owner string, names map[st
 					ErrUnavailable, name, c.SecretProvider)
 			}
 			switch p := s.d.Secrets.(type) {
+			case *secrets.Vault:
+				path, key, err := secrets.ParseVaultRef(c.SecretRef)
+				if err != nil {
+					return nil, fmt.Errorf("%w: %q's credentials: %w", ErrUnavailable, name, err)
+				}
+				src.SecretVault = &vaultSecret{Path: path, Key: key}
+				if cfg.Vault == nil {
+					if cfg.Vault, err = fetcherVaultFor(p.Config(), fs); err != nil {
+						return nil, err
+					}
+					allow = append(allow, hostPort(cfg.Vault.Address))
+				}
 			case Revealer:
 				v, err := p.Reveal(ctx, c.SecretRef)
 				if err != nil {
@@ -191,7 +227,7 @@ func (s *Service) Fetcher(ctx context.Context, runID, owner string, names map[st
 		return nil, err
 	}
 	return &isolation.Fetcher{Image: fs.Image, Config: b, Token: cfg.Token, Gateway: fs.GatewayContainer, Mounts: mounts,
-		MemoryBytes: fs.MemoryBytes, NanoCPUs: fs.NanoCPUs}, nil
+		MemoryBytes: fs.MemoryBytes, NanoCPUs: fs.NanoCPUs, VaultLogin: cfg.Vault != nil, ServiceAccount: fs.ServiceAccount}, nil
 }
 
 // targets are the host:port endpoints a source's fetcher connects to,
@@ -231,4 +267,35 @@ func randomToken() string {
 	b := make([]byte, 32)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// fetcherVaultFor is how fetchers log in to Vault: the fetchers' role, a
+// token of their own for Vault's audience, and Vault's CA if it has one.
+func fetcherVaultFor(c secrets.VaultConfig, fs FetcherSettings) (*fetcherVault, error) {
+	v := &fetcherVault{Address: c.Address, Mount: c.Mount, AuthMount: c.AuthMount, Role: fs.FetcherRole,
+		TokenFile: isolation.FetcherVaultTokenPath}
+	if c.CACertFile != "" {
+		pem, err := os.ReadFile(c.CACertFile)
+		if err != nil {
+			return nil, fmt.Errorf("vault CA: %w", err)
+		}
+		v.CAPEM = string(pem)
+	}
+	return v, nil
+}
+
+// hostPort is a URL's host:port, with the scheme's port if it has none.
+func hostPort(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	if u.Port() != "" {
+		return strings.ToLower(u.Host)
+	}
+	p := "443"
+	if u.Scheme == "http" {
+		p = "80"
+	}
+	return net.JoinHostPort(strings.ToLower(u.Hostname()), p)
 }

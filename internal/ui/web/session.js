@@ -102,7 +102,8 @@ export class KernelSession {
   /** Opens (or joins) the notebook's session and connects to it. */
   async start(mode) {
     this.setState({ status: "starting", reason: "" });
-    const s = await this.api.request("POST", this.path(), { notebook: this.notebook, mode: mode || undefined });
+    const s = await this.api.request("POST", this.path(), { notebook: this.notebook, mode: mode || undefined,
+      environment: this.environment || undefined });
     this.attach(s);
   }
 

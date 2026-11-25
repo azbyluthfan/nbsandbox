@@ -53,6 +53,22 @@ data:
       secrets:
         provider: {{ .Values.connections.secretsProvider | quote }}
         namespace: {{ .Values.runs.namespace | quote }}
+        {{- if include "nbsandbox.vault" . }}
+        {{- with .Values.connections.vault }}
+        vault:
+          address: {{ required "connections.vault.address is required with the vault provider" .address | quote }}
+          mount: {{ .mount | quote }}
+          prefix: {{ .prefix | quote }}
+          auth_mount: {{ .authMount | quote }}
+          role: {{ .role | quote }}
+          fetcher_role: {{ .fetcherRole | quote }}
+          references: {{ toJson .references }}
+          {{- if .caConfigMap }}
+          ca_file: /etc/nbsandbox/vault-ca.crt
+          {{- end }}
+        {{- end }}
+          fetcher_service_account: {{ include "nbsandbox.fullname" . }}-fetcher
+        {{- end }}
       gateway:
         address: {{ printf "%s-gateway.%s.svc:3128" (include "nbsandbox.fullname" .) .Release.Namespace | quote }}
       fetcher_image: {{ .Values.connections.fetcherImage | quote }}

@@ -144,9 +144,23 @@ connections:
   # Where connections may point: host names, "*.domain" patterns, CIDRs.
   allowed: []
   # kubernetes: Secrets in the runs namespace (the API writes managed ones;
-  # fetcher Pods mount them, nbsandboxd never reads them). builtin: encrypted
-  # in the database, for development, with masterKeySecret.
+  # fetcher Pods mount them, nbsandboxd never reads them). vault: Vault or
+  # OpenBao (below). builtin: encrypted in the database, for development,
+  # with masterKeySecret.
   secretsProvider: kubernetes
+  # Vault or OpenBao, KV v2 (docs/connections.md#vault). nbsandboxd and the
+  # fetchers log in with Vault's Kubernetes auth; the fetchers reach Vault
+  # through the gateway.
+  vault:
+    address: ""             # e.g. https://vault.vault.svc:8200
+    mount: secret           # the KV v2 mount
+    prefix: nbsandbox/connections   # where nbsandbox writes managed secrets
+    authMount: kubernetes
+    role: nbsandbox         # the API processes' role: write and delete under prefix, read metadata of references
+    fetcherRole: nbsandbox-fetcher  # the fetchers' role: read under prefix and the references
+    references: []          # path prefixes connections may reference, e.g. [teams/data]
+    caConfigMap: ""         # a ConfigMap with key ca.crt, if Vault's certificate isn't publicly trusted
+    tokenSecret: ""         # testing only: a Secret with key token, instead of Kubernetes auth
   masterKeySecret: ""       # builtin: a Secret with key master-key (openssl rand -base64 32)
   fetcherImage: ghcr.io/azbyluthfan/nbsandbox-fetcher:0.3.0
   # Each reading run's fetcher Pod, beside its run Pod: reserved like a

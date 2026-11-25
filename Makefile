@@ -342,6 +342,25 @@ test-k8s: k8s-up ## Integration tests through the local Kubernetes stack (K8S_CN
 	$(K8S_TEST_ENV) $(GO) test -tags integration -count=1 -timeout 40m $(TESTFLAGS) ./tests/integration/; \
 		status=$$?; docker rm -f nbsandbox-src-pg nbsandbox-src-s3 nbsandbox-src-mysql nbsandbox-src-mssql >/dev/null 2>&1; exit $$status
 
+# Connections with their secrets in Vault: OpenBao (development mode) in the
+# kind cluster, configured as an operator would, and the connection tests
+# against it (referenced secrets too). The stack goes back to the kubernetes
+# provider afterwards.
+VAULT_VALUES := --set connections.secretsProvider=vault --set connections.vault.address=http://openbao.vault.svc:8200 \
+	--set 'connections.vault.references={teams}'
+.PHONY: test-k8s-vault
+test-k8s-vault: k8s-up ## Connections with secrets in Vault (OpenBao in the local Kubernetes stack)
+	$(KUBECTL) apply -f - < $(KIND_DIR)/openbao.yaml
+	$(KUBECTL) -n vault rollout status deploy/openbao --timeout=180s
+	$(KIND_DIR)/openbao-setup.sh "$(KUBECTL)"
+	$(HELM) upgrade --install nbsandbox deploy/helm/nbsandbox -n nbsandbox -f $(KIND_DIR)/values.yaml $(VAULT_VALUES) \
+		--set runs.runtimeClass=$(K8S_RUNTIME_CLASS) --set runs.memory=$(K8S_RUN_MEMORY) --kubeconfig $(KIND_CONFIG) --wait --timeout 5m
+	$(KUBECTL) -n nbsandbox rollout restart deploy/nbsandbox-api deploy/nbsandbox-worker
+	$(KUBECTL) -n nbsandbox rollout status deploy/nbsandbox-api deploy/nbsandbox-worker --timeout=180s
+	$(K8S_TEST_ENV) NBSANDBOX_TEST_VAULT=1 $(GO) test -tags integration -count=1 -timeout 30m -run 'TestConnections' $(TESTFLAGS) ./tests/integration/; \
+		status=$$?; docker rm -f nbsandbox-src-pg nbsandbox-src-s3 nbsandbox-src-mysql nbsandbox-src-mssql >/dev/null 2>&1; \
+		$(HELM) upgrade --install nbsandbox deploy/helm/nbsandbox -n nbsandbox -f $(KIND_DIR)/values.yaml --kubeconfig $(KIND_CONFIG) >/dev/null; exit $$status
+
 # kind's own network plugin (kindnet) doesn't enforce the deny-all policy
 # (run Pods reach the API server, kubelet, workers, internet): the workers must notice and refuse runs.
 test-k8s-cni-refuses: ## On kindnet, workers find the network open and refuse runs
@@ -410,6 +429,9 @@ ui-preview: build test-db dev-s3 ## Work on the web UI: nbsandboxd on 127.0.0.1:
 	NBSANDBOX_DATABASE_URL="$(TEST_DB_URL)&search_path=ui_preview" $(DEV_S3_ENV) NBSANDBOX_S3_PREFIX=ui-preview/ \
 	NBSANDBOX_LISTEN=127.0.0.1:18080 NBSANDBOX_UI_ENABLED=true NBSANDBOX_UI_LISTEN=127.0.0.1:18090 \
 	NBSANDBOX_DOCKER_HOST=unix:///nonexistent/nbsandbox-ui-preview.sock \
+	NBSANDBOX_CONNECTIONS_ENABLED=true NBSANDBOX_CONNECTIONS_ALLOWED='*.internal' \
+	NBSANDBOX_CONNECTIONS_MASTER_KEY=ZGV2LW9ubHktbWFzdGVyLWtleS0wMTIzNDU2Nzg5YWI= \
+	NBSANDBOX_GATEWAY_KEY=ZGV2LW9ubHktZ2F0ZXdheS1rZXktMDEyMzQ1Njc4OWE= \
 	./bin/nbsandboxd -config config/settings.yaml
 
 # Docker Desktop's socket, when present (Go programs ignore docker contexts).

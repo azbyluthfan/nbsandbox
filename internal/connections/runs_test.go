@@ -7,12 +7,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/azbyluthfan/nbsandbox/internal/gateway"
+	"github.com/azbyluthfan/nbsandbox/internal/secrets"
 	"github.com/azbyluthfan/nbsandbox/internal/spaces"
 	"github.com/azbyluthfan/nbsandbox/internal/store"
 	"github.com/azbyluthfan/nbsandbox/internal/store/storetest"
@@ -158,4 +163,43 @@ func TestFetcherMountsKubernetesSecrets(t *testing.T) {
 		cfg.Sources[0].SecretFile != "/etc/nbsandbox-fetcher/secrets/"+f.Mounts[0].Path || f.Gateway != "gw.svc:3128" {
 		t.Fatalf("mounts %+v, source %+v", f.Mounts, cfg.Sources[0])
 	}
+}
+
+func TestFetcherReadsVault(t *testing.T) {
+	ctx := context.Background()
+	fv := &fakeVaultServer{}
+	srv := httptest.NewServer(fv)
+	defer srv.Close()
+	vp, err := secrets.NewVault(secrets.VaultConfig{Address: srv.URL, Token: "t", References: []string{"team"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := New(Deps{DB: storetest.Open(t), Secrets: vp, Allowed: NewAllowed([]string{"*.internal"}),
+		Fetcher: FetcherSettings{Image: "f", GatewayAddress: "gw:3128", GatewayKey: gwKey, ServiceAccount: "nbsandbox-fetcher", FetcherRole: "fetchers"}})
+	crm, err := s.Create(ctx, "alice", pg("crm", "pg.internal"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := s.Fetcher(ctx, "r1", "alice", map[string]string{"crm": crm.ID}, time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg fetcherConfig
+	_ = json.Unmarshal(f.Config, &cfg)
+	src := cfg.Sources[0]
+	if strings.Contains(string(f.Config), "pa55") || src.SecretVault == nil || src.SecretVault.Path != "nbsandbox/connections/conn-"+crm.ID ||
+		src.SecretVault.Key != "secret" || cfg.Vault == nil || cfg.Vault.Role != "fetchers" || !f.VaultLogin || f.ServiceAccount != "nbsandbox-fetcher" {
+		t.Fatalf("config %s, fetcher %+v", f.Config, f)
+	}
+	c, _ := gateway.Verify(gwKey, cfg.Gateway.Token, time.Now())
+	if !slices.Contains(c.Allow, hostPort(srv.URL)) {
+		t.Fatalf("vault not in the token: %v", c.Allow)
+	}
+}
+
+// fakeVaultServer accepts KV v2 writes, for creating connections.
+type fakeVaultServer struct{}
+
+func (fakeVaultServer) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
+	_, _ = io.WriteString(w, `{"data":{"version":1}}`)
 }

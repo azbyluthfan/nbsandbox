@@ -214,9 +214,35 @@ export class Api {
     return this.request("POST", `/spaces/${enc(space)}/functions/${enc(name)}/versions`, { notebook, files });
   }
 
-  invoke(space, name, version, parameters) {
+  invoke(space, name, version, parameters, environment) {
     const path = version ? `/versions/${version}/invoke` : "/invoke";
-    return this.request("POST", `/spaces/${enc(space)}/functions/${enc(name)}${path}`, { parameters });
+    const body = { parameters };
+    if (environment) body.environment = environment;
+    return this.request("POST", `/spaces/${enc(space)}/functions/${enc(name)}${path}`, body);
+  }
+
+  connections() {
+    return this.request("GET", "/connections").then((d) => d.items);
+  }
+
+  createConnection(body) {
+    return this.request("POST", "/connections", body);
+  }
+
+  updateConnection(id, patch) {
+    return this.request("PATCH", `/connections/${enc(id)}`, patch);
+  }
+
+  deleteConnection(id) {
+    return this.request("DELETE", `/connections/${enc(id)}`);
+  }
+
+  spaceConnections(space) {
+    return this.request("GET", `/spaces/${enc(space)}/connections`);
+  }
+
+  setSpaceConnections(space, body) {
+    return this.request("PUT", `/spaces/${enc(space)}/connections`, body);
   }
 
   deleteFunction(space, name) {
@@ -249,10 +275,11 @@ export class Api {
     return this.request("GET", `/spaces/${enc(space)}/runs/${enc(id)}`);
   }
 
-  startRun(space, notebook, parameters, readOnly) {
+  startRun(space, notebook, parameters, readOnly, environment) {
     const body = { notebook };
     if (parameters) body.parameters = parameters;
     if (readOnly) body.space = "read-only";
+    if (environment) body.environment = environment;
     return this.request("POST", `/spaces/${enc(space)}/runs`, body);
   }
 

@@ -79,7 +79,19 @@ type Fetcher struct {
 	Mounts []SecretMount
 	// MemoryBytes and NanoCPUs are the fetcher's own limits.
 	MemoryBytes, NanoCPUs int64
+	// VaultLogin: the fetcher logs in to Vault itself (Kubernetes auth), as
+	// ServiceAccount, with a token for Vault's audience at
+	// FetcherVaultTokenPath; nothing else of the service account.
+	VaultLogin     bool
+	ServiceAccount string
 }
+
+// FetcherVaultTokenPath is where a fetcher finds its service account token
+// for Vault, and FetcherVaultAudience the audience it is for.
+const (
+	FetcherVaultTokenPath = "/var/run/secrets/nbsandbox/vault/token" //nolint:gosec // a path, not a credential
+	FetcherVaultAudience  = "vault"
+)
 
 // SecretMount is one credential mounted into the fetcher: the Secret's
 // name and key, at FetcherSecretsDir/Path.

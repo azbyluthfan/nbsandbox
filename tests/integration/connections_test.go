@@ -607,3 +607,41 @@ nbsandbox.output(int(nbsandbox.sql("SELECT count(*) FROM crm.orders WHERE region
 	}
 	assertNoReadLeftovers(t)
 }
+
+// With secrets in Vault (make test-k8s-vault): a connection can reference
+// a secret the platform team keeps, under a prefix the operator allows; the
+// fetcher reads it itself. Managed secrets are covered by every other test
+// there.
+func TestConnectionsVaultReference(t *testing.T) {
+	needConnections(t)
+	if os.Getenv("NBSANDBOX_TEST_VAULT") != "1" {
+		t.Skip("set NBSANDBOX_TEST_VAULT=1 (make test-k8s-vault)")
+	}
+	sources(t)
+	for ref, want := range map[string]int{"teams/elsewhere#password": http.StatusBadRequest, "other/crm#password": http.StatusBadRequest} {
+		r := jsonCall(t, "POST", "/v1/connections", "alice", map[string]any{"name": fmt.Sprintf("bad-%d", time.Now().UnixNano()%1_000_000),
+			"type": "postgresql", "settings": pgSettings(), "secret": map[string]any{"ref": ref}}, nil)
+		if r.Code != want {
+			t.Errorf("reference %s: %d %s", ref, r.Code, r.Body)
+		}
+	}
+	name := fmt.Sprintf("crm-ref-%d", time.Now().UnixNano()%1_000_000)
+	r := jsonCall(t, "POST", "/v1/connections", "alice", map[string]any{"name": name, "type": "postgresql", "settings": pgSettings(),
+		"secret": map[string]any{"ref": "teams/data/crm#password"}}, nil)
+	if r.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", r.Code, r.Body)
+	}
+	var c struct{ ID string }
+	r.json(t, &c)
+	t.Cleanup(func() { call(t, "DELETE", "/v1/connections/"+c.ID, "alice", nil, nil) })
+	sp := space(t, "alice")
+	upload(t, "alice", sp, "", map[string]string{"read.ipynb": codeNotebook(`import nbsandbox
+nbsandbox.output(int(nbsandbox.sql("SELECT count(*) FROM crm.orders").iloc[0, 0]))`)})
+	bind(t, sp, "main", map[string]map[string]string{"main": {"crm": c.ID}})
+	run := startRun(t, "alice", sp, "read.ipynb", nil)
+	res := runResult(t, "alice", sp, run.ID)
+	if res.Status != "succeeded" || string(res.Output) != "1000" {
+		t.Fatalf("run: %+v %s", res, call(t, "GET", "/v1/spaces/"+sp+"/runs/"+run.ID+"/log", "alice", nil, nil).Body)
+	}
+	assertNoReadLeftovers(t)
+}

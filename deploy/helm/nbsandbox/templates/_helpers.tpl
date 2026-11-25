@@ -61,6 +61,10 @@ seccompProfile: { type: RuntimeDefault }
 {{- if .Values.connections.enabled }}
 - name: NBSANDBOX_GATEWAY_KEY
   valueFrom: { secretKeyRef: { name: {{ required "connections.gateway.keySecret is required with connections.enabled" .Values.connections.gateway.keySecret | quote }}, key: key } }
+{{- if and (include "nbsandbox.vault" .) .Values.connections.vault.tokenSecret }}
+- name: NBSANDBOX_VAULT_TOKEN
+  valueFrom: { secretKeyRef: { name: {{ .Values.connections.vault.tokenSecret | quote }}, key: token } }
+{{- end }}
 {{- if eq .Values.connections.secretsProvider "builtin" }}
 - name: NBSANDBOX_CONNECTIONS_MASTER_KEY
   valueFrom: { secretKeyRef: { name: {{ required "connections.masterKeySecret is required with the builtin provider" .Values.connections.masterKeySecret | quote }}, key: master-key } }
@@ -76,6 +80,17 @@ seccompProfile: { type: RuntimeDefault }
 {{- if and .Values.connections.enabled (eq .Values.connections.secretsProvider "kubernetes") }}true{{ end }}
 {{- end }}
 
+{{/* Connections' secrets are in Vault. */}}
+{{- define "nbsandbox.vault" -}}
+{{- if and .Values.connections.enabled (eq .Values.connections.secretsProvider "vault") }}true{{ end }}
+{{- end }}
+
+{{/* The API processes need their service account token: for the Kubernetes
+API (Secrets) or for logging in to Vault. */}}
+{{- define "nbsandbox.apiUsesToken" -}}
+{{- if or (include "nbsandbox.apiManagesSecrets" .) (include "nbsandbox.vault" .) }}true{{ end }}
+{{- end }}
+
 {{/* users.yaml: for basic auth on the API, or the UI's sign-in form. */}}
 {{- define "nbsandbox.usesUsers" -}}
 {{- if or .Values.auth.basic (and .Values.ui.enabled (eq .Values.ui.auth "basic")) }}true{{ end }}
@@ -83,6 +98,9 @@ seccompProfile: { type: RuntimeDefault }
 
 {{- define "nbsandbox.volumeMounts" -}}
 - { name: settings, mountPath: /etc/nbsandbox/settings.yaml, subPath: settings.yaml, readOnly: true }
+{{- if and (include "nbsandbox.vault" .) .Values.connections.vault.caConfigMap }}
+- { name: vault-ca, mountPath: /etc/nbsandbox/vault-ca.crt, subPath: ca.crt, readOnly: true }
+{{- end }}
 - { name: data, mountPath: /srv/nbsandbox }
 {{- if include "nbsandbox.usesUsers" . }}
 - { name: users, mountPath: /etc/nbsandbox/users.yaml, subPath: users.yaml, readOnly: true }
@@ -92,6 +110,10 @@ seccompProfile: { type: RuntimeDefault }
 {{- define "nbsandbox.volumes" -}}
 - name: settings
   configMap: { name: {{ include "nbsandbox.fullname" . }} }
+{{- if and (include "nbsandbox.vault" .) .Values.connections.vault.caConfigMap }}
+- name: vault-ca
+  configMap: { name: {{ .Values.connections.vault.caConfigMap | quote }} }
+{{- end }}
 {{- if include "nbsandbox.usesUsers" . }}
 - name: users
   secret: { secretName: {{ required "auth.usersSecret is required with auth.basic or ui.auth basic" .Values.auth.usersSecret | quote }}, defaultMode: 0400 }

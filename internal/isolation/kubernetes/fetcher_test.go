@@ -195,3 +195,26 @@ func TestFetcherPodOwnLimits(t *testing.T) {
 		t.Fatalf("resources %+v", c.Resources)
 	}
 }
+
+func TestFetcherPodVaultToken(t *testing.T) {
+	spec := fetcherSpec()
+	spec.Fetcher.VaultLogin, spec.Fetcher.ServiceAccount = true, "nbsandbox-fetcher"
+	p := buildFetcherPod(Config{Namespace: "runs"}, spec, runFetcher, "10.96.0.9:3128")
+	var tok *corev1.ServiceAccountTokenProjection
+	for _, v := range p.Spec.Volumes {
+		if v.Projected != nil && len(v.Projected.Sources) == 1 && v.Projected.Sources[0].ServiceAccountToken != nil {
+			tok = v.Projected.Sources[0].ServiceAccountToken
+		}
+	}
+	if p.Spec.ServiceAccountName != "nbsandbox-fetcher" || *p.Spec.AutomountServiceAccountToken || tok == nil ||
+		tok.Audience != "vault" || *tok.ExpirationSeconds > 3600 {
+		t.Fatalf("vault token: sa %q automount %v token %+v", p.Spec.ServiceAccountName, *p.Spec.AutomountServiceAccountToken, tok)
+	}
+	// Without Vault: no service account token of any kind.
+	plain := buildFetcherPod(Config{Namespace: "runs"}, fetcherSpec(), runFetcher, "10.96.0.9:3128")
+	for _, v := range plain.Spec.Volumes {
+		if v.Projected != nil && v.Projected.Sources[0].ServiceAccountToken != nil {
+			t.Fatal("a token without Vault")
+		}
+	}
+}
