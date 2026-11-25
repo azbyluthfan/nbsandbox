@@ -28,7 +28,9 @@ type Route struct {
 	RunScoped   bool    // has {run_id}: validated as a UUID
 	// SessionScoped: has {session_id}, validated as a UUID.
 	SessionScoped bool
-	MaxBody       int64 // 0 = DefaultMaxBody
+	// ConnectionScoped: has {connection_id}, validated as a UUID.
+	ConnectionScoped bool
+	MaxBody          int64 // 0 = DefaultMaxBody
 }
 
 func (a *API) routes() []Route {
@@ -53,6 +55,16 @@ func (a *API) routes() []Route {
 		{Method: "PATCH", Pattern: "/v1/spaces/{id}/files/{path...}", Handler: a.patchFile, Auth: true, Op: auth.OpMoveFile, SpaceScoped: true},
 		{Method: "DELETE", Pattern: "/v1/spaces/{id}/files/{path...}", Handler: a.deleteFile, Auth: true, Op: auth.OpDeleteFile, SpaceScoped: true},
 		{Method: "POST", Pattern: "/v1/spaces/{id}/folders", Handler: a.createFolder, Auth: true, Op: auth.OpCreateFolder, SpaceScoped: true},
+
+		// Connections: the caller's data sources, and what names mean in a
+		// space (docs/plan-data-access.md).
+		{Method: "POST", Pattern: "/v1/connections", Handler: a.createConnection, Auth: true, Op: auth.OpCreateConnection},
+		{Method: "GET", Pattern: "/v1/connections", Handler: a.listConnections, Auth: true, Op: auth.OpListConnections},
+		{Method: "GET", Pattern: "/v1/connections/{connection_id}", Handler: a.getConnection, Auth: true, Op: auth.OpGetConnection, ConnectionScoped: true},
+		{Method: "PATCH", Pattern: "/v1/connections/{connection_id}", Handler: a.updateConnection, Auth: true, Op: auth.OpUpdateConnection, ConnectionScoped: true},
+		{Method: "DELETE", Pattern: "/v1/connections/{connection_id}", Handler: a.deleteConnection, Auth: true, Op: auth.OpDeleteConnection, ConnectionScoped: true},
+		{Method: "GET", Pattern: "/v1/spaces/{id}/connections", Handler: a.getSpaceConnections, Auth: true, Op: auth.OpGetSpaceConnections, SpaceScoped: true},
+		{Method: "PUT", Pattern: "/v1/spaces/{id}/connections", Handler: a.setSpaceConnections, Auth: true, Op: auth.OpSetSpaceConnections, SpaceScoped: true},
 
 		// The space's own packages (requirements.txt), built into a package set.
 		{Method: "GET", Pattern: "/v1/spaces/{id}/packages", Handler: a.getPackages, Auth: true, Op: auth.OpGetSpacePackages, SpaceScoped: true},

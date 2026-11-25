@@ -47,8 +47,8 @@ A connection's credential (a password, a key, a token, an OAuth client secret) i
 | Built-in store | development only (the Docker backend) | encrypted in nbsandbox's PostgreSQL with a master key the operator provides; not offered for production |
 
 Each connection's secret is either:
-- **managed:** the user enters it in nbsandbox's UI or API (write-only: it is never shown again), and nbsandbox writes it into **a namespace or Vault path that only nbsandbox owns**. nbsandbox's permissions are limited to that namespace or path. This is the self-service way, as Airflow's or Grafana's own stores are; or
-- **referenced:** the connection points to an existing Kubernetes Secret or Vault path, created outside nbsandbox (GitOps, Sealed Secrets, the platform team). Read-only, as Airflow's secrets backends or Databricks' Key Vault-backed scopes work.
+- **managed:** the user enters it in nbsandbox's UI or API (write-only: it is never shown again), and nbsandbox writes it into **a place only nbsandbox writes to**: Secrets it creates and labels in the **runs namespace** (a Pod can mount only its own namespace's Secrets, and the fetcher runs there; run Pods have no API access, no service account token, and network policy blocks the API server, so only a fetcher ever mounts one), or its own Vault path. This is the self-service way, as Airflow's or Grafana's own stores are; or
+- **referenced:** the connection points to an existing Kubernetes Secret (in the runs namespace, for the same reason) or Vault path, created outside nbsandbox (GitOps, Sealed Secrets, the platform team). Read-only, as Airflow's secrets backends or Databricks' Key Vault-backed scopes work.
 
 **nbsandboxd never handles a secret's value when a run starts.** It creates the run's fetcher Pod with *references* to exactly the secrets that run needs, and the kubelet mounts them. With Vault, the fetcher gets a short-lived token limited to those paths.
 
@@ -238,7 +238,7 @@ Verified with Cilium; the policies use only standard NetworkPolicy, still to be 
 ## Decisions so far
 
 - Kubernetes only (AKS and on-premises); Docker for development.
-- Secret providers: Kubernetes Secrets (with Sealed Secrets and External Secrets Operator) and Vault/OpenBao; a built-in store for development only. Each secret managed or referenced.
+- Secret providers: Kubernetes Secrets (with Sealed Secrets and External Secrets Operator) and Vault/OpenBao; a built-in store for development only. Each secret managed or referenced. Kubernetes Secrets live in the runs namespace, where the fetcher Pods that mount them run.
 - Connections at user level; names per space; environments; no "protected" environment.
 - Functions and shared spaces use the caller's or member's own connections.
 - Mediated mode for SQL and files, injected mode for APIs and custom storage.

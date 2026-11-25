@@ -183,6 +183,22 @@ ui:
       - nbsandbox.runs
       - nbsandbox.functions.invoke
       - nbsandbox.functions.publish
+      - nbsandbox.connections
+
+# Connections (docs/plan-data-access.md): a user's data sources, named in
+# their spaces per environment. Being built: they can be created and bound
+# now; notebooks read them in a later release. Off by default.
+connections:
+  enabled: false                    # NBSANDBOX_CONNECTIONS_ENABLED
+  allowed: []                       # NBSANDBOX_CONNECTIONS_ALLOWED: where connections may point: host names,
+                                    # "*.domain" patterns, CIDR ranges ("10.0.0.0/8"). Empty: nowhere.
+                                    # Loopback and link-local (cloud metadata) addresses never.
+  secrets:
+    provider: builtin               # NBSANDBOX_CONNECTIONS_PROVIDER: builtin (development) or kubernetes
+    master_key: ""                  # NBSANDBOX_CONNECTIONS_MASTER_KEY: builtin only; openssl rand -base64 32.
+                                    # Losing it loses every stored secret.
+    namespace: ""                   # NBSANDBOX_CONNECTIONS_NAMESPACE: kubernetes only; default: the runs
+                                    # namespace (a Pod mounts only its own namespace's Secrets)
 
 # Who may call the API (docs/auth.md). Basic auth uses users_file; bearer
 # tokens come from an OpenID Connect provider. Spaces belong to the caller's ID.

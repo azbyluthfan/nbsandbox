@@ -393,3 +393,40 @@ func TestSessionsInACluster(t *testing.T) {
 		t.Fatalf("one process: %v %q", s.SessionsOn(), s.Sessions.SessionAddress("w1"))
 	}
 }
+
+func TestConnectionsSettings(t *testing.T) {
+	d := Default().Connections
+	if d.Enabled || d.Secrets.Provider != SecretsBuiltin || len(d.Allowed) != 0 {
+		t.Fatalf("defaults: %+v", d)
+	}
+	key := "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=" // 32 bytes
+	s, err := Load("", envOf(map[string]string{"NBSANDBOX_CONNECTIONS_ENABLED": "true", "NBSANDBOX_CONNECTIONS_MASTER_KEY": key,
+		"NBSANDBOX_CONNECTIONS_ALLOWED": "*.internal, 10.0.0.0/8,db.corp.example"}))
+	if err != nil || !s.Connections.Enabled || len(s.Connections.Allowed) != 3 || s.Connections.Allowed[1] != "10.0.0.0/8" {
+		t.Fatalf("env: %+v %v", s.Connections, err)
+	}
+	if s, err := Load("", envOf(map[string]string{"NBSANDBOX_CONNECTIONS_ALLOWED": "not valid"})); err != nil || s.Connections.Enabled {
+		t.Fatalf("off: settings aren't checked: %v", err)
+	}
+	on := map[string]string{"NBSANDBOX_CONNECTIONS_ENABLED": "true", "NBSANDBOX_CONNECTIONS_MASTER_KEY": key}
+	for name, extra := range map[string]map[string]string{
+		"no master key":                  {"NBSANDBOX_CONNECTIONS_MASTER_KEY": ""},
+		"a short master key":             {"NBSANDBOX_CONNECTIONS_MASTER_KEY": "c2hvcnQ="},
+		"an unknown provider":            {"NBSANDBOX_CONNECTIONS_PROVIDER": "vault"},
+		"kubernetes without its backend": {"NBSANDBOX_CONNECTIONS_PROVIDER": "kubernetes"},
+		"a bad CIDR":                     {"NBSANDBOX_CONNECTIONS_ALLOWED": "10.0.0.0/99"},
+		"a wildcard in the middle":       {"NBSANDBOX_CONNECTIONS_ALLOWED": "db.*.example"},
+		"a URL instead of a host":        {"NBSANDBOX_CONNECTIONS_ALLOWED": "https://db.example"},
+	} {
+		env := map[string]string{}
+		for k, v := range on {
+			env[k] = v
+		}
+		for k, v := range extra {
+			env[k] = v
+		}
+		if _, err := Load("", envOf(env)); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}

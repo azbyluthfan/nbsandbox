@@ -10,7 +10,8 @@ This guide shows how to use the HTTP API, task by task: which endpoints to call,
 - [5. Publish a notebook and call it from another service](#5-publish-a-notebook-and-call-it-from-another-service)
 - [6. Follow progress: which stream to use](#6-follow-progress-which-stream-to-use)
 - [7. Work interactively: a session](#7-work-interactively-a-session)
-- [8. Errors and retries](#8-errors-and-retries)
+- [8. Connections: your data sources](#8-connections-your-data-sources)
+- [9. Errors and retries](#9-errors-and-retries)
 - [Endpoint overview](#endpoint-overview), [viewing the spec](#viewing-the-spec), [compatibility policy](#compatibility-policy)
 
 ## Basics
@@ -28,7 +29,7 @@ nb() { curl -sS -u "$NBSANDBOX_USER:$NBSANDBOX_PASSWORD" "$@"; }
 - **Ownership:** you see only your own spaces. Another user's space answers `404`, exactly like one that doesn't exist, whatever the request contains.
 - **IDs:** spaces and runs are lowercase UUIDs; anything else in their place is `400`. File paths are relative to the space and may contain `/`; `..`, absolute paths and names starting with `.nbsandbox` are refused.
 - **Request bodies:** JSON with `Content-Type: application/json`, except uploads (`multipart/form-data`) and file saves (the raw file). Unknown fields are refused with `400`, so typos don't pass silently.
-- **Errors:** always `{"error": {"code": "…", "message": "…"}}`. Act on `code` and the status; `message` is for people. Some errors add fields: `problems` (where parameters broke the contract), `current_version` (on file saves), `status` (asking for the result of a run that hasn't finished). See [8. Errors and retries](#8-errors-and-retries).
+- **Errors:** always `{"error": {"code": "…", "message": "…"}}`. Act on `code` and the status; `message` is for people. Some errors add fields: `problems` (where parameters broke the contract), `current_version` (on file saves), `status` (asking for the result of a run that hasn't finished). See [9. Errors and retries](#9-errors-and-retries).
 - **Lists:** paged with `limit` (default 50, at most 200) and `cursor`. Pass the response's `next_cursor` to get the next page; it is empty on the last one.
 - **Times** are RFC 3339 in UTC.
 
@@ -293,7 +294,35 @@ Then open the WebSocket `GET …/sessions/{session_id}/channel` and exchange **J
 
 **Read-write and read-only.** A read-write session (the default) holds the space's write lock, like a writing run: no writing run starts while it's open (`409`), and what the kernel writes in `/space` is written back. While something else writes the space, a new session is read-only instead (`mode` says which). A session **ends by itself** after 30 minutes with no cell running and nobody connected, or 8 hours after it started.
 
-## 8. Errors and retries
+## 8. Connections: your data sources
+
+Being built ([plan-data-access.md](plan-data-access.md)): connections can be created and bound to spaces now; notebooks read them in a later release. Off unless the operator turns them on (`connections.enabled`); while off, these routes answer `404`.
+
+A **connection** is one of your data sources: PostgreSQL, MySQL, SQL Server, object storage (S3-compatible, Azure Blob) or an HTTP API. Its secret goes to the deployment's secret provider and **never comes back** in any response.
+
+```bash
+curl -su alice:… -X POST "$URL/v1/connections" -H 'Content-Type: application/json' -d '{
+  "name": "crm-prod", "type": "postgresql",
+  "settings": {"host": "pg.internal", "database": "crm", "user": "reporting_ro"},
+  "secret": {"value": "…"}}'
+# {"id": "…", "name": "crm-prod", "settings": {…, "port": 5432}, "secret": {"mode": "managed", "provider": "kubernetes"}, …}
+```
+
+- **The secret:** `{"value": "…"}` (nbsandbox stores it), `{"ref": "name#key"}` (an existing Kubernetes Secret in the runs namespace, from GitOps, Sealed Secrets or External Secrets Operator), or none (an open API). Replace it with `PATCH …/connections/{connection_id}`; every space using the connection gets the new one.
+- **Where it may point:** only hosts the operator allows (`connections.allowed`); never loopback or link-local (cloud metadata) addresses. Give the database a **read-only, least-privilege** user: the database's own permissions are the real boundary.
+- **Deleting** is refused (`409`) while a space binds it; `GET …/connections/{connection_id}` lists where (`used_by`).
+
+**In a space, names per environment.** Notebooks name `crm`, never a host or a secret; each environment says which connection a name means:
+
+```bash
+curl -su alice:… -X PUT "$URL/v1/spaces/$SPACE/connections" -H 'Content-Type: application/json' -d '{
+  "default_environment": "dev",
+  "environments": {"dev": {"crm": "crm-dev"}, "prod": {"crm": "crm-prod"}}}'
+```
+
+Every environment binds the same names; connections by name or ID; an empty `environments` unbinds everything.
+
+## 9. Errors and retries
 
 | Status | `code` | What happened | What to do |
 |---|---|---|---|
@@ -328,18 +357,20 @@ Then open the WebSocket `GET …/sessions/{session_id}/channel` and exchange **J
 | Status streams (SSE) | `GET …/runs/{run_id}/events`, `GET /v1/spaces/{id}/events` |
 | Functions | `GET …/functions`, `GET/DELETE …/functions/{name}`, `POST …/functions/{name}/versions` (publish), `GET …/versions/{version}`, `GET …/contract`, `POST …/invoke`, `POST …/versions/{version}/invoke` |
 | Packages | `GET/POST /v1/spaces/{id}/packages`: the space's package set, and building it now ([packages.md](packages.md)) |
+| Connections | `POST/GET /v1/connections`, `GET/PATCH/DELETE /v1/connections/{connection_id}`, `GET/PUT /v1/spaces/{id}/connections` |
 | Sessions | `POST/GET …/sessions`, `GET/DELETE …/sessions/{session_id}`, `POST …/interrupt`, `…/restart`, `…/sync`, `GET …/channel` (WebSocket) ([sessions.md](sessions.md)) |
 | Administration (`nbsandbox.admin`) | `GET /v1/admin/spaces`, `PATCH/DELETE /v1/admin/spaces/{id}`, `GET /v1/admin/runs`, `POST /v1/admin/runs/{run_id}/cancel`, `GET/PUT /v1/admin/drain`, `GET /v1/admin/audit`, `GET /v1/admin/sessions`, `POST /v1/admin/sessions/{session_id}/end` ([auth.md](auth.md#administration)) |
 
 ## gRPC
 
-The same API is served over gRPC, gRPC-Web and the Connect protocol, on the same port as REST: [api/proto/nbsandbox/v1/nbsandbox.proto](../api/proto/nbsandbox/v1/nbsandbox.proto). Five services, one RPC per REST operation, with the same names as the scopes table uses:
+The same API is served over gRPC, gRPC-Web and the Connect protocol, on the same port as REST: [api/proto/nbsandbox/v1/nbsandbox.proto](../api/proto/nbsandbox/v1/nbsandbox.proto). Six services, one RPC per REST operation, with the same names as the scopes table uses:
 
 | Service | RPCs |
 |---|---|
 | `SpaceService` | `CreateSpace`, `ListSpaces`, `GetSpace`, `UpdateSpace`, `DeleteSpace`, `UploadFiles` (client stream), `ListFiles`, `GetFile` (server stream), `PutFile` (client stream), `MoveFile`, `DeleteFile`, `CreateFolder`, `GetSpacePackages`, `BuildSpacePackages` |
 | `FunctionService` | `ListFunctions`, `GetFunction`, `DeleteFunction`, `PublishFunction`, `GetFunctionVersion`, `GetFunctionContract`, `InvokeFunction` (with `wait_seconds`), `InvokeFunctionStream` (server stream) |
 | `AdminService` | `AdminListSpaces`, `AdminUpdateSpace`, `AdminDeleteSpace`, `AdminListRuns`, `AdminCancelRun`, `AdminGetDrain`, `AdminSetDrain`, `AdminListAudit`, `AdminListSessions`, `AdminEndSession` |
+| `ConnectionService` | `CreateConnection`, `ListConnections`, `GetConnection`, `UpdateConnection`, `DeleteConnection`, `GetSpaceConnections`, `SetSpaceConnections` |
 | `SessionService` | `OpenSession`, `ListSessions`, `GetSession`, `EndSession`, `InterruptSession`, `RestartSession`, `SyncSession`, `SessionChannel` (bidirectional stream: the WebSocket's messages; the first request names the session) |
 | `RunService` | `GetRuntime`, `CreateRun`, `ListRuns`, `GetRun`, `CancelRun`, `GetRunResult` (with `wait_seconds`), `FollowRunResult` (server stream: items, then the result), `DeleteRun`, `GetRunNotebook`, `GetRunHTML`, `GetRunLog`, `GetArtifact` (server streams), `ListArtifacts`, `PromoteArtifact`, `FollowRunLog`, `FollowRunEvents`, `FollowSpaceEvents` (server streams) |
 

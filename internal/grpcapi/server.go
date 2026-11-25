@@ -29,6 +29,7 @@ import (
 	"github.com/azbyluthfan/nbsandbox/internal/audit"
 	"github.com/azbyluthfan/nbsandbox/internal/auth"
 	"github.com/azbyluthfan/nbsandbox/internal/completions"
+	"github.com/azbyluthfan/nbsandbox/internal/connections"
 	"github.com/azbyluthfan/nbsandbox/internal/runs"
 	"github.com/azbyluthfan/nbsandbox/internal/sessions"
 	"github.com/azbyluthfan/nbsandbox/internal/spaces"
@@ -50,6 +51,8 @@ type Deps struct {
 	Audit *audit.Recorder
 	// Sessions are interactive sessions (nil: turned off).
 	Sessions *sessions.Manager
+	// Connections are users' data sources (nil: turned off).
+	Connections *connections.Service
 }
 
 // maxMessage bounds one message; uploads stream any number of them.
@@ -75,6 +78,7 @@ func Handler(d Deps) http.Handler {
 		func() (string, http.Handler) { return nbsandboxv1connect.NewRunServiceHandler(s, opts...) },
 		func() (string, http.Handler) { return nbsandboxv1connect.NewAdminServiceHandler(s, opts...) },
 		func() (string, http.Handler) { return nbsandboxv1connect.NewSessionServiceHandler(s, opts...) },
+		func() (string, http.Handler) { return nbsandboxv1connect.NewConnectionServiceHandler(s, opts...) },
 	} {
 		path, handler := h()
 		mux.Handle(path, handler)
@@ -89,6 +93,7 @@ type server struct {
 	nbsandboxv1connect.UnimplementedRunServiceHandler
 	nbsandboxv1connect.UnimplementedAdminServiceHandler
 	nbsandboxv1connect.UnimplementedSessionServiceHandler
+	nbsandboxv1connect.UnimplementedConnectionServiceHandler
 }
 
 // Procedures lists every RPC's operation, from the service descriptors, for

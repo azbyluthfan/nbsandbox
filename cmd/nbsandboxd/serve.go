@@ -295,8 +295,13 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 	recorder := audit.New(audit.Config{Enabled: cfg.Audit.Enabled, Retention: cfg.Audit.Retention, Downloads: cfg.Audit.Downloads},
 		db, logger, metrics.AuditFailures)
 	go recorder.Run(ctx, cfg.Runs.CleanupEvery)
+	conns, err := newConnections(cfg, db, logger)
+	if err != nil {
+		return fmt.Errorf("connections: %w", err)
+	}
 	deps := api.Deps{
-		Auth: authn, Users: users, Health: health, Metrics: metrics, Logger: logger, Spaces: spaceSvc, Audit: recorder,
+		Connections: conns,
+		Auth:        authn, Users: users, Health: health, Metrics: metrics, Logger: logger, Spaces: spaceSvc, Audit: recorder,
 		MaxUpload:  int64(cfg.Uploads.MaxSpace) + 1<<20, // quota plus multipart overhead
 		MaxRunBody: int64(cfg.Runs.MaxParameters) + 64<<10,
 		Runs:       mgr,
@@ -344,7 +349,7 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 	}
 	handler := withGRPC(api.NewHandler(deps), grpcapi.Handler(grpcapi.Deps{
 		Auth: authn, Spaces: spaceSvc, Runs: mgr, Runtime: runtime, Logger: logger, Shutdown: shuttingDown,
-		Completions: deps.Completions, Audit: recorder, Sessions: sess,
+		Completions: deps.Completions, Audit: recorder, Sessions: sess, Connections: conns,
 	}))
 	if !cfg.Serves() {
 		handler = workerHandler(health, metrics)

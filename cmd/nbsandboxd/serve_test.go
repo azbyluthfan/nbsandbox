@@ -316,3 +316,41 @@ func TestServeRoles(t *testing.T) {
 		t.Fatalf("role not logged:\n%s", apiLogs)
 	}
 }
+
+// Connections, on with the built-in secret store: created over HTTP; the
+// secret and the master key appear in no response and no log line.
+func TestServeConnections(t *testing.T) {
+	dir := t.TempDir()
+	const masterKey = "TUFTVEVSLUtFWS0wMTIzNDU2Nzg5YWJjZGVmZ2hpams=" // 32 bytes
+	base, logs := startServe(t, map[string]string{
+		"NBSANDBOX_DATA_DIR": filepath.Join(dir, "data"), "NBSANDBOX_DATABASE_URL": storetest.URL(t),
+		"NBSANDBOX_USERS_FILE": writeUsers(t, dir, 0o600), "NBSANDBOX_LISTEN": "127.0.0.1:0",
+		"NBSANDBOX_DOCKER_HOST":         "unix:///nonexistent/nbsandbox-test.sock",
+		"NBSANDBOX_CONNECTIONS_ENABLED": "true", "NBSANDBOX_CONNECTIONS_MASTER_KEY": masterKey,
+		"NBSANDBOX_CONNECTIONS_ALLOWED": "*.internal",
+	})
+	req, _ := http.NewRequest(http.MethodPost, base+"/v1/connections", strings.NewReader(
+		`{"name":"crm","type":"postgresql","settings":{"host":"pg.internal","database":"crm","user":"ro"},"secret":{"value":"db-SECRET-pw"}}`))
+	req.SetBasicAuth("alice", "alice-password")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated || !strings.Contains(string(body), `"mode":"managed"`) {
+		t.Fatalf("create: %d %s", resp.StatusCode, body)
+	}
+	code, list := status(t, base+"/v1/connections", "alice")
+	if code != http.StatusOK || !strings.Contains(list, `"name":"crm"`) {
+		t.Fatalf("list: %d %s", code, list)
+	}
+	for what, text := range map[string]string{"create response": string(body), "list": list, "logs": logs.String()} {
+		if strings.Contains(text, "db-SECRET-pw") || strings.Contains(text, masterKey) {
+			t.Errorf("%s shows the secret or the master key:\n%s", what, text)
+		}
+	}
+	if !strings.Contains(logs.String(), "connections on") {
+		t.Errorf("no startup line for connections:\n%s", logs)
+	}
+}

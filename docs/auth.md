@@ -34,6 +34,7 @@ Each endpoint needs one scope (listed per operation in [api/openapi.yaml](../api
 | `nbsandbox.runs` | start, cancel and delete runs; open, use and end interactive sessions (a session runs code, as a run does) |
 | `nbsandbox.functions.invoke` | call functions |
 | `nbsandbox.functions.publish` | publish and delete functions |
+| `nbsandbox.connections` | create, change and delete your connections (data sources), and bind them to your spaces; reading them, never their secrets, needs `nbsandbox.read` |
 | `nbsandbox.admin` | every owner's spaces: list them, give one to another owner, delete one (`/v1/admin/spaces`, gRPC `AdminService`); every owner's runs and sessions, stopping them; draining; the audit log. Grant it only to operators: it is never implied by the others |
 
 A backend that only calls functions needs `nbsandbox.functions.invoke nbsandbox.read` (read lets it fetch results and follow status).
@@ -195,7 +196,7 @@ ui:
     client_id: nbsandbox-ui
     client_secret: ""          # better: NBSANDBOX_UI_OIDC_CLIENT_SECRET
     scopes: [openid, profile, nbsandbox.read, nbsandbox.spaces.write, nbsandbox.files.write,
-             nbsandbox.runs, nbsandbox.functions.invoke, nbsandbox.functions.publish]
+             nbsandbox.runs, nbsandbox.functions.invoke, nbsandbox.functions.publish, nbsandbox.connections]
 ```
 
 - **The access token decides who the user is.** It is checked by the same rules as an API token (issuer, audience, caller ID, scopes, and introspection when it is on). A sign-in without `nbsandbox.read` is refused; other missing scopes give `403` on what they cover.

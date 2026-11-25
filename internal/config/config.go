@@ -5,10 +5,12 @@ package config
 
 import (
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -66,6 +68,9 @@ type Settings struct {
 	// Sessions are interactive sessions: a notebook's live kernel
 	// (docs/sessions.md).
 	Sessions Sessions `yaml:"sessions"`
+	// Connections are data sources users register, which notebooks read
+	// where the data lives (docs/plan-data-access.md).
+	Connections Connections `yaml:"connections"`
 
 	Auth Auth `yaml:"auth"`
 
@@ -189,6 +194,40 @@ type Sessions struct {
 	// Secret authenticates API nodes to workers: the same long random value
 	// on every process (NBSANDBOX_SESSIONS_SECRET). Never logged.
 	Secret string `yaml:"secret"`
+}
+
+// Connections configures connections: a user's data sources (a database,
+// object storage, an API), named in their spaces and read where the data
+// lives. Their credentials are kept by a secret provider, never in
+// nbsandbox's own records.
+type Connections struct {
+	Enabled bool `yaml:"enabled"`
+	// Allowed lists where connections may point: host names, "*.domain"
+	// patterns and CIDR ranges. Empty: nowhere. Loopback, link-local (cloud
+	// metadata) and unspecified addresses are refused whatever it says.
+	Allowed []string `yaml:"allowed"`
+	// Secrets is where connections' credentials are kept.
+	Secrets ConnectionSecrets `yaml:"secrets"`
+}
+
+// Secret providers for connections.
+const (
+	SecretsBuiltin    = "builtin"    // encrypted in nbsandbox's database; development only
+	SecretsKubernetes = "kubernetes" // Kubernetes Secrets in the runs namespace
+)
+
+// ConnectionSecrets configures where connections' credentials are kept.
+type ConnectionSecrets struct {
+	// Provider is builtin (development) or kubernetes.
+	Provider string `yaml:"provider"`
+	// MasterKey encrypts the built-in store: 32 random bytes, base64
+	// (NBSANDBOX_CONNECTIONS_MASTER_KEY). Never logged. Losing it loses
+	// every stored secret.
+	MasterKey string `yaml:"master_key"`
+	// Namespace holds the Kubernetes Secrets nbsandbox writes, and those
+	// connections refer to: the runs namespace by default, since a Pod can
+	// mount only its own namespace's Secrets.
+	Namespace string `yaml:"namespace"`
 }
 
 // SessionsOn reports whether this process runs interactive sessions:
@@ -427,10 +466,11 @@ func Default() Settings {
 			BuilderImage: "nbsandbox-runner-builder:dev", Network: "bridge"},
 		Sessions: Sessions{Enabled: true, Idle: 30 * time.Minute, Max: 8 * time.Hour, PerUser: 2, PerWorker: 4,
 			WriteBack: 5 * time.Minute, MaxMessage: 2 * MiB, Retention: 7 * 24 * time.Hour, Listen: ":8091"},
+		Connections: Connections{Enabled: false, Allowed: []string{}, Secrets: ConnectionSecrets{Provider: SecretsBuiltin}},
 		UI: UI{Enabled: false, Listen: "127.0.0.1:8090", Auth: "none",
 			Session: UISession{Idle: time.Hour, Max: 12 * time.Hour},
 			OIDC: UIOIDC{Scopes: []string{"openid", "profile", auth.ScopeRead, auth.ScopeSpacesWrite, auth.ScopeFilesWrite,
-				auth.ScopeRuns, auth.ScopeFunctionsInvoke, auth.ScopeFunctionsPublish}}},
+				auth.ScopeRuns, auth.ScopeFunctionsInvoke, auth.ScopeFunctionsPublish, auth.ScopeConnections}}},
 		Auth: Auth{LoginLimit: LoginLimit{Failures: new5(), Refill: time.Minute}, TrustedProxies: []string{}},
 	}
 }
@@ -578,6 +618,9 @@ func applyEnv(s *Settings, getenv func(string) string) error {
 		"NBSANDBOX_SESSIONS_LISTEN":         &s.Sessions.Listen,
 		"NBSANDBOX_SESSIONS_ADDRESS":        &s.Sessions.Address,
 		"NBSANDBOX_SESSIONS_SECRET":         &s.Sessions.Secret,
+		"NBSANDBOX_CONNECTIONS_PROVIDER":    &s.Connections.Secrets.Provider,
+		"NBSANDBOX_CONNECTIONS_MASTER_KEY":  &s.Connections.Secrets.MasterKey,
+		"NBSANDBOX_CONNECTIONS_NAMESPACE":   &s.Connections.Secrets.Namespace,
 	}
 	for k, p := range str {
 		if v := getenv(k); v != "" {
@@ -600,6 +643,9 @@ func applyEnv(s *Settings, getenv func(string) string) error {
 			return fmt.Errorf("NBSANDBOX_UI_NO_LOGIN_BEYOND_LOOPBACK: %w", err)
 		}
 		s.UI.NoLoginBeyondLoopback = b
+	}
+	if v := getenv("NBSANDBOX_CONNECTIONS_ALLOWED"); v != "" {
+		s.Connections.Allowed = strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' })
 	}
 	if v := getenv("NBSANDBOX_PACKAGES_ALLOWED"); v != "" {
 		s.Packages.Allowed = strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' })
@@ -640,6 +686,7 @@ func applyEnv(s *Settings, getenv func(string) string) error {
 		"NBSANDBOX_PACKAGES_ENABLED":       &s.Packages.Enabled,
 		"NBSANDBOX_AUDIT_DOWNLOADS":        &s.Audit.Downloads,
 		"NBSANDBOX_SESSIONS_ENABLED":       &s.Sessions.Enabled,
+		"NBSANDBOX_CONNECTIONS_ENABLED":    &s.Connections.Enabled,
 	} {
 		if v := getenv(name); v != "" {
 			b, err := strconv.ParseBool(v)
@@ -851,6 +898,25 @@ func (s Settings) Validate() error {
 			}
 		}
 	}
+	if c := s.Connections; c.Enabled {
+		switch c.Secrets.Provider {
+		case SecretsBuiltin:
+			if k, err := base64.StdEncoding.DecodeString(c.Secrets.MasterKey); err != nil || len(k) != 32 {
+				add("connections.secrets.master_key: the built-in secret store needs 32 random bytes, base64 (openssl rand -base64 32)")
+			}
+		case SecretsKubernetes:
+			if s.Backend != "kubernetes" {
+				add("connections.secrets.provider: kubernetes needs the Kubernetes backend")
+			}
+		default:
+			add("connections.secrets.provider: must be %s or %s, got %q", SecretsBuiltin, SecretsKubernetes, c.Secrets.Provider)
+		}
+		for _, a := range c.Allowed {
+			if err := ValidAllowedEntry(a); err != nil {
+				add("connections.allowed: %v", err)
+			}
+		}
+	}
 	if p := s.Packages; p.Enabled {
 		if s.Backend == "kubernetes" {
 			add("packages.enabled: custom packages run on the docker backend only, for now")
@@ -902,4 +968,20 @@ func (s Settings) Validate() error {
 		add("shutdown_grace: must not be negative, got %s", s.ShutdownGrace)
 	}
 	return errors.Join(errs...)
+}
+
+// ValidAllowedEntry checks one connections.allowed entry: a CIDR range
+// ("10.0.0.0/8"), a host name ("db.internal") or a "*.domain" pattern.
+func ValidAllowedEntry(e string) error {
+	if strings.Contains(e, "/") {
+		if _, err := netip.ParsePrefix(e); err != nil {
+			return fmt.Errorf("%q is not a CIDR range", e)
+		}
+		return nil
+	}
+	h := strings.TrimPrefix(e, "*.")
+	if h == "" || strings.ContainsAny(h, "*/:@ ") || strings.HasPrefix(h, ".") || strings.HasSuffix(h, ".") {
+		return fmt.Errorf("%q is not a host name, *.domain pattern or CIDR range", e)
+	}
+	return nil
 }

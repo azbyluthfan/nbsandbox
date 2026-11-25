@@ -18,13 +18,14 @@ const (
 	ScopeRuns             = "nbsandbox.runs"              // start, cancel, delete runs
 	ScopeFunctionsInvoke  = "nbsandbox.functions.invoke"  // call functions
 	ScopeFunctionsPublish = "nbsandbox.functions.publish" // publish and delete functions
+	ScopeConnections      = "nbsandbox.connections"       // create, change and delete connections; bind them to spaces
 	// ScopeAdmin manages every owner's spaces. Basic-auth users get it only
 	// when users.yaml says admin: true.
 	ScopeAdmin = "nbsandbox.admin"
 )
 
 // AllScopes lists every scope, for documentation and tests.
-var AllScopes = []string{ScopeRead, ScopeSpacesWrite, ScopeFilesWrite, ScopeRuns, ScopeFunctionsInvoke, ScopeFunctionsPublish, ScopeAdmin}
+var AllScopes = []string{ScopeRead, ScopeSpacesWrite, ScopeFilesWrite, ScopeRuns, ScopeFunctionsInvoke, ScopeFunctionsPublish, ScopeConnections, ScopeAdmin}
 
 // Principal is an authenticated caller.
 type Principal struct {
