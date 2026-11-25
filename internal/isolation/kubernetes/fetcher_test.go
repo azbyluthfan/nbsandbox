@@ -218,3 +218,13 @@ func TestFetcherPodVaultToken(t *testing.T) {
 		}
 	}
 }
+
+func TestFetcherPodHostAliases(t *testing.T) {
+	spec := fetcherSpec()
+	spec.Fetcher.Hosts = map[string]string{"my.internal": "127.0.0.2", "a.internal": "127.0.0.3"}
+	p := buildFetcherPod(Config{Namespace: "runs"}, spec, runFetcher, "10.96.0.9:3128")
+	got := p.Spec.HostAliases
+	if len(got) != 2 || got[0].IP != "127.0.0.3" || got[0].Hostnames[0] != "a.internal" || got[1].IP != "127.0.0.2" || got[1].Hostnames[0] != "my.internal" {
+		t.Fatalf("host aliases: %+v", got)
+	}
+}

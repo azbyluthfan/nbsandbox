@@ -8,15 +8,20 @@
 import { ApiError } from "./api.js";
 import { el, clear, toast, timeAgo, icon } from "./dom.js";
 
-// The settings of each type, as the server checks them.
+// The settings of each type, as the server checks them: [key, label,
+// placeholder, "pem" for a multi-line certificate field].
+const TLS = ["tls", "TLS (off, prefer, require or verify)", "prefer"];
+const CA = ["ca", "CA certificates (PEM; with tls verify, or the system's)", "-----BEGIN CERTIFICATE-----", "pem"];
 export const TYPES = {
-  postgresql: { label: "PostgreSQL", secret: "Password", fields: [["host", "Host"], ["port", "Port", "5432"], ["database", "Database"], ["user", "User"]] },
-  mysql: { label: "MySQL", secret: "Password", fields: [["host", "Host"], ["port", "Port", "3306"], ["database", "Database"], ["user", "User"]] },
-  sqlserver: { label: "SQL Server", secret: "Password", fields: [["host", "Host"], ["port", "Port", "1433"], ["database", "Database"], ["user", "User (a SQL login)"]] },
+  postgresql: { label: "PostgreSQL", secret: "Password", fields: [["host", "Host"], ["port", "Port", "5432"], ["database", "Database"], ["user", "User"], TLS, CA] },
+  mysql: { label: "MySQL", secret: "Password", fields: [["host", "Host"], ["port", "Port", "3306"], ["database", "Database"], ["user", "User"], TLS, CA] },
+  sqlserver: { label: "SQL Server", secret: "Password",
+    fields: [["host", "Host"], ["port", "Port", "1433"], ["database", "Database"], ["user", "User (a SQL login)"], ["tls", "TLS (off, prefer or require)", "prefer"]] },
   s3: {
     label: "S3-compatible storage", secret: "Secret access key", optionalSecret: true,
     fields: [["endpoint", "Endpoint (host[:port])", "s3.amazonaws.com"], ["bucket", "Bucket"], ["region", "Region", "us-east-1"],
-      ["access_key_id", "Access key ID"], ["url_style", "URL style (vhost or path)", "vhost"], ["use_ssl", "HTTPS (true or false)", "true"]],
+      ["access_key_id", "Access key ID"], ["url_style", "URL style (vhost or path)", "vhost"], ["use_ssl", "HTTPS (true or false)", "true"],
+      ["ca", "CA certificates (PEM; optional, trusted beside the system's)", "-----BEGIN CERTIFICATE-----", "pem"]],
   },
   azureblob: { label: "Azure Blob Storage", secret: "Connection string, account key or SAS",
     fields: [["account", "Account"], ["container", "Container"], ["endpoint", "Endpoint URL (optional)"], ["auth", "Secret kind (connection_string, account_key or sas)", "connection_string"]] },
@@ -157,9 +162,12 @@ function editDialog(api, c, done) {
   const drawFields = () => {
     const t = TYPES[type.value];
     clear(fields);
-    for (const [key, label, placeholder] of t.fields) {
+    for (const [key, label, placeholder, kind] of t.fields) {
       const v = c && c.settings[key] !== undefined ? String(c.settings[key]) : "";
-      inputs[key] = el("input", { value: v, placeholder: placeholder || "", "aria-label": label });
+      inputs[key] = kind === "pem"
+        ? el("textarea", { rows: "3", spellcheck: "false", placeholder: placeholder || "", "aria-label": label })
+        : el("input", { value: v, placeholder: placeholder || "", "aria-label": label });
+      if (kind === "pem") inputs[key].value = v;
       fields.append(el("label", {}, label, inputs[key]));
     }
     secret.placeholder = t.secret;

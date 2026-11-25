@@ -180,17 +180,32 @@ class Vault:
             pass
 
 
+# A connection's tls, in each driver's words.
+PG_SSLMODE = {"off": "disable", "prefer": "prefer", "require": "require", "verify": "verify-full"}
+MYSQL_SSL_MODE = {"off": "DISABLED", "prefer": "PREFERRED", "require": "REQUIRED", "verify": "VERIFY_IDENTITY"}
+SYSTEM_CAS = "/etc/ssl/certs/ca-certificates.crt"
+
+
+def _ca_file(name, *pems):
+    """Writes certificates to a file of the fetcher's own (a tmpfs)."""
+    os.makedirs("/tmp/nbsandbox-ca", mode=0o700, exist_ok=True)
+    path = f"/tmp/nbsandbox-ca/{name}"
+    with open(path, "w") as f:
+        f.write("\n".join(p.strip() + "\n" for p in pems))
+    return path
+
+
 class Forwarder:
     """A local TCP port tunnelled to host:port through the gateway (CONNECT).
 
     Database drivers speak their own protocol and know no HTTP proxy: they
     connect here, and each connection becomes a tunnel."""
 
-    def __init__(self, gateway, token, target):
+    def __init__(self, gateway, token, target, listen=("127.0.0.1", 0)):
         self.gateway, self.token, self.target = gateway, token, target
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.sock.bind(("127.0.0.1", 0))
+        self.sock.bind(listen)
         self.sock.listen(64)
         self.port = self.sock.getsockname()[1]
         threading.Thread(target=self._accept, daemon=True).start()
@@ -273,6 +288,7 @@ def connect(cfg):
     allowed = []
     served = []
     loaded = set()
+    s3_cas = []
     # Secrets in Vault: read now, all at once, and the token revoked.
     from_vault = {}
     if cfg.get("vault"):
@@ -291,27 +307,57 @@ def connect(cfg):
             with open(src["secret_file"]) as f:
                 secret = f.read().strip()
         sec = f"nbs_{i}"
+        tls = s.get("tls") or "prefer"
         if typ == "postgresql":
             if "postgres" not in loaded:
                 con.execute("LOAD postgres")
                 loaded.add("postgres")
             fwd = Forwarder(gw["address"], gw["token"], f"{s['host']}:{s['port']}")
+            # libpq connects to hostaddr (the forwarder) and checks the
+            # certificate against host, the source's own name.
+            opts = f"hostaddr=127.0.0.1 sslmode={PG_SSLMODE[tls]}"
+            if tls == "verify":
+                opts += " sslrootcert=" + (_ca_file(f"{sec}.pem", s["ca"]) if s.get("ca") else "system")
             con.execute(
-                f"CREATE SECRET {sec} (TYPE postgres, HOST '127.0.0.1', PORT {fwd.port}, "
+                f"CREATE SECRET {sec} (TYPE postgres, HOST {_lit(s['host'])}, PORT {fwd.port}, "
                 f"DATABASE {_lit(s['database'])}, USER {_lit(s['user'])}, PASSWORD {_lit(secret)})"
             )
-            con.execute(f"ATTACH '' AS {_ident(name)} (TYPE postgres, SECRET {sec}, READ_ONLY)")
-        elif typ in ("mysql", "sqlserver"):
-            ext, kind = ("mysql", "mysql") if typ == "mysql" else ("mssql", "mssql")
-            if ext not in loaded:
-                con.execute(f"LOAD {ext}")
-                loaded.add(ext)
+            con.execute(f"ATTACH {_lit(opts)} AS {_ident(name)} (TYPE postgres, SECRET {sec}, READ_ONLY)")
+        elif typ == "mysql":
+            if "mysql" not in loaded:
+                con.execute("LOAD mysql")
+                loaded.add("mysql")
+            # With tls verify the source's name resolves to the forwarder
+            # (src["listen"], a host alias), so the client checks that name:
+            # it skips the check when it connects to 127.0.0.1.
+            target = f"{s['host']}:{s['port']}"
+            if src.get("listen"):
+                fwd = Forwarder(gw["address"], gw["token"], target, (src["listen"], int(s["port"])))
+                host = s["host"]
+            else:
+                fwd = Forwarder(gw["address"], gw["token"], target)
+                host = "127.0.0.1"
+            opts = f"SSL_MODE {_lit(MYSQL_SSL_MODE[tls])}"
+            if tls == "verify":
+                opts += ", SSL_CA " + _lit(_ca_file(f"{sec}.pem", s["ca"]) if s.get("ca") else SYSTEM_CAS)
+            con.execute(
+                f"CREATE SECRET {sec} (TYPE mysql, HOST {_lit(host)}, PORT {fwd.port}, "
+                f"DATABASE {_lit(s['database'])}, USER {_lit(s['user'])}, PASSWORD {_lit(secret)}, {opts})"
+            )
+            con.execute(f"ATTACH '' AS {_ident(name)} (TYPE mysql, SECRET {sec}, READ_ONLY)")
+        elif typ == "sqlserver":
+            if "mssql" not in loaded:
+                con.execute("LOAD mssql")
+                loaded.add("mssql")
             fwd = Forwarder(gw["address"], gw["token"], f"{s['host']}:{s['port']}")
+            # The extension (0.2.5) encrypts by default and checks no
+            # certificate: nbsandboxd refuses tls verify for it.
+            enc = {"off": ", USE_ENCRYPT false", "require": ", USE_ENCRYPT true"}.get(tls, "")
             con.execute(
-                f"CREATE SECRET {sec} (TYPE {kind}, HOST '127.0.0.1', PORT {fwd.port}, "
-                f"DATABASE {_lit(s['database'])}, USER {_lit(s['user'])}, PASSWORD {_lit(secret)})"
+                f"CREATE SECRET {sec} (TYPE mssql, HOST '127.0.0.1', PORT {fwd.port}, "
+                f"DATABASE {_lit(s['database'])}, USER {_lit(s['user'])}, PASSWORD {_lit(secret)}{enc})"
             )
-            con.execute(f"ATTACH '' AS {_ident(name)} (TYPE {kind}, SECRET {sec}, READ_ONLY)")
+            con.execute(f"ATTACH '' AS {_ident(name)} (TYPE mssql, SECRET {sec}, READ_ONLY)")
         elif typ == "s3":
             if "httpfs" not in loaded:
                 con.execute("LOAD httpfs")
@@ -327,6 +373,8 @@ def connect(cfg):
             ]
             if s.get("access_key_id"):
                 opts += [f"KEY_ID {_lit(s['access_key_id'])}", f"SECRET {_lit(secret)}"]
+            if s.get("ca"):
+                s3_cas.append(s["ca"])
             con.execute(f"CREATE SECRET {sec} ({', '.join(opts)})")
             schema = _ident(name)
             con.execute(f"CREATE SCHEMA {schema}")
@@ -342,6 +390,13 @@ def connect(cfg):
     if mem > 0:
         con.execute(f"SET memory_limit = '{mem * 3 // 4 // (1 << 20)}MiB'")
         con.execute("SET temp_directory = '/tmp/duckdb'")
+    if s3_cas:
+        # One setting for every S3 source: the system's CAs and theirs.
+        # GLOBAL: unlike the others it is per connection, and each query
+        # runs on a cursor of its own.
+        with open(SYSTEM_CAS) as f:
+            bundle = f.read()
+        con.execute(f"SET GLOBAL ca_cert_file = {_lit(_ca_file('s3.pem', bundle, *s3_cas))}")
     if "httpfs" in loaded:
         con.execute(f"SET http_proxy = {_lit(gw['address'])}")
         con.execute("SET http_proxy_username = 'run'")

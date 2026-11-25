@@ -37,14 +37,29 @@ curl -u alice:… -X POST https://nbsandbox.example/v1/connections -H 'Content-T
 
 | Type | Settings | The secret |
 |---|---|---|
-| `postgresql` | `host`, `port` (5432), `database`, `user` | the password |
-| `mysql` | `host`, `port` (3306), `database`, `user` | the password |
-| `sqlserver` | `host`, `port` (1433), `database`, `user` (a SQL login) | the password |
-| `s3` | `endpoint` (`host[:port]`, no scheme), `bucket`, `region` (us-east-1), `access_key_id`, `use_ssl` (true), `url_style` (`vhost`, or `path` for MinIO, Ceph, RustFS) | the secret access key |
+| `postgresql` | `host`, `port` (5432), `database`, `user`, `tls` (`prefer`), `ca` | the password |
+| `mysql` | `host`, `port` (3306), `database`, `user`, `tls` (`prefer`), `ca` | the password |
+| `sqlserver` | `host`, `port` (1433), `database`, `user` (a SQL login), `tls` (`prefer`; not `verify`) | the password |
+| `s3` | `endpoint` (`host[:port]`, no scheme), `bucket`, `region` (us-east-1), `access_key_id`, `use_ssl` (true), `url_style` (`vhost`, or `path` for MinIO, Ceph, RustFS), `ca` | the secret access key |
 
 **Give nbsandbox a read-only user.** The database's own permissions are what really limits a query: nbsandbox refuses writes and more, but a role that can only `SELECT` the tables a notebook needs is the guarantee.
 
 A connection may point only where the operator allows (`connections.allowed`); anything else is refused when you create it, and when a run starts.
+
+**Encryption.** A database's `tls` says how nbsandbox talks to it:
+
+| `tls` | |
+|---|---|
+| `off` | never encrypted |
+| `prefer` (the default) | encrypted if the server offers it, but its certificate isn't checked |
+| `require` | always encrypted, certificate not checked |
+| `verify` | encrypted, and the certificate must come from a trusted authority and name the `host` you gave |
+
+Only `verify` stops someone on the network between nbsandbox and the database from reading the data, or MySQL's password. Use it for any database you reach over a network you don't control. `verify` trusts the system's authorities (public ones), or, if you give `ca` (PEM certificates), those instead: your organisation's CA, or the bundle your cloud publishes for its databases. A refused certificate fails the run when it starts, with the driver's reason.
+
+- MySQL with `verify` needs `host` to be a name, not an address.
+- SQL Server connections can't be verified yet: DuckDB's SQL Server extension accepts any certificate. Use `require`, and reach SQL Server over a network you trust.
+- Object storage with `use_ssl` (the default) always checks the certificate against the system's authorities. Give `ca` for a store with a private one (an internal MinIO).
 
 ### 2. Bind names in a space
 

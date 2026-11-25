@@ -335,12 +335,20 @@ k8s-logs: ## Follow the local Kubernetes stack's logs
 k8s-down: ## Delete the local Kubernetes cluster (K8S_CNI picks which)
 	$(KIND) delete cluster --name $(KIND_NAME)
 
+# The connection tests' sources (containers), and the names connections may
+# point to: theirs, and a second name for the TLS ones that their
+# certificates don't carry (deploy/kubernetes/kind/values.yaml lists them too).
+TEST_SOURCES := nbsandbox-src-pg nbsandbox-src-s3 nbsandbox-src-mysql nbsandbox-src-mssql \
+	nbsandbox-src-tls-pg nbsandbox-src-tls-mysql nbsandbox-src-tls-s3
+comma := ,
+TEST_SOURCES_ALLOWED := $(subst $(eval) ,$(comma),$(strip $(TEST_SOURCES) nbsandbox-src-tls-pg-alias nbsandbox-src-tls-mysql-alias))
+
 test-k8s-conformance: k8s-up ## The backend conformance suite against the local Kubernetes cluster
 	NBSANDBOX_TEST_KUBECONFIG=$(KIND_CONFIG) $(GO) test -count=1 -timeout 20m -run Conformance $(TESTFLAGS) ./internal/isolation/kubernetes/
 
 test-k8s: k8s-up ## Integration tests through the local Kubernetes stack (K8S_CNI=cilium|calico)
 	$(K8S_TEST_ENV) $(GO) test -tags integration -count=1 -timeout 40m $(TESTFLAGS) ./tests/integration/; \
-		status=$$?; docker rm -f nbsandbox-src-pg nbsandbox-src-s3 nbsandbox-src-mysql nbsandbox-src-mssql >/dev/null 2>&1; exit $$status
+		status=$$?; docker rm -fv $(TEST_SOURCES) >/dev/null 2>&1; exit $$status
 
 # Connections with their secrets in Vault: OpenBao (development mode) in the
 # kind cluster, configured as an operator would, and the connection tests
@@ -358,7 +366,7 @@ test-k8s-vault: k8s-up ## Connections with secrets in Vault (OpenBao in the loca
 	$(KUBECTL) -n nbsandbox rollout restart deploy/nbsandbox-api deploy/nbsandbox-worker
 	$(KUBECTL) -n nbsandbox rollout status deploy/nbsandbox-api deploy/nbsandbox-worker --timeout=180s
 	$(K8S_TEST_ENV) NBSANDBOX_TEST_VAULT=1 $(GO) test -tags integration -count=1 -timeout 30m -run 'TestConnections' $(TESTFLAGS) ./tests/integration/; \
-		status=$$?; docker rm -f nbsandbox-src-pg nbsandbox-src-s3 nbsandbox-src-mysql nbsandbox-src-mssql >/dev/null 2>&1; \
+		status=$$?; docker rm -fv $(TEST_SOURCES) >/dev/null 2>&1; \
 		$(HELM) upgrade --install nbsandbox deploy/helm/nbsandbox -n nbsandbox -f $(KIND_DIR)/values.yaml --kubeconfig $(KIND_CONFIG) >/dev/null; exit $$status
 
 # kind's own network plugin (kindnet) doesn't enforce the deny-all policy
@@ -467,10 +475,10 @@ test-integration: dev-data ## Integration tests against the dev stack (Docker ne
 test-connections: dev-data fetcher-image ## Reading external data, end to end: the dev stack with connections on, sources on the gateway's network
 	@$(STOP_KIND)
 	-@$(CLUSTER) stop >/dev/null 2>&1
-	NBSANDBOX_CONNECTIONS_ENABLED=true NBSANDBOX_CONNECTIONS_ALLOWED=nbsandbox-src-pg,nbsandbox-src-s3,nbsandbox-src-mysql,nbsandbox-src-mssql \
+	NBSANDBOX_CONNECTIONS_ENABLED=true NBSANDBOX_CONNECTIONS_ALLOWED=$(TEST_SOURCES_ALLOWED) \
 		NBSANDBOX_SHUTDOWN_GRACE=5s NBSANDBOX_RUN_TIMEOUT=120s NBSANDBOX_SESSIONS_PER_USER=0 $(COMPOSE) up -d --build
 	NBSANDBOX_TEST_CONNECTIONS=1 NBSANDBOX_RUN_TIMEOUT=120s $(GO) test -tags integration -count=1 -timeout 20m -run 'TestConnections' $(TESTFLAGS) ./tests/integration/; \
-		status=$$?; docker rm -f nbsandbox-src-pg nbsandbox-src-s3 nbsandbox-src-mysql nbsandbox-src-mssql >/dev/null 2>&1; exit $$status
+		status=$$?; docker rm -fv $(TEST_SOURCES) >/dev/null 2>&1; exit $$status
 
 KEYCLOAK_COMPOSE := $(COMPOSE) -f deploy/docker-compose.keycloak.yml
 

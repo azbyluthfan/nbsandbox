@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -92,6 +94,9 @@ func buildFetcherConfig(spec isolation.RunSpec, kind fetcherKind) (*container.Co
 			NanoCPUs:   fetcherCPUs(spec),
 			PidsLimit:  &pids,
 		},
+	}
+	for _, name := range slices.Sorted(maps.Keys(spec.Fetcher.Hosts)) {
+		host.ExtraHosts = append(host.ExtraHosts, name+":"+spec.Fetcher.Hosts[name])
 	}
 	if spec.Runtime == "runsc" {
 		gvisorPIDs(host, spec.Limits.PIDs)
