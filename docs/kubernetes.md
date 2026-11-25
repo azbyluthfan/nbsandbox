@@ -76,6 +76,10 @@ The probe checks the network only. To check the whole isolation of your cluster 
 
 A session ([sessions.md](sessions.md)) is a Pod like a run's, in the runs namespace under the same deny-all policy, labelled `nbsandbox.session`, with the session bridge as its main process. The worker reaches it through `pods/attach` (its standard input and output), copies the space's files in when it starts, and copies `/space` back out before each write-back of a read-write session. Sessions need `sessions.secretName` (a Secret with key `secret`), since API and worker Pods are separate processes; without it they stay off. Custom packages aren't available in sessions on Kubernetes yet, as for runs.
 
+## Reading external data
+
+A run whose space binds connections ([connections.md](connections.md)) gets a **fetcher Pod** beside its run Pod, labelled `nbsandbox.fetcher` and `nbsandbox.role: fetcher`: the run Pod's hardening, the connections' Secrets mounted, no DNS. Two NetworkPolicies of the run's own let its runner reach its fetcher's port 8815 and nothing else in; a chart policy lets fetchers reach the egress gateway (a Deployment in the release namespace), the only way out. The worker creates the fetcher first, then the run Pod with the fetcher's address. Turn it on with `connections.enabled` and `connections.gateway.keySecret`.
+
 ## Install with Helm
 
 The chart is in [deploy/helm/nbsandbox](../deploy/helm/nbsandbox). It doesn't install PostgreSQL or object storage: bring a managed database and storage account, or your own.

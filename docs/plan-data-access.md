@@ -128,7 +128,7 @@ run 42 — one private network, removed with the run
 
 ### The fetcher
 
-- **Its own image, one Pod per run**, with the run's limits. It never runs notebook code. It holds only that run's resolved credentials. **Written in Python** (`duckdb` and `pyarrow`, whose Arrow export and Flight are C++), with **DuckDB pinned to the 1.5 series** ([spike results](#spike-results-m0-2026-11-25)).
+- **Its own image, one Pod per run**, with its own limits (`connections.fetcher_memory`, `fetcher_cpus`). It never runs notebook code. It holds only that run's resolved credentials. **Written in Python** (`duckdb` and `pyarrow`, whose Arrow export and Flight are C++), with **DuckDB pinned to the 1.5 series** ([spike results](#spike-results-m0-2026-11-25)).
 - **DuckDB** as the engine, locked down in three layers, since its SQL comes from the notebook (DuckDB's own docs say SQL from untrusted sources needs sandboxing; the fetcher Pod is that sandbox):
   - **a gate:** only a single `SELECT`, and no pass-through functions unless the connection allows them, checked with DuckDB's own parser before anything runs;
   - **DuckDB's settings:** only the run's own sources allowed, then external access off, extensions off, configuration locked;
@@ -192,7 +192,7 @@ New guarantees, each with an isolation-report row, as for runs and sessions:
 - **Names are bounded:** a run can use only its space's names in the chosen environment; a function call only the caller's connections; another space's or user's connections are unreachable.
 - **Runs are separated:** a runner can't reach another run's runners or fetcher, nbsandboxd, the host, the cloud metadata address or the internet; a token from one run is useless in another and after the run.
 - **Egress is bounded:** the gateway refuses endpoints that aren't the run's connections, and addresses outside the operator's allowed ranges.
-- **The fetcher stays locked:** no file or URL access through SQL, no extension loading, the run's limits.
+- **The fetcher stays locked:** no file or URL access through SQL, no extension loading, its own limits.
 - **Audit:** connection and environment changes, and every read (run, connection, table).
 
 ## Order of work (to decide later)
@@ -278,6 +278,7 @@ Verified with Cilium; the policies use only standard NetworkPolicy, still to be 
 - M2 covers runs; sessions and functions get their fetchers in M4.
 - The gate also refuses `query()` and `query_table()` (they run SQL from a string), `duckdb_*` and `pragma_*` functions, and `..` in a table function's paths (DuckDB's `allowed_directories` doesn't normalise `s3://bucket/../other`). Secrets are kept in memory only (`allow_persistent_secrets` off), created before the lockdown.
 - The fetcher attaches every source when it starts; one it can't attach (a wrong password, a source down) fails the run at start with the fetcher's own message. Its output until it serves goes to the run's log, prefixed `[fetcher]`.
-- On Docker, the fetcher's configuration, credentials included, is in its container's environment, dropped from the process once read: no file on the host, visible only to whoever holds the Docker API, who holds the host anyway. On Kubernetes it will be a mounted Secret. The fetcher gets the run's limits.
+- On Docker, the fetcher's configuration, credentials included, is in its container's environment, dropped from the process once read: no file on the host, visible only to whoever holds the Docker API, who holds the host anyway. On Kubernetes it is a per-run Secret. The fetcher has limits of its own, not the run's: reserving the run's memory twice kept run Pods from being scheduled (found on kind). DuckDB keeps under three quarters of them and spills to `/tmp`.
+- On Kubernetes (M3): the gateway is a Deployment and Service in the release namespace, reachable only by fetchers. A reading run gets a fetcher Pod (no DNS: the worker resolves the gateway's Service to its address), a per-run Secret with its configuration and tokens, and two per-run NetworkPolicies (its runner may reach its fetcher, nothing else may), on top of the namespace's deny-all; one chart policy lets fetchers reach the gateway's port. Connections' Kubernetes Secrets are mounted into the fetcher, never read by nbsandboxd; the API processes get a token only to manage Secrets in the runs namespace, and only with the `kubernetes` provider. The run Pod is created once the fetcher serves, with its Pod address.
 - The gateway token lives until the run's time limit plus five minutes; a connection deleted, or pointing somewhere the operator no longer allows, fails a queued run at start.
 - Live data is the source's concern: for repeatable results, read a snapshot.

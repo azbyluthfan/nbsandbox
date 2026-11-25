@@ -26,7 +26,6 @@ import (
 // Skipped unless NBSANDBOX_TEST_CONNECTIONS=1.
 
 const (
-	egressNet  = "nbsandbox-dev-egress"
 	srcPG      = "nbsandbox-src-pg"
 	srcS3      = "nbsandbox-src-s3"
 	readerPass = "reader-SECRET-pw"
@@ -40,6 +39,47 @@ func needConnections(t *testing.T) {
 	}
 }
 
+// sourcesNet is the Docker network the sources join: the dev stack's
+// gateway network, or kind's (Pods resolve its containers' names through
+// the node's DNS).
+func sourcesNet() string {
+	if onKubernetes {
+		return "kind"
+	}
+	return "nbsandbox-dev-egress"
+}
+
+// gatewayAddr is where a run would find the gateway: by name on Docker; on
+// Kubernetes, run Pods have no DNS, so its Service's address.
+func gatewayAddr(t *testing.T) string {
+	if onKubernetes {
+		return kubectl(t, "-n", "nbsandbox", "get", "svc", "nbsandbox-gateway", "-o", "jsonpath={.spec.clusterIP}")
+	}
+	return "nbsandbox-gateway"
+}
+
+// fetcherAddr is a running fetcher's IP address: what another run would
+// need to reach it (by name it couldn't even look it up).
+func fetcherAddr(t *testing.T, runID string) string {
+	t.Helper()
+	var ip string
+	if onKubernetes {
+		ip = kubectl(t, "-n", "nbsandbox-runs", "get", "pod", "nbsandbox-fetch-"+runID, "-o", "jsonpath={.status.podIP}")
+	} else {
+		ip = containerIP(t, "nbsandbox-fetch-"+runID)
+	}
+	if ip == "" {
+		t.Fatalf("run %s's fetcher has no address", runID)
+	}
+	return ip
+}
+
+// containerIP is a container's address (its only network's).
+func containerIP(t *testing.T, name string) string {
+	t.Helper()
+	return docker(t, "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", name)
+}
+
 var sourcesOnce sync.Once
 
 // sources starts the data sources once per test binary (and leaves them for
@@ -48,9 +88,9 @@ func sources(t *testing.T) {
 	t.Helper()
 	sourcesOnce.Do(func() {
 		_, _ = runDocker("rm", "-f", srcPG, srcS3)
-		docker(t, "run", "-d", "--name", srcPG, "--network", egressNet, "-e", "POSTGRES_PASSWORD=owner-pw", "-e", "POSTGRES_DB=crm",
+		docker(t, "run", "-d", "--name", srcPG, "--network", sourcesNet(), "-e", "POSTGRES_PASSWORD=owner-pw", "-e", "POSTGRES_DB=crm",
 			"postgres:17-alpine@sha256:3540c0362c809df084ffac0ae69fe794515f9de92692f02178bcdce0ef0302ac")
-		docker(t, "run", "-d", "--name", srcS3, "--network", egressNet, "-p", "127.0.0.1::9000",
+		docker(t, "run", "-d", "--name", srcS3, "--network", sourcesNet(), "-p", "127.0.0.1::9000",
 			"-e", "RUSTFS_ACCESS_KEY=reader", "-e", "RUSTFS_SECRET_KEY="+s3Secret,
 			"rustfs/rustfs:1.0.4@sha256:ed9210d6411d77ffceb70d94b964a3cb7d225983368bc25bebe01e995293dcc2")
 		// The database: orders the role may read, a table it may not.
@@ -149,7 +189,6 @@ func readerSpace(t *testing.T, notebook string) string {
 }
 
 func TestConnectionsRead(t *testing.T) {
-	needCompose(t)
 	needConnections(t)
 	sp := readerSpace(t, codeNotebook(`import nbsandbox
 by_region = nbsandbox.sql("SELECT region, count(*) AS n, sum(amount)::BIGINT AS total FROM crm.orders GROUP BY 1 ORDER BY 1")
@@ -205,8 +244,8 @@ nbsandbox.output({"by_region": by_region, "lake": lake, "joined": joined, "strea
 
 // What a notebook can't do, whatever it tries.
 func TestConnectionsIsolation(t *testing.T) {
-	needCompose(t)
 	needConnections(t)
+	sources(t) // the notebook below needs their addresses
 	sp := readerSpace(t, codeNotebook(`import nbsandbox, os, socket, json
 found = {}
 def attempt(name, f):
@@ -231,9 +270,11 @@ def connect(host, port):
     socket.create_connection((host, port), timeout=3).close()
 attempt("direct_db", lambda: connect("`+srcPG+`", 5432))
 attempt("direct_s3", lambda: connect("`+srcS3+`", 9000))
+attempt("direct_db_by_address", lambda: connect("`+containerIP(t, srcPG)+`", 5432))
+attempt("direct_s3_by_address", lambda: connect("`+containerIP(t, srcS3)+`", 9000))
 attempt("internet", lambda: connect("1.1.1.1", 443))
 def through_gateway():
-    s = socket.create_connection(("nbsandbox-gateway", 3128), timeout=3)
+    s = socket.create_connection(("`+gatewayAddr(t)+`", 3128), timeout=3)
     tok = os.environ["NBSANDBOX_FETCHER_TOKEN"]
     s.sendall(f"CONNECT `+srcPG+`:5432 HTTP/1.1\r\nHost: x\r\nProxy-Authorization: Bearer {tok}\r\n\r\n".encode())
     status = s.recv(200).split(b"\r\n")[0].decode()
@@ -272,7 +313,7 @@ nbsandbox.output(found)`))
 		}
 		s, _ := v.(string)
 		ok := strings.HasPrefix(s, "refused")
-		finding(t, "connections-"+k, "a notebook tries "+k, "refused", s, ok)
+		expectRefused(t, "connections-"+k, "a notebook tries "+k, s, ok)
 	}
 	if s, _ := found["db_role"].(string); !strings.Contains(s, "permission denied") {
 		t.Errorf("the database's own role: %q", s)
@@ -282,7 +323,6 @@ nbsandbox.output(found)`))
 // A source the fetcher can't attach (prod's wrong password) fails the run at
 // start, saying why; nothing is left behind.
 func TestConnectionsStartFailure(t *testing.T) {
-	needCompose(t)
 	needConnections(t)
 	sp := readerSpace(t, codeNotebook(`import nbsandbox
 nbsandbox.output(nbsandbox.connections())`))
@@ -305,30 +345,26 @@ nbsandbox.output(nbsandbox.connections())`))
 
 // Two reading runs at once: neither reaches the other's fetcher.
 func TestConnectionsRunsSeparated(t *testing.T) {
-	needCompose(t)
 	needConnections(t)
 	slow := readerSpace(t, codeNotebook(`import nbsandbox, time
 nbsandbox.sql("SELECT 1 FROM crm.orders LIMIT 1")
 time.sleep(40)`))
 	run := startRun(t, "alice", slow, "read.ipynb", nil)
-	deadline := time.Now().Add(2 * time.Minute)
-	for getRun(t, "alice", slow, run.ID).Status != "running" {
-		if time.Now().After(deadline) {
-			t.Fatal("the first run didn't start")
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
+	waitLog(t, "alice", slow, run.ID, "fetcher: serving", 2*time.Minute)
 	other := readerSpace(t, codeNotebook(`import nbsandbox, socket
 try:
-    socket.create_connection(("nbsandbox-fetch-`+run.ID+`", 8815), timeout=3).close()
+    socket.create_connection(("`+fetcherAddr(t, run.ID)+`", 8815), timeout=3).close()
     nbsandbox.output("reached")
 except Exception as e:
     nbsandbox.output("refused: " + str(e))`))
 	run2 := startRun(t, "alice", other, "read.ipynb", nil)
 	res := runResult(t, "alice", other, run2.ID)
+	if res.Status != "succeeded" {
+		t.Fatalf("the probing run: %+v", res)
+	}
 	var s string
 	_ = json.Unmarshal(res.Output, &s)
-	finding(t, "connections-cross-run", "a run reaches another run's fetcher", "refused", s, strings.HasPrefix(s, "refused"))
+	expectRefused(t, "connections-cross-run", "a run reaches another run's fetcher", s, strings.HasPrefix(s, "refused"))
 	call(t, "POST", "/v1/spaces/"+slow+"/runs/"+run.ID+"/cancel", "alice", nil, nil)
 	waitRun(t, "alice", slow, run.ID, time.Minute)
 }
@@ -340,18 +376,23 @@ func getRunEnv(t *testing.T, sp, runID string) string {
 	return v.Environment
 }
 
-// assertNoReadLeftovers: no fetcher container or run network outlives its run.
+// assertNoReadLeftovers: no fetcher, run network or fetcher Secret outlives
+// its run.
 func assertNoReadLeftovers(t *testing.T) {
 	t.Helper()
-	deadline := time.Now().Add(30 * time.Second)
+	deadline := time.Now().Add(60 * time.Second)
 	for {
-		f := docker(t, "ps", "-aq", "--filter", "label=nbsandbox.fetcher")
-		n := docker(t, "network", "ls", "-q", "--filter", "label=nbsandbox.network")
-		if f == "" && n == "" {
+		var left string
+		if onKubernetes {
+			left = kubectl(t, "-n", "nbsandbox-runs", "get", "pods,secrets,networkpolicies", "-l", "nbsandbox.fetcher", "-o", "name")
+		} else {
+			left = docker(t, "ps", "-aq", "--filter", "label=nbsandbox.fetcher") + docker(t, "network", "ls", "-q", "--filter", "label=nbsandbox.network")
+		}
+		if left == "" {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("left behind: fetchers %q, networks %q", f, n)
+			t.Fatalf("left behind: %q", left)
 		}
 		time.Sleep(time.Second)
 	}
@@ -363,4 +404,14 @@ func reverse(s string) string {
 		r[i], r[j] = r[j], r[i]
 	}
 	return string(r)
+}
+
+// expectRefused records an isolation finding, and fails the test if what
+// was tried wasn't refused.
+func expectRefused(t *testing.T, id, attempted, observed string, refused bool) {
+	t.Helper()
+	finding(t, id, attempted, "refused", observed, refused)
+	if !refused {
+		t.Errorf("%s: %s was not refused: %q", id, attempted, observed)
+	}
 }
