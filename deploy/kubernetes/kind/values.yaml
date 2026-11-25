@@ -30,7 +30,7 @@ sessions: { secretName: nbsandbox-sessions }
 # kind's Docker network (tests/integration/connections_test.go).
 connections:
   enabled: true
-  allowed: [nbsandbox-src-pg, nbsandbox-src-s3]
+  allowed: [nbsandbox-src-pg, nbsandbox-src-s3, nbsandbox-src-mysql, nbsandbox-src-mssql]
   fetcherImage: nbsandbox-fetcher:dev
   fetcherMemory: 384MiB   # beside 1GiB runs on kind's one small node
   fetcherCpus: 0.5

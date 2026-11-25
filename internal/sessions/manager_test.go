@@ -347,7 +347,7 @@ func newEnv(t *testing.T, mod func(*Config)) *env {
 
 func (e *env) open(t *testing.T, nb, mode string) store.Session {
 	t.Helper()
-	s, _, err := e.m.Open(context.Background(), "alice", e.space, nb, mode)
+	s, _, err := e.m.Open(context.Background(), "alice", e.space, nb, mode, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -418,16 +418,16 @@ func TestOpenChecks(t *testing.T) {
 	for _, tc := range []struct{ owner, nb, mode string }{
 		{"alice", "a.ipynb", "sideways"}, {"alice", "notes.txt", ""}, {"alice", "missing.ipynb", ""}, {"bob", "a.ipynb", ""},
 	} {
-		if _, _, err := e.m.Open(ctx, tc.owner, e.space, tc.nb, tc.mode); err == nil {
+		if _, _, err := e.m.Open(ctx, tc.owner, e.space, tc.nb, tc.mode, ""); err == nil {
 			t.Errorf("%+v: opened", tc)
 		}
 	}
 	e.drain.Store(true)
-	if _, _, err := e.m.Open(ctx, "alice", e.space, "a.ipynb", ""); !errors.Is(err, ErrDraining) {
+	if _, _, err := e.m.Open(ctx, "alice", e.space, "a.ipynb", "", ""); !errors.Is(err, ErrDraining) {
 		t.Fatalf("draining: %v", err)
 	}
 	off := New(Config{}, Deps{})
-	if _, _, err := off.Open(ctx, "alice", e.space, "a.ipynb", ""); !errors.Is(err, ErrDisabled) {
+	if _, _, err := off.Open(ctx, "alice", e.space, "a.ipynb", "", ""); !errors.Is(err, ErrDisabled) {
 		t.Fatalf("disabled: %v", err)
 	}
 }
@@ -508,7 +508,7 @@ func TestPerUserLimit(t *testing.T) {
 	e := newEnv(t, nil)
 	e.open(t, "a.ipynb", "")
 	e.open(t, "b.ipynb", "")
-	if _, _, err := e.m.Open(context.Background(), "alice", e.space, "c.ipynb", ""); !errors.Is(err, ErrLimit) {
+	if _, _, err := e.m.Open(context.Background(), "alice", e.space, "c.ipynb", "", ""); !errors.Is(err, ErrLimit) {
 		t.Fatalf("third session: %v", err)
 	}
 }

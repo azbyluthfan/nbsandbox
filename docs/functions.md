@@ -97,6 +97,7 @@ curl -u svc:… -H 'Content-Type: application/json' -d '{"parameters": {"region"
 - **With `wait`:** `200` with the result if it finished in time, otherwise `202` with the run as it is. Call `GET .../runs/{id}/result?wait=30s` to keep waiting.
 - **Retries:** send an `Idempotency-Key` header to retry safely. The same key and body within 24 hours return the original call.
 - **Concurrency:** calls of one space run side by side, within the server's overall limit (`runs.concurrency`).
+- **Connections:** a function that reads databases or object storage ([connections.md](connections.md#6-in-a-published-function)) reads the names its version declared (`connections` on the version), in the environment the call names (`"environment"`, the space's default otherwise). If that environment doesn't bind them all, with connections of the same types, the call is refused (`400`) before anything runs.
 
 ### The result
 

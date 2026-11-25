@@ -20,6 +20,9 @@ type SessionSpec struct {
 	Limits             Limits
 	PackagesDir        string // the space's package set, if any (see RunSpec.PackagesDir)
 	MaxMessage         int64  // the largest message the bridge sends; larger outputs become a notice
+	// Fetcher, if set, reads the session's connections, as a run's does
+	// (RunSpec.Fetcher), for the session's whole life.
+	Fetcher *Fetcher
 }
 
 // SessionConn is an attached session's stdio: Jupyter messages, one JSON

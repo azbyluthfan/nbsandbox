@@ -28,6 +28,20 @@ import (
 // is the run.
 const LabelFetcher = "nbsandbox.fetcher"
 
+// LabelSessionFetcher marks an interactive session's fetcher and what
+// goes with it: apart from runs', so the run reconciler never takes a live
+// session's fetcher for an orphan.
+const LabelSessionFetcher = "nbsandbox.session.fetcher"
+
+// fetcherKind says whose fetcher it is: the label on the fetcher and its
+// objects, and the label of the Pod that may reach it (its runner).
+type fetcherKind struct{ label, peer string }
+
+var (
+	runFetcher     = fetcherKind{LabelFetcher, LabelRun}
+	sessionFetcher = fetcherKind{LabelSessionFetcher, LabelSession}
+)
+
 // fetcherContainer is the fetcher Pod's only container.
 const fetcherContainer = "fetcher"
 
@@ -52,10 +66,10 @@ const fetcherConfigPath = "/etc/nbsandbox-fetcher/config.json"
 // buildFetcherConfigSecret is the run's fetcher configuration: the run's
 // tokens and its sources (credentials only for providers nbsandboxd reads;
 // the others are mounted from their own Secrets).
-func buildFetcherConfigSecret(cfg Config, spec isolation.RunSpec) *corev1.Secret {
+func buildFetcherConfigSecret(cfg Config, spec isolation.RunSpec, kind fetcherKind) *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: FetcherName(spec.RunID), Namespace: cfg.Namespace,
-			Labels: map[string]string{LabelFetcher: spec.RunID, LabelSpace: spec.SpaceID, LabelManaged: "nbsandbox"}},
+			Labels: map[string]string{kind.label: spec.RunID, LabelSpace: spec.SpaceID, LabelManaged: "nbsandbox"}},
 		Type: corev1.SecretTypeOpaque,
 		Data: map[string][]byte{"config.json": spec.Fetcher.Config},
 	}
@@ -66,15 +80,15 @@ func buildFetcherConfigSecret(cfg Config, spec isolation.RunSpec) *corev1.Secret
 // fetcher may be reached by its runner. Nothing else: another run's runner
 // can't reach this fetcher. (Fetchers reaching the gateway is a policy of
 // the chart's, the same for every fetcher.)
-func buildFetcherPolicies(cfg Config, spec isolation.RunSpec) []*networkingv1.NetworkPolicy {
+func buildFetcherPolicies(cfg Config, spec isolation.RunSpec, kind fetcherKind) []*networkingv1.NetworkPolicy {
 	port := intstr.FromInt32(isolation.FetcherPort)
 	tcp := corev1.ProtocolTCP
 	ports := []networkingv1.NetworkPolicyPort{{Protocol: &tcp, Port: &port}}
-	runner := &metav1.LabelSelector{MatchLabels: map[string]string{LabelRun: spec.RunID}}
-	fetcher := &metav1.LabelSelector{MatchLabels: map[string]string{LabelFetcher: spec.RunID}}
+	runner := &metav1.LabelSelector{MatchLabels: map[string]string{kind.peer: spec.RunID}}
+	fetcher := &metav1.LabelSelector{MatchLabels: map[string]string{kind.label: spec.RunID}}
 	meta := func(name string) metav1.ObjectMeta {
 		return metav1.ObjectMeta{Name: name, Namespace: cfg.Namespace,
-			Labels: map[string]string{LabelFetcher: spec.RunID, LabelManaged: "nbsandbox"}}
+			Labels: map[string]string{kind.label: spec.RunID, LabelManaged: "nbsandbox"}}
 	}
 	return []*networkingv1.NetworkPolicy{
 		{ObjectMeta: meta(runnerPolicyName(spec.RunID)), Spec: networkingv1.NetworkPolicySpec{
@@ -92,7 +106,7 @@ func buildFetcherPolicies(cfg Config, spec isolation.RunSpec) []*networkingv1.Ne
 // credentials, no DNS, non-root, read-only root, no capabilities, the run's
 // limits and runtime class), its configuration and mounted credentials,
 // and no files of the run's.
-func buildFetcherPod(cfg Config, spec isolation.RunSpec, gateway string) *corev1.Pod {
+func buildFetcherPod(cfg Config, spec isolation.RunSpec, kind fetcherKind, gateway string) *corev1.Pod {
 	no, yes := false, true
 	uid := int64(1000)
 	memBytes, nanoCPUs := spec.Limits.MemoryBytes, spec.Limits.NanoCPUs
@@ -131,7 +145,7 @@ func buildFetcherPod(cfg Config, spec isolation.RunSpec, gateway string) *corev1
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: FetcherName(spec.RunID), Namespace: cfg.Namespace,
-			Labels: map[string]string{LabelFetcher: spec.RunID, LabelSpace: spec.SpaceID, LabelWorker: labelValue(cfg.WorkerID),
+			Labels: map[string]string{kind.label: spec.RunID, LabelSpace: spec.SpaceID, LabelWorker: labelValue(cfg.WorkerID),
 				LabelRole: "fetcher", LabelManaged: "nbsandbox"},
 		},
 		Spec: corev1.PodSpec{
@@ -216,11 +230,11 @@ func (b *Backend) resolveGateway(ctx context.Context, hostport string) (string, 
 // startFetcher creates the run's fetcher (its configuration Secret, its
 // network policies, its Pod) and returns its address once it serves. The
 // cleanup it returns removes all of it; call it whatever the error.
-func (b *Backend) startFetcher(ctx context.Context, spec isolation.RunSpec, out isolation.LineSink) (string, func(), error) {
+func (b *Backend) startFetcher(ctx context.Context, spec isolation.RunSpec, kind fetcherKind, out isolation.LineSink) (string, func(), error) {
 	cleanup := func() {
 		cctx, cancel := freshContext(ctx)
 		defer cancel()
-		if err := b.killFetcher(cctx, spec.RunID); err != nil {
+		if err := b.killFetcher(cctx, spec.RunID); err != nil { // the names don't depend on the kind
 			b.log.Warn("remove a run's fetcher", "run_id", spec.RunID, "error", err)
 		}
 	}
@@ -230,15 +244,15 @@ func (b *Backend) startFetcher(ctx context.Context, spec isolation.RunSpec, out 
 	}
 	cctx, cancel := freshContext(ctx)
 	defer cancel()
-	if _, err := b.client.CoreV1().Secrets(b.cfg.Namespace).Create(cctx, buildFetcherConfigSecret(b.cfg, spec), metav1.CreateOptions{}); err != nil {
+	if _, err := b.client.CoreV1().Secrets(b.cfg.Namespace).Create(cctx, buildFetcherConfigSecret(b.cfg, spec, kind), metav1.CreateOptions{}); err != nil {
 		return "", cleanup, fmt.Errorf("%w: the fetcher's configuration: %w", isolation.ErrStart, err)
 	}
-	for _, p := range buildFetcherPolicies(b.cfg, spec) {
+	for _, p := range buildFetcherPolicies(b.cfg, spec, kind) {
 		if _, err := b.client.NetworkingV1().NetworkPolicies(b.cfg.Namespace).Create(cctx, p, metav1.CreateOptions{}); err != nil {
 			return "", cleanup, fmt.Errorf("%w: the run's network policy: %w", isolation.ErrStart, err)
 		}
 	}
-	if _, err := b.client.CoreV1().Pods(b.cfg.Namespace).Create(cctx, buildFetcherPod(b.cfg, spec, gw), metav1.CreateOptions{}); err != nil {
+	if _, err := b.client.CoreV1().Pods(b.cfg.Namespace).Create(cctx, buildFetcherPod(b.cfg, spec, kind, gw), metav1.CreateOptions{}); err != nil {
 		return "", cleanup, fmt.Errorf("%w: create the fetcher: %w", isolation.ErrStart, err)
 	}
 	addr, err := b.fetcherReady(ctx, FetcherName(spec.RunID), out)
@@ -313,22 +327,22 @@ func (b *Backend) killFetcher(ctx context.Context, runID string) error {
 
 // fetcherOrphans lists the runs whose fetcher Pod or configuration Secret
 // exists.
-func (b *Backend) fetcherOrphans(ctx context.Context) (map[string]string, error) {
-	runs := map[string]string{} // run -> space
-	pods, err := b.client.CoreV1().Pods(b.cfg.Namespace).List(ctx, metav1.ListOptions{LabelSelector: LabelFetcher})
+func (b *Backend) fetcherOrphans(ctx context.Context, kind fetcherKind) (map[string]string, error) {
+	runs := map[string]string{} // run (or session) -> space
+	pods, err := b.client.CoreV1().Pods(b.cfg.Namespace).List(ctx, metav1.ListOptions{LabelSelector: kind.label})
 	if err != nil {
 		return nil, err
 	}
 	for _, p := range pods.Items {
-		runs[p.Labels[LabelFetcher]] = p.Labels[LabelSpace]
+		runs[p.Labels[kind.label]] = p.Labels[LabelSpace]
 	}
-	secrets, err := b.client.CoreV1().Secrets(b.cfg.Namespace).List(ctx, metav1.ListOptions{LabelSelector: LabelFetcher})
+	secrets, err := b.client.CoreV1().Secrets(b.cfg.Namespace).List(ctx, metav1.ListOptions{LabelSelector: kind.label})
 	if err != nil {
 		return nil, err
 	}
 	for _, s := range secrets.Items {
-		if _, ok := runs[s.Labels[LabelFetcher]]; !ok {
-			runs[s.Labels[LabelFetcher]] = s.Labels[LabelSpace]
+		if _, ok := runs[s.Labels[kind.label]]; !ok {
+			runs[s.Labels[kind.label]] = s.Labels[LabelSpace]
 		}
 	}
 	return runs, nil

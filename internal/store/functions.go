@@ -33,6 +33,8 @@ type FunctionVersion struct {
 	// PackageLock is the exact packages the version was published with
 	// (a package set's lock), "" if none.
 	PackageLock string
+	// Connections is what it reads: {"name": "type"} as JSON ("{}": nothing).
+	Connections string
 	// Files is what the version holds (the notebook included): index rows,
 	// recorded with the version; the contents are in object storage.
 	Files []ContentRef
@@ -75,10 +77,10 @@ func (db *DB) AddFunctionVersion(ctx context.Context, fv FunctionVersion) error 
 	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO function_versions(space_id, function, version, notebook, files_json, contract_input, contract_output,
-		                              contract_mode, contract_mode_declared, notebook_sha256, bundle_bytes, created_by, created_at, package_lock)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		                              contract_mode, contract_mode_declared, notebook_sha256, bundle_bytes, created_by, created_at, package_lock, connections)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		fv.SpaceID, fv.Function, fv.Version, fv.Notebook, fv.FilesJSON, fv.ContractInput, fv.ContractOutput,
-		modeOrSingle(fv.ContractMode), fv.ContractModeDeclared, fv.NotebookSHA256, fv.BundleBytes, fv.CreatedBy, at, fv.PackageLock); err != nil {
+		modeOrSingle(fv.ContractMode), fv.ContractModeDeclared, fv.NotebookSHA256, fv.BundleBytes, fv.CreatedBy, at, fv.PackageLock, connectionsOrEmpty(fv.Connections)); err != nil {
 		return err
 	}
 	for _, f := range fv.Files {
@@ -130,7 +132,7 @@ func (db *DB) GetFunction(ctx context.Context, spaceID, name string) (Function, 
 }
 
 const fvCols = "space_id, function, version, notebook, files_json, contract_input, contract_output, contract_mode, contract_mode_declared, " +
-	"notebook_sha256, bundle_bytes, created_by, created_at, package_lock"
+	"notebook_sha256, bundle_bytes, created_by, created_at, package_lock, connections"
 
 func modeOrSingle(m string) string {
 	if m == "" {
@@ -143,7 +145,7 @@ func scanFV(s interface{ Scan(...any) error }) (FunctionVersion, error) {
 	var fv FunctionVersion
 	var at int64
 	err := s.Scan(&fv.SpaceID, &fv.Function, &fv.Version, &fv.Notebook, &fv.FilesJSON, &fv.ContractInput, &fv.ContractOutput,
-		&fv.ContractMode, &fv.ContractModeDeclared, &fv.NotebookSHA256, &fv.BundleBytes, &fv.CreatedBy, &at, &fv.PackageLock)
+		&fv.ContractMode, &fv.ContractModeDeclared, &fv.NotebookSHA256, &fv.BundleBytes, &fv.CreatedBy, &at, &fv.PackageLock, &fv.Connections)
 	fv.CreatedAt = time.UnixMilli(at)
 	return fv, err
 }
@@ -207,4 +209,11 @@ func (db *DB) DeleteFunction(ctx context.Context, spaceID, name string) error {
 		return ErrNotFound
 	}
 	return tx.Commit()
+}
+
+func connectionsOrEmpty(s string) string {
+	if s == "" {
+		return "{}"
+	}
+	return s
 }

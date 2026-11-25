@@ -272,3 +272,22 @@ func (db *DB) RunConnections(ctx context.Context, runID string) (map[string]stri
 func (db *DB) ConnectionByID(ctx context.Context, id string) (Connection, error) {
 	return scanConnection(db.r.QueryRowContext(ctx, "SELECT "+connectionCols+" FROM connections WHERE id = ?", id))
 }
+
+// SessionConnections returns which connection each of a session's names
+// meant (name -> connection id), as resolved when it was opened.
+func (db *DB) SessionConnections(ctx context.Context, sessionID string) (map[string]string, error) {
+	rows, err := db.r.QueryContext(ctx, "SELECT name, connection_id FROM session_connections WHERE session_id = ?", sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]string{}
+	for rows.Next() {
+		var n, id string
+		if err := rows.Scan(&n, &id); err != nil {
+			return nil, err
+		}
+		out[n] = id
+	}
+	return out, rows.Err()
+}

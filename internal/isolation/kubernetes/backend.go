@@ -72,7 +72,7 @@ func (b *Backend) Run(ctx context.Context, spec isolation.RunSpec, out isolation
 	runPod := buildPod(b.cfg, spec)
 	if spec.Fetcher != nil {
 		// The fetcher first: the runner is told its address.
-		addr, cleanup, err := b.startFetcher(ctx, spec, out)
+		addr, cleanup, err := b.startFetcher(ctx, spec, runFetcher, out)
 		defer cleanup()
 		if err != nil {
 			if ctx.Err() != nil {
@@ -557,7 +557,7 @@ func (b *Backend) Orphans(ctx context.Context) ([]isolation.Orphan, error) {
 		seen[p.Labels[LabelRun]] = true
 	}
 	// Fetchers whose run Pod is gone (or was never created).
-	fetchers, err := b.fetcherOrphans(ctx)
+	fetchers, err := b.fetcherOrphans(ctx, runFetcher)
 	if err != nil {
 		return nil, err
 	}

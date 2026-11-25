@@ -64,6 +64,10 @@ Then open the WebSocket `GET /v1/spaces/{id}/sessions/{session_id}/channel` and 
 
 AI agents get sessions as MCP tools (`open_session`, `run_cell`, `complete_code`, `end_session`): [mcp.md](mcp.md#tools).
 
+### Reading connections
+
+A session reads its space's connections like a run ([connections.md](connections.md#5-in-an-interactive-session)): `nbsandbox.sql("SELECT … FROM crm.orders")` in a cell. Open it with `"environment"` to choose dev or prod (the space's default otherwise); its fetcher lives as long as the session.
+
 ## Limits
 
 | | Default | Setting |

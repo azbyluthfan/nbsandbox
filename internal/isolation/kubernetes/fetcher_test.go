@@ -31,7 +31,7 @@ func fetcherSpec() isolation.RunSpec {
 func TestFetcherPod(t *testing.T) {
 	cfg := Config{Namespace: "runs", RuntimeClass: "gvisor", WorkerID: "w1"}
 	spec := fetcherSpec()
-	p := buildFetcherPod(cfg, spec, "10.96.0.9:3128")
+	p := buildFetcherPod(cfg, spec, runFetcher, "10.96.0.9:3128")
 	c := p.Spec.Containers[0]
 	env := map[string]string{}
 	for _, e := range c.Env {
@@ -69,7 +69,7 @@ func TestFetcherPod(t *testing.T) {
 
 func TestFetcherPolicies(t *testing.T) {
 	spec := fetcherSpec()
-	ps := buildFetcherPolicies(Config{Namespace: "runs"}, spec)
+	ps := buildFetcherPolicies(Config{Namespace: "runs"}, spec, runFetcher)
 	if len(ps) != 2 {
 		t.Fatalf("%d policies", len(ps))
 	}
@@ -190,7 +190,7 @@ func TestResolveGateway(t *testing.T) {
 func TestFetcherPodOwnLimits(t *testing.T) {
 	spec := fetcherSpec()
 	spec.Fetcher.MemoryBytes, spec.Fetcher.NanoCPUs = 384<<20, 5e8
-	c := buildFetcherPod(Config{Namespace: "runs"}, spec, "10.96.0.9:3128").Spec.Containers[0]
+	c := buildFetcherPod(Config{Namespace: "runs"}, spec, runFetcher, "10.96.0.9:3128").Spec.Containers[0]
 	if c.Resources.Requests.Memory().Value() != 384<<20 || c.Resources.Limits.Cpu().MilliValue() != 500 {
 		t.Fatalf("resources %+v", c.Resources)
 	}

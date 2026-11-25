@@ -28,6 +28,9 @@ import (
 const (
 	srcPG      = "nbsandbox-src-pg"
 	srcS3      = "nbsandbox-src-s3"
+	srcMySQL   = "nbsandbox-src-mysql"
+	srcMSSQL   = "nbsandbox-src-mssql"
+	mssqlSA    = "Owner-pw-12345"
 	readerPass = "reader-SECRET-pw"
 	s3Secret   = "s3-SECRET-key-0123"
 )
@@ -80,6 +83,11 @@ func containerIP(t *testing.T, name string) string {
 	return docker(t, "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", name)
 }
 
+// withSQLServer: SQL Server is a test source (on by default). It needs about
+// 2 GB of memory, emulated on arm64: NBSANDBOX_TEST_SQLSERVER=0 leaves it out
+// where that doesn't fit beside kind.
+var withSQLServer = os.Getenv("NBSANDBOX_TEST_SQLSERVER") != "0"
+
 var sourcesOnce sync.Once
 
 // sources starts the data sources once per test binary (and leaves them for
@@ -87,7 +95,15 @@ var sourcesOnce sync.Once
 func sources(t *testing.T) {
 	t.Helper()
 	sourcesOnce.Do(func() {
-		_, _ = runDocker("rm", "-f", srcPG, srcS3)
+		_, _ = runDocker("rm", "-f", srcPG, srcS3, srcMySQL, srcMSSQL)
+		docker(t, "run", "-d", "--name", srcMySQL, "--network", sourcesNet(), "-e", "MYSQL_ROOT_PASSWORD=owner-pw", "-e", "MYSQL_DATABASE=crm",
+			"mysql:8.4@sha256:8c233bad33d520a7aae1c1e619c3a9775f4a1ba2d463d692fada04ec7f40be00")
+		// SQL Server publishes amd64 images only (emulated on arm64 hosts).
+		if withSQLServer {
+			docker(t, "run", "-d", "--name", srcMSSQL, "--network", sourcesNet(), "--platform", "linux/amd64",
+				"-e", "ACCEPT_EULA=Y", "-e", "MSSQL_SA_PASSWORD="+mssqlSA,
+				"mcr.microsoft.com/mssql/server:2022-latest@sha256:4525e3efac9f3e241cb003bb2ff2a82818b502f37e12049d788b1a9fa7e13b7f")
+		}
 		docker(t, "run", "-d", "--name", srcPG, "--network", sourcesNet(), "-e", "POSTGRES_PASSWORD=owner-pw", "-e", "POSTGRES_DB=crm",
 			"postgres:17-alpine@sha256:3540c0362c809df084ffac0ae69fe794515f9de92692f02178bcdce0ef0302ac")
 		docker(t, "run", "-d", "--name", srcS3, "--network", sourcesNet(), "-p", "127.0.0.1::9000",
@@ -110,6 +126,35 @@ func sources(t *testing.T) {
 				t.Fatalf("source database: %v\n%s", err, out)
 			}
 			time.Sleep(time.Second)
+		}
+		// MySQL and SQL Server: the same orders, and a role that may read only them.
+		// Over TCP: while it initialises, MySQL runs a temporary server on its
+		// socket only, and what it is given is lost when the real one starts.
+		retry(t, "source MySQL", 180*time.Second, func() (string, error) {
+			return runDocker("exec", srcMySQL, "mysql", "-h127.0.0.1", "--protocol=TCP", "-uroot", "-powner-pw", "crm", "-e", `
+				DROP TABLE IF EXISTS orders, payroll;
+				DROP USER IF EXISTS 'reader'@'%';
+				CREATE TABLE orders (id int, region varchar(10), amount int);
+				INSERT INTO orders WITH RECURSIVE s(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM s WHERE n<1000)
+				  SELECT n, IF(n % 2 = 0, 'eu', 'us'), n FROM s;
+				CREATE TABLE payroll (name varchar(10), salary int);
+				CREATE USER 'reader'@'%' IDENTIFIED BY '`+readerPass+`';
+				GRANT SELECT ON crm.orders TO 'reader'@'%';`)
+		})
+		sqlcmd := func(db, q string) (string, error) {
+			return runDocker("exec", srcMSSQL, "/opt/mssql-tools18/bin/sqlcmd", "-C", "-b", "-S", "localhost", "-U", "sa", "-P", mssqlSA, "-d", db, "-Q", q)
+		}
+		if withSQLServer {
+			retry(t, "source SQL Server", 180*time.Second, func() (string, error) { return sqlcmd("master", "CREATE DATABASE crm") })
+			retry(t, "source SQL Server tables", 30*time.Second, func() (string, error) {
+				return sqlcmd("crm", `CREATE TABLE orders (id int, region nvarchar(10), amount int);
+				INSERT INTO orders SELECT n, CASE WHEN n % 2 = 0 THEN 'eu' ELSE 'us' END, n
+				  FROM (SELECT TOP 1000 ROW_NUMBER() OVER (ORDER BY (SELECT 1)) AS n FROM sys.all_objects a CROSS JOIN sys.all_objects b) s;
+				CREATE TABLE payroll (name nvarchar(10), salary int);
+				CREATE LOGIN reader WITH PASSWORD = '`+readerPass+`', CHECK_POLICY = OFF;
+				CREATE USER reader FOR LOGIN reader;
+				GRANT SELECT ON orders TO reader;`)
+			})
 		}
 		// The object store: a CSV in the bound bucket, another bucket beside it.
 		port := strings.TrimPrefix(docker(t, "port", srcS3, "9000/tcp"), "127.0.0.1:")
@@ -384,9 +429,13 @@ func assertNoReadLeftovers(t *testing.T) {
 	for {
 		var left string
 		if onKubernetes {
-			left = kubectl(t, "-n", "nbsandbox-runs", "get", "pods,secrets,networkpolicies", "-l", "nbsandbox.fetcher", "-o", "name")
+			for _, l := range []string{"nbsandbox.fetcher", "nbsandbox.session.fetcher"} {
+				left += kubectl(t, "-n", "nbsandbox-runs", "get", "pods,secrets,networkpolicies", "-l", l, "-o", "name")
+			}
 		} else {
-			left = docker(t, "ps", "-aq", "--filter", "label=nbsandbox.fetcher") + docker(t, "network", "ls", "-q", "--filter", "label=nbsandbox.network")
+			left = docker(t, "ps", "-aq", "--filter", "label=nbsandbox.fetcher") + docker(t, "network", "ls", "-q", "--filter", "label=nbsandbox.network") +
+				docker(t, "ps", "-aq", "--filter", "label=nbsandbox.session.fetcher") +
+				docker(t, "network", "ls", "-q", "--filter", "label=nbsandbox.session.network")
 		}
 		if left == "" {
 			return
@@ -414,4 +463,147 @@ func expectRefused(t *testing.T, id, attempted, observed string, refused bool) {
 	if !refused {
 		t.Errorf("%s: %s was not refused: %q", id, attempted, observed)
 	}
+}
+
+// retry runs f until it succeeds or the time is up (a source starting).
+func retry(t *testing.T, what string, within time.Duration, f func() (string, error)) {
+	t.Helper()
+	deadline := time.Now().Add(within)
+	for {
+		out, err := f()
+		if err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s: %v\n%s", what, err, out)
+		}
+		time.Sleep(2 * time.Second)
+	}
+}
+
+// MySQL and SQL Server, read and joined with PostgreSQL in one query; the
+// databases' own roles still hold.
+func TestConnectionsMoreDatabases(t *testing.T) {
+	needConnections(t)
+	sources(t)
+	pgc := connection(t, "crm", "postgresql", pgSettings(), readerPass)
+	my := connection(t, "shop", "mysql", map[string]any{"host": srcMySQL, "database": "crm", "user": "reader"}, readerPass)
+	if !withSQLServer {
+		t.Skip("NBSANDBOX_TEST_SQLSERVER=0: no SQL Server source")
+	}
+	ms := connection(t, "erp", "sqlserver", map[string]any{"host": srcMSSQL, "database": "crm", "user": "reader"}, readerPass)
+	sp := space(t, "alice")
+	upload(t, "alice", sp, "", map[string]string{"read.ipynb": codeNotebook(`import nbsandbox
+def count(q):
+    return int(nbsandbox.sql(q).iloc[0, 0])
+out = {
+    "shop": count("SELECT sum(amount) FROM shop.orders WHERE region = 'eu'"),
+    "erp": count("SELECT sum(amount) FROM erp.dbo.orders WHERE region = 'eu'"),
+    "joined": count("""SELECT count(*) FROM crm.orders c JOIN shop.orders s USING (id) JOIN erp.dbo.orders e USING (id)
+                       WHERE c.region = s.region AND s.region = e.region"""),
+}
+for name, q in {"shop_role": "SELECT * FROM shop.payroll", "erp_role": "SELECT * FROM erp.dbo.payroll",
+                "shop_pass_through": "SELECT * FROM mysql_query('shop', 'SELECT 1')",
+                "erp_pass_through": "SELECT mssql_exec('erp', 'DROP TABLE orders')",
+                "erp_write": "INSERT INTO erp.dbo.orders VALUES (1, 'eu', 1)"}.items():
+    try:
+        nbsandbox.sql(q)
+        out[name] = "allowed"
+    except Exception as e:
+        out[name] = "refused: " + str(e)[:200]
+nbsandbox.output(out)`)})
+	bind(t, sp, "main", map[string]map[string]string{"main": {"crm": pgc, "shop": my, "erp": ms}})
+	run := startRun(t, "alice", sp, "read.ipynb", nil)
+	res := runResult(t, "alice", sp, run.ID)
+	if res.Status != "succeeded" {
+		t.Fatalf("run: %+v\n%s", res, call(t, "GET", "/v1/spaces/"+sp+"/runs/"+run.ID+"/log", "alice", nil, nil).Body)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(res.Output, &out); err != nil {
+		t.Fatal(err)
+	}
+	// eu: the even ids 2..1000, summed.
+	if out["shop"] != float64(250500) || out["erp"] != float64(250500) || out["joined"] != float64(1000) {
+		t.Errorf("reads: %v", out)
+	}
+	for _, k := range []string{"shop_role", "erp_role", "shop_pass_through", "erp_pass_through", "erp_write"} {
+		s, _ := out[k].(string)
+		expectRefused(t, "connections-"+k, "a notebook tries "+k, s, strings.HasPrefix(s, "refused"))
+	}
+	assertNoReadLeftovers(t)
+}
+
+// An interactive session reads its space's names too, through a fetcher of
+// its own that goes when the session ends.
+func TestConnectionsSession(t *testing.T) {
+	needConnections(t)
+	sp := readerSpace(t, codeNotebook("1"))
+	r := jsonCall(t, "POST", "/v1/spaces/"+sp+"/sessions", "alice", map[string]string{"notebook": "read.ipynb", "environment": "dev"}, nil)
+	if r.Code != http.StatusCreated {
+		t.Fatalf("open: %d %s", r.Code, r.Body)
+	}
+	var s struct{ ID, Environment string }
+	r.json(t, &s)
+	if s.Environment != "dev" {
+		t.Fatalf("environment %q", s.Environment)
+	}
+	ended := false
+	end := func() {
+		if !ended {
+			ended = true
+			call(t, "DELETE", "/v1/spaces/"+sp+"/sessions/"+s.ID, "alice", nil, nil)
+		}
+	}
+	t.Cleanup(end)
+	k := connectSession(t, "alice", sp, s.ID)
+	k.run("import nbsandbox")
+	if out, _ := k.run(`print(int(nbsandbox.sql("SELECT count(*) FROM crm.orders").iloc[0, 0]))`); out != "1000\n" {
+		t.Fatalf("query: %q", out)
+	}
+	// Variables stay: a result kept between cells.
+	k.run(`df = nbsandbox.sql("SELECT region, sum(amount)::BIGINT AS total FROM lake.csv('sales/2026.csv') GROUP BY 1 ORDER BY 1")`)
+	if out, _ := k.run("print(df.total.tolist())"); out != "[17, 5]\n" {
+		t.Fatalf("lake: %q", out)
+	}
+	if out, _ := k.run(`import os, json; print(any(s[::-1] in json.dumps(dict(os.environ)) for s in ["` + reverse(readerPass) + `", "` + reverse(s3Secret) + `"]))`); out != "False\n" {
+		t.Fatalf("the session saw a credential: %q", out)
+	}
+	if r := jsonCall(t, "POST", "/v1/spaces/"+sp+"/sessions", "alice", map[string]string{"notebook": "read.ipynb", "environment": "staging"}, nil); r.Code != http.StatusBadRequest {
+		t.Fatalf("unknown environment: %d %s", r.Code, r.Body)
+	}
+	end()
+	assertNoSessionContainer(t, s.ID)
+	assertNoReadLeftovers(t)
+}
+
+// A published function reads the names its version declared, in the
+// environment the call names; a call whose bindings don't match is refused
+// before anything runs.
+func TestConnectionsFunction(t *testing.T) {
+	needConnections(t)
+	sp := readerSpace(t, codeNotebook(`import nbsandbox
+nbsandbox.output(int(nbsandbox.sql("SELECT count(*) FROM crm.orders WHERE region = 'eu'").iloc[0, 0]))`))
+	r := jsonCall(t, "POST", "/v1/spaces/"+sp+"/functions/eu_orders/versions", "alice", map[string]any{"notebook": "read.ipynb"}, nil)
+	if r.Code != http.StatusCreated {
+		t.Fatalf("publish: %d %s", r.Code, r.Body)
+	}
+	var v struct{ Connections map[string]string }
+	r.json(t, &v)
+	if v.Connections["crm"] != "postgresql" || v.Connections["lake"] != "s3" {
+		t.Fatalf("declared: %v", v.Connections)
+	}
+	r = jsonCall(t, "POST", "/v1/spaces/"+sp+"/functions/eu_orders/invoke?wait=50s", "alice", map[string]any{"environment": "dev"}, nil)
+	var res callerResult
+	_ = json.Unmarshal(r.Body, &res)
+	if res.Status != "succeeded" || string(res.Output) != "500" {
+		t.Fatalf("invoke: %d %s", r.Code, r.Body)
+	}
+	// The space now binds crm to an object store: the version's crm is gone.
+	lake := connection(t, "lake2", "s3", s3Settings(), s3Secret)
+	bind(t, sp, "main", map[string]map[string]string{"main": {"crm": lake, "lake": lake}})
+	r = jsonCall(t, "POST", "/v1/spaces/"+sp+"/functions/eu_orders/invoke", "alice", map[string]any{}, nil)
+	if r.Code != http.StatusBadRequest || !strings.Contains(string(r.Body), "crm (postgresql, bound to a s3 connection)") {
+		t.Fatalf("mismatched bindings: %d %s", r.Code, r.Body)
+	}
+	assertNoReadLeftovers(t)
 }

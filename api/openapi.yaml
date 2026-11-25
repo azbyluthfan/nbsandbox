@@ -866,6 +866,7 @@ paths:
               additionalProperties: false
               properties:
                 parameters: { $ref: "#/components/schemas/Parameters" }
+                environment: { type: string, description: "The space environment the function's connection names are read in (default: the space's default). It must bind every name the version reads, with connections of the same types." }
       responses:
         "200":
           description: |
@@ -917,6 +918,7 @@ paths:
               additionalProperties: false
               properties:
                 parameters: { $ref: "#/components/schemas/Parameters" }
+                environment: { type: string, description: "The space environment the function's connection names are read in (default: the space's default). It must bind every name the version reads, with connections of the same types." }
       responses:
         "200":
           description: With wait, the result; or a replay of an earlier request with the same Idempotency-Key (the run)
@@ -1188,6 +1190,7 @@ paths:
               properties:
                 notebook: { type: string, description: A .ipynb file in the space }
                 mode: { type: string, enum: [read-write, read-only], default: read-write }
+                environment: { type: string, description: "The space environment its connections' names are read in (default: the space's default). An open session keeps the one it was opened in." }
       responses:
         "200": { description: The notebook's open session, content: { application/json: { schema: { $ref: "#/components/schemas/Session" } } } }
         "201": { description: Started, content: { application/json: { schema: { $ref: "#/components/schemas/Session" } } } }
@@ -1731,6 +1734,7 @@ components:
         ended_by: { type: string, description: Who ended it (absent when it ended by itself) }
         owner: { type: string, description: Administrators only }
         worker: { type: string, description: The worker holding it (administrators only) }
+        environment: { type: string, description: "The space environment it reads its connections' names in; absent if the space binds none" }
     SessionList:
       type: object
       required: [items]
@@ -2026,6 +2030,10 @@ components:
         created_by: { type: string }
         created_at: { type: string, format: date-time }
         contract: { $ref: "#/components/schemas/Contract" }
+        connections:
+          type: object
+          additionalProperties: { type: string }
+          description: "The names it reads and their connection types ({\"crm\": \"postgresql\"}), from its space's bindings when it was published"
     Contract:
       type: object
       required: [function, version, input, mode, mode_inferred, output, item]

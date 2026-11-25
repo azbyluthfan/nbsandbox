@@ -119,7 +119,8 @@ func (a *API) invokeFunction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Parameters json.RawMessage `json:"parameters"`
+		Parameters  json.RawMessage `json:"parameters"`
+		Environment string          `json:"environment"`
 	}
 	if err := decodeJSON(r, &body, true); err != nil {
 		writeRunError(w, r, err)
@@ -128,7 +129,7 @@ func (a *API) invokeFunction(w http.ResponseWriter, r *http.Request) {
 	// The request is fully read: record it even if the caller hangs up now.
 	ctx := context.WithoutCancel(r.Context())
 	v, replay, err := a.d.Runs.Invoke(ctx, user(r), r.PathValue("id"), r.PathValue("name"), runs.InvokeRequest{
-		Version: ver, Parameters: body.Parameters, IdempotencyKey: r.Header.Get("Idempotency-Key"),
+		Version: ver, Parameters: body.Parameters, IdempotencyKey: r.Header.Get("Idempotency-Key"), Environment: body.Environment,
 	})
 	if err != nil {
 		writeRunError(w, r, err)

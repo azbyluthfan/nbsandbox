@@ -18,7 +18,7 @@ COPY requirements.txt /tmp/requirements.txt
 RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/* \
  && pip install --root-user-action=ignore --require-hashes --no-deps -r /tmp/requirements.txt \
  && rm /tmp/requirements.txt \
- && python -c "import duckdb; c = duckdb.connect(config={'extension_directory': '/opt/nbsandbox-fetcher/extensions'}); [c.execute(f'INSTALL {e}') for e in ('postgres', 'httpfs')]" \
+ && python -c "import duckdb; c = duckdb.connect(config={'extension_directory': '/opt/nbsandbox-fetcher/extensions'}); [c.execute(f'INSTALL {e}') for e in ('postgres', 'mysql', 'httpfs')]; c.execute('INSTALL mssql FROM community')" \
  && pip uninstall -y --root-user-action=ignore pip \
  && rm -rf /usr/local/lib/python3.13/ensurepip \
  && find / -xdev -type f -perm /6000 -exec chmod a-s {} + \

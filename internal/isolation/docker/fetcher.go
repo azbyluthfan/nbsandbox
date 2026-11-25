@@ -27,6 +27,21 @@ const (
 	LabelGateway = "nbsandbox.gateway" // on a run network: the gateway container joined to it
 )
 
+// Labels on an interactive session's fetcher and network: apart from runs',
+// so the run reconciler never takes a live session's fetcher for an orphan.
+const (
+	LabelSessionFetcher = "nbsandbox.session.fetcher"
+	LabelSessionNetwork = "nbsandbox.session.network"
+)
+
+// fetcherKind says whose fetcher it is: a run's or a session's labels.
+type fetcherKind struct{ fetcher, network string }
+
+var (
+	runFetcher     = fetcherKind{LabelFetcher, LabelNetwork}
+	sessionFetcher = fetcherKind{LabelSessionFetcher, LabelSessionNetwork}
+)
+
 // FetcherName is a run's fetcher container; NetworkName its network.
 func FetcherName(runID string) string { return "nbsandbox-fetch-" + runID }
 
@@ -42,7 +57,7 @@ const fetcherStartTimeout = 90 * time.Second
 // buildFetcherConfig is the fetcher's container: a run's hardening, on the
 // run's network only, with its configuration (credentials included) in
 // its environment.
-func buildFetcherConfig(spec isolation.RunSpec) (*container.Config, *container.HostConfig) {
+func buildFetcherConfig(spec isolation.RunSpec, kind fetcherKind) (*container.Config, *container.HostConfig) {
 	init := true
 	pids := spec.Limits.PIDs
 	cfg := &container.Config{
@@ -55,7 +70,7 @@ func buildFetcherConfig(spec isolation.RunSpec) (*container.Config, *container.H
 			"NBSANDBOX_FETCHER_CONFIG_JSON=" + string(spec.Fetcher.Config),
 			"NBSANDBOX_FETCHER_MEMORY=" + strconv.FormatInt(fetcherMemory(spec), 10),
 		},
-		Labels: map[string]string{LabelFetcher: spec.RunID, LabelSpace: spec.SpaceID},
+		Labels: map[string]string{kind.fetcher: spec.RunID, LabelSpace: spec.SpaceID},
 	}
 	host := &container.HostConfig{
 		NetworkMode:    container.NetworkMode(NetworkName(spec.RunID)),
@@ -87,7 +102,7 @@ func buildFetcherConfig(spec isolation.RunSpec) (*container.Config, *container.H
 // startFetcher gives a run its network, joins the gateway to it, and
 // starts the fetcher, returning once it serves. The cleanup it returns
 // removes all of it; call it whatever the error.
-func (b *Backend) startFetcher(ctx context.Context, spec isolation.RunSpec, out isolation.LineSink) (func(), error) {
+func (b *Backend) startFetcher(ctx context.Context, spec isolation.RunSpec, kind fetcherKind, out isolation.LineSink) (func(), error) {
 	f := spec.Fetcher
 	netName := NetworkName(spec.RunID)
 	var fetcherID string
@@ -111,7 +126,7 @@ func (b *Backend) startFetcher(ctx context.Context, spec isolation.RunSpec, out 
 	}
 	cctx, cancel := freshContext(ctx)
 	defer cancel()
-	labels := map[string]string{LabelNetwork: spec.RunID, LabelSpace: spec.SpaceID, LabelGateway: f.Gateway}
+	labels := map[string]string{kind.network: spec.RunID, LabelSpace: spec.SpaceID, LabelGateway: f.Gateway}
 	if _, err := b.client.NetworkCreate(cctx, netName, labels); err != nil {
 		return cleanup, fmt.Errorf("%w: create the run's network: %w", isolation.ErrStart, err)
 	}
@@ -121,7 +136,7 @@ func (b *Backend) startFetcher(ctx context.Context, spec isolation.RunSpec, out 
 		}
 		joined = true
 	}
-	cfg, host := buildFetcherConfig(spec)
+	cfg, host := buildFetcherConfig(spec, kind)
 	id, err := b.client.ContainerCreate(cctx, FetcherName(spec.RunID), cfg, host)
 	if err != nil {
 		return cleanup, fmt.Errorf("%w: create the fetcher: %w", isolation.ErrStart, err)
@@ -177,12 +192,12 @@ func (b *Backend) fetcherReady(ctx context.Context, id string, out isolation.Lin
 
 // killFetcher removes what a run left on the network side: its fetcher,
 // and its network once the gateway has left it.
-func (b *Backend) killFetcher(ctx context.Context, runID string) error {
+func (b *Backend) killFetcher(ctx context.Context, runID string, kind fetcherKind) error {
 	var errs []error
 	if err := b.client.ContainerRemove(ctx, FetcherName(runID)); err != nil && !IsNotFound(err) {
 		errs = append(errs, err)
 	}
-	nets, err := b.client.NetworkList(ctx, LabelNetwork+"="+runID)
+	nets, err := b.client.NetworkList(ctx, kind.network+"="+runID)
 	if err != nil {
 		return errors.Join(append(errs, err)...)
 	}

@@ -43,7 +43,7 @@ func TestRunnerSpecWithFetcher(t *testing.T) {
 func TestFetcherSpec(t *testing.T) {
 	spec := fetcherSpec()
 	spec.Runtime = "runsc"
-	cfg, host := buildFetcherConfig(spec)
+	cfg, host := buildFetcherConfig(spec, runFetcher)
 	rows := map[string]bool{
 		"image":               cfg.Image == "nbsandbox-fetcher:dev",
 		"user 1000":           cfg.User == "1000:1000",
@@ -144,7 +144,7 @@ func TestOrphanFetchersAndNetworks(t *testing.T) {
 func TestFetcherOwnLimits(t *testing.T) {
 	spec := fetcherSpec()
 	spec.Fetcher.MemoryBytes, spec.Fetcher.NanoCPUs = 512<<20, 5e8
-	cfg, host := buildFetcherConfig(spec)
+	cfg, host := buildFetcherConfig(spec, runFetcher)
 	if host.Memory != 512<<20 || host.MemorySwap != host.Memory || host.NanoCPUs != 5e8 ||
 		!slices.Contains(cfg.Env, "NBSANDBOX_FETCHER_MEMORY=536870912") {
 		t.Fatalf("limits: %d %d %v", host.Memory, host.NanoCPUs, cfg.Env)

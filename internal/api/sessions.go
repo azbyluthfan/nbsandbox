@@ -30,6 +30,8 @@ type SessionView struct {
 	EndedAt   *time.Time `json:"ended_at,omitempty"`
 	EndReason string     `json:"end_reason,omitempty"`
 	EndedBy   string     `json:"ended_by,omitempty"`
+	// Environment is the space environment the session reads its names in.
+	Environment string `json:"environment,omitempty"`
 	// Administrators also see who owns it and where it runs.
 	Owner  string `json:"owner,omitempty"`
 	Worker string `json:"worker,omitempty"`
@@ -37,7 +39,7 @@ type SessionView struct {
 
 func sessionView(s store.Session, admin bool) SessionView {
 	v := SessionView{ID: s.ID, SpaceID: s.SpaceID, Notebook: s.Notebook, Mode: s.Mode, Status: s.Status,
-		CreatedAt: s.CreatedAt.UTC(), EndReason: s.EndReason, EndedBy: s.EndedBy}
+		CreatedAt: s.CreatedAt.UTC(), EndReason: s.EndReason, EndedBy: s.EndedBy, Environment: s.Environment}
 	if !s.EndedAt.IsZero() {
 		t := s.EndedAt.UTC()
 		v.EndedAt = &t
@@ -98,14 +100,15 @@ func (a *API) openSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Notebook string `json:"notebook"`
-		Mode     string `json:"mode"`
+		Notebook    string `json:"notebook"`
+		Mode        string `json:"mode"`
+		Environment string `json:"environment"`
 	}
 	if err := decodeJSON(r, &body, false); err != nil {
 		writeSessionError(w, r, err)
 		return
 	}
-	s, created, err := a.d.Sessions.Open(r.Context(), user(r), r.PathValue("id"), body.Notebook, body.Mode)
+	s, created, err := a.d.Sessions.Open(r.Context(), user(r), r.PathValue("id"), body.Notebook, body.Mode, body.Environment)
 	if err != nil {
 		writeSessionError(w, r, err)
 		return

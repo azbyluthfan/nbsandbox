@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -68,10 +69,23 @@ func buildSessionPod(cfg Config, spec isolation.SessionSpec) *corev1.Pod {
 func (b *Backend) StartSession(ctx context.Context, spec isolation.SessionSpec) (isolation.SessionConn, error) {
 	pods := b.client.CoreV1().Pods(b.cfg.Namespace)
 	name := SessionPodName(spec.SessionID)
+	pod := buildSessionPod(b.cfg, spec)
+	if spec.Fetcher != nil {
+		// Its fetcher first, as for a run; it lives as long as the session.
+		addr, cleanup, err := b.startFetcher(ctx, isolation.RunSpec{RunID: spec.SessionID, SpaceID: spec.SpaceID,
+			Limits: spec.Limits, Runtime: spec.Runtime, Fetcher: spec.Fetcher}, sessionFetcher,
+			isolation.LineFunc(func(line string) { b.log.Debug("session fetcher", "session_id", spec.SessionID, "line", line) }))
+		if err != nil {
+			cleanup()
+			return nil, err
+		}
+		withFetcher(pod, addr, spec.Fetcher.Token)
+	}
 	cctx, cancel := freshContext(ctx)
-	_, err := pods.Create(cctx, buildSessionPod(b.cfg, spec), metav1.CreateOptions{})
+	_, err := pods.Create(cctx, pod, metav1.CreateOptions{})
 	cancel()
 	if err != nil {
+		_ = b.StopSession(ctx, spec.SessionID)
 		return nil, fmt.Errorf("%w: create the session's pod: %w", isolation.ErrStart, err)
 	}
 	fail := func(err error) (isolation.SessionConn, error) {
@@ -109,7 +123,7 @@ func (b *Backend) StopSession(ctx context.Context, sessionID string) error {
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
-	return nil
+	return b.killFetcher(cctx, sessionID)
 }
 
 // Sessions implements isolation.SessionBackend.
@@ -125,6 +139,17 @@ func (b *Backend) Sessions(ctx context.Context) ([]isolation.SessionInfo, error)
 		alive := p.Status.Phase == corev1.PodPending ||
 			(p.Status.Phase == corev1.PodRunning && terminated(&p, runnerContainer) == nil)
 		out = append(out, isolation.SessionInfo{SessionID: p.Labels[LabelSession], SpaceID: p.Labels[LabelSpace], Running: alive})
+	}
+	// A fetcher a session left without its Pod: a stopped session, which
+	// reconciliation stops (removing it).
+	fetchers, err := b.fetcherOrphans(ctx, sessionFetcher)
+	if err != nil {
+		return nil, err
+	}
+	for id, space := range fetchers {
+		if !slices.ContainsFunc(out, func(s isolation.SessionInfo) bool { return s.SessionID == id }) {
+			out = append(out, isolation.SessionInfo{SessionID: id, SpaceID: space})
+		}
 	}
 	return out, nil
 }

@@ -56,6 +56,19 @@ func (s *Service) Resolve(ctx context.Context, spaceID, environment string) (str
 	return env, out, nil
 }
 
+// Types returns each name's connection type (the owner's connections).
+func (s *Service) Types(ctx context.Context, owner string, names map[string]string) (map[string]string, error) {
+	out := make(map[string]string, len(names))
+	for name, id := range names {
+		c, err := s.d.DB.ConnectionByID(ctx, id)
+		if err != nil || c.Owner != owner {
+			return nil, fmt.Errorf("%w: %q's connection no longer exists", ErrUnavailable, name)
+		}
+		out[name] = c.Type
+	}
+	return out, nil
+}
+
 // Revealer is a secret provider that can hand a value to nbsandboxd, which
 // passes it to a run's fetcher (the built-in store, on Docker).
 type Revealer interface {
@@ -105,7 +118,7 @@ type fetcherConfig struct {
 
 // served are the types a fetcher reads; the others (http) reach notebooks
 // another way.
-var served = map[string]bool{TypePostgreSQL: true, TypeS3: true}
+var served = map[string]bool{TypePostgreSQL: true, TypeMySQL: true, TypeSQLServer: true, TypeS3: true}
 
 // Fetcher makes a run's fetcher: its configuration with the credentials of
 // each name the run resolved, and a gateway token for exactly their

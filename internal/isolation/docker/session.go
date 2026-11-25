@@ -33,10 +33,7 @@ func buildSessionConfig(spec isolation.SessionSpec) (*container.Config, *contain
 	if spec.SpaceReadOnly {
 		spaceMode = "ro"
 	}
-	cfg, host := buildContainerConfig(isolation.RunSpec{
-		RunID: spec.SessionID, SpaceID: spec.SpaceID, Image: spec.Image, Runtime: spec.Runtime, Limits: spec.Limits,
-		SpaceReadOnly: spec.SpaceReadOnly,
-	})
+	cfg, host := buildContainerConfig(sessionRunSpec(spec))
 	cfg.Entrypoint = []string{"python", isolation.SessionBridge}
 	cfg.Cmd = nil
 	cfg.Env = []string{
@@ -44,6 +41,11 @@ func buildSessionConfig(spec isolation.SessionSpec) (*container.Config, *contain
 		"PYTHONUNBUFFERED=1",
 		"NBSANDBOX_SESSION_ID=" + spec.SessionID,
 		"NBSANDBOX_SESSION_MAX_MESSAGE=" + strconv.FormatInt(spec.MaxMessage, 10),
+	}
+	if spec.Fetcher != nil { // its network is the session's own (buildContainerConfig)
+		cfg.Env = append(cfg.Env,
+			isolation.FetcherEnv+"=grpc://"+FetcherName(spec.SessionID)+":"+strconv.Itoa(isolation.FetcherPort),
+			isolation.FetcherTokenEnv+"="+spec.Fetcher.Token)
 	}
 	cfg.Labels = map[string]string{LabelSession: spec.SessionID, LabelSpace: spec.SpaceID}
 	cfg.OpenStdin, cfg.StdinOnce = true, false
@@ -56,19 +58,43 @@ func buildSessionConfig(spec isolation.SessionSpec) (*container.Config, *contain
 	return cfg, host
 }
 
-// StartSession implements isolation.SessionBackend: create, attach, start
-// (attached first, so nothing the bridge says is missed).
+// sessionRunSpec is what a session shares with a run: its container's
+// controls, and its fetcher.
+func sessionRunSpec(spec isolation.SessionSpec) isolation.RunSpec {
+	return isolation.RunSpec{
+		RunID: spec.SessionID, SpaceID: spec.SpaceID, Image: spec.Image, Runtime: spec.Runtime, Limits: spec.Limits,
+		SpaceReadOnly: spec.SpaceReadOnly, Fetcher: spec.Fetcher,
+	}
+}
+
+// StartSession implements isolation.SessionBackend: the session's fetcher
+// and network first, if it reads connections; then create, attach, start
+// (attached first, so nothing the bridge says is missed). The fetcher lives
+// as long as the session.
 func (b *Backend) StartSession(ctx context.Context, spec isolation.SessionSpec) (isolation.SessionConn, error) {
+	dropFetcher := func() {}
+	if spec.Fetcher != nil {
+		cleanup, err := b.startFetcher(ctx, sessionRunSpec(spec), sessionFetcher, isolation.LineFunc(func(line string) {
+			b.log.Debug("session fetcher", "session_id", spec.SessionID, "line", line)
+		}))
+		if err != nil {
+			cleanup()
+			return nil, err
+		}
+		dropFetcher = cleanup
+	}
 	cfg, host := buildSessionConfig(spec)
 	name := SessionContainerName(spec.SessionID)
 	id, err := b.client.ContainerCreate(ctx, name, cfg, host)
 	if err != nil {
+		dropFetcher()
 		return nil, fmt.Errorf("%w: create the session's container: %w", isolation.ErrStart, err)
 	}
 	fail := func(err error) (isolation.SessionConn, error) {
 		cctx, cancel := freshContext(ctx)
 		defer cancel()
 		_ = b.client.ContainerRemove(cctx, id)
+		dropFetcher()
 		return nil, err
 	}
 	conn, err := b.attach(ctx, id, spec.SessionID)
@@ -96,7 +122,7 @@ func (b *Backend) StopSession(ctx context.Context, sessionID string) error {
 	if err := b.client.ContainerRemove(cctx, name); err != nil && !IsNotFound(err) {
 		return err
 	}
-	return nil
+	return b.killFetcher(cctx, sessionID, sessionFetcher)
 }
 
 // Sessions implements isolation.SessionBackend.
@@ -106,8 +132,32 @@ func (b *Backend) Sessions(ctx context.Context) ([]isolation.SessionInfo, error)
 		return nil, err
 	}
 	out := make([]isolation.SessionInfo, 0, len(list))
+	seen := map[string]bool{}
 	for _, c := range list {
 		out = append(out, isolation.SessionInfo{SessionID: c.Labels[LabelSession], SpaceID: c.Labels[LabelSpace], Running: c.Running})
+		seen[c.Labels[LabelSession]] = true
+	}
+	// A fetcher or network a session left without its container: listed as
+	// a stopped session, which reconciliation stops (removing them).
+	fetchers, err := b.client.ContainerList(ctx, LabelSessionFetcher)
+	if err != nil {
+		return nil, err
+	}
+	nets, err := b.client.NetworkList(ctx, LabelSessionNetwork)
+	if err != nil {
+		return nil, err
+	}
+	add := func(id, space string) {
+		if id != "" && !seen[id] {
+			seen[id] = true
+			out = append(out, isolation.SessionInfo{SessionID: id, SpaceID: space})
+		}
+	}
+	for _, c := range fetchers {
+		add(c.Labels[LabelSessionFetcher], c.Labels[LabelSpace])
+	}
+	for _, n := range nets {
+		add(n.Labels[LabelSessionNetwork], n.Labels[LabelSpace])
 	}
 	return out, nil
 }

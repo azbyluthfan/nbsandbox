@@ -210,6 +210,7 @@ nb -H 'Content-Type: application/json' -d '{"parameters": {"region": "bandung"}}
 ```
 
 - **Pin a version** with `…/functions/forecast/versions/2/invoke`.
+- **`"environment"`** in the body picks the space environment a function that reads connections uses; it must bind the names the version declares (`connections` on the version), or the call is `400` ([connections.md](connections.md#6-in-a-published-function)).
 - **The answer is the same result** as `GET …/runs/{run_id}/result` in [2](#2-run-a-notebook-and-collect-its-outputs). A call is an ordinary run, so its log, outputs and events work the same way.
 - **A contract** (JSON Schemas in the notebook's metadata) checks parameters before anything runs (`400 invalid_parameters` with `problems`) and checks the output afterwards (`failed`, `output_invalid`). `GET …/functions/{name}/contract` returns it.
 - **Calls run side by side**, see the bundle read-only, and don't block the space's other runs.
@@ -293,7 +294,7 @@ Then open the WebSocket `GET …/sessions/{session_id}/channel` and exchange **J
 | `POST …/sessions/{session_id}/sync` | write a read-write session's file changes to the space now (also every 5 minutes, and at the end) |
 | `DELETE …/sessions/{session_id}` | end it |
 
-**Read-write and read-only.** A read-write session (the default) holds the space's write lock, like a writing run: no writing run starts while it's open (`409`), and what the kernel writes in `/space` is written back. While something else writes the space, a new session is read-only instead (`mode` says which). A session **ends by itself** after 30 minutes with no cell running and nobody connected, or 8 hours after it started.
+**Read-write and read-only.** A read-write session (the default) holds the space's write lock, like a writing run: no writing run starts while it's open (`409`), and what the kernel writes in `/space` is written back. While something else writes the space, a new session is read-only instead (`mode` says which). A session **ends by itself** after 30 minutes with no cell running and nobody connected, or 8 hours after it started. Open it with `"environment"` to read the space's connections in that environment ([connections.md](connections.md#5-in-an-interactive-session)).
 
 ## 8. Connections: your data sources
 

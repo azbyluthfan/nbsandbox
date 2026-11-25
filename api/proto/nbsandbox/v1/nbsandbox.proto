@@ -302,6 +302,7 @@ message FunctionVersion {
   string created_by = 7;
   google.protobuf.Timestamp created_at = 8;
   Contract contract = 9;
+  map<string, string> connections = 10; // the names it reads and their connection types
 }
 
 message Contract {
@@ -355,6 +356,7 @@ message InvokeFunctionRequest {
   google.protobuf.Value parameters = 4;
   string idempotency_key = 5;
   int32 wait_seconds = 6; // 0..60
+  string environment = 7; // the space environment the function's names are read in ("": the default)
 }
 
 // ---------------------------------------------------------------- runs
@@ -756,12 +758,14 @@ message Session {
   string ended_by = 9;
   string owner = 10;  // administrators only
   string worker = 11; // administrators only
+  string environment = 12; // the space environment it reads its names in
 }
 
 message OpenSessionRequest {
   string space_id = 1;
   string notebook = 2;
   string mode = 3; // read-write (default) or read-only
+  string environment = 4; // the space environment to read names in ("": the default)
 }
 message ListSessionsRequest {
   string space_id = 1;

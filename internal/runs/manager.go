@@ -288,7 +288,8 @@ type submission struct {
 	outputSchema *contract.Contract
 	function     string
 	version      int
-	packageLock  string // a published version's packages
+	packageLock  string            // a published version's packages
+	connections  map[string]string // a published version's names and their types
 }
 
 func (m *Manager) submit(ctx context.Context, owner, spaceID string, req SubmitRequest, sub submission) (View, bool, error) {
@@ -300,7 +301,7 @@ func (m *Manager) submit(ctx context.Context, owner, spaceID string, req SubmitR
 	if err != nil {
 		return View{}, false, err
 	}
-	env, names, err := m.resolveData(ctx, spaceID, req, sub)
+	env, names, err := m.resolveData(ctx, owner, spaceID, req, sub)
 	if err != nil {
 		return View{}, false, err
 	}
