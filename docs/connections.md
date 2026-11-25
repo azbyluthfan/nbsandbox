@@ -16,7 +16,9 @@ This is off unless the operator turns it on ([below](#for-operators)).
 - PostgreSQL, MySQL and SQL Server databases, and S3-compatible object storage (AWS S3, MinIO, Ceph, RustFS), with CSV and Parquet files.
 - Runs, interactive sessions and published functions, on Docker and on Kubernetes.
 
-**Not yet:** Azure Blob storage and HTTP APIs (connections of those types can be created and bound, but nothing reads them yet); connections in the web UI.
+**Not yet:** Azure Blob storage and HTTP APIs (connections of those types can be created and bound, but nothing reads them yet).
+
+**In the web UI:** **Connections** on the spaces page lists yours, to add, change or delete (the secret field is write-only); each space's page has a **Connections** section, a name per row and an environment per column; and where a space has several environments, a picker next to **Run** chooses the one runs, sessions and function calls read in.
 
 ## For users
 
@@ -143,6 +145,36 @@ connections:
 - **The gateway** is a Deployment and a Service in the release namespace, with a NetworkPolicy that lets only fetchers in. Allow its egress to your sources in whatever egress controls the cluster has (it needs DNS too).
 - **Each reading run** gets a fetcher Pod in the runs namespace (its own limits, reserved like a run's: `connections.fetcherMemory` and `fetcherCpus`; the run's runtime class; no API credentials, no DNS: the worker resolves the gateway's address), a Secret with its configuration and tokens, and two NetworkPolicies: its runner may reach its fetcher, and nothing else may. A chart policy lets fetchers reach the gateway's port. The workers' Role gains Secrets and NetworkPolicies in the runs namespace.
 - The namespace's deny-all and the workers' check that it's enforced are unchanged: the network plugin must enforce NetworkPolicy (Cilium, Calico, Azure's).
+
+### Vault or OpenBao
+
+Secrets can live in Vault or OpenBao (KV version 2) instead of Kubernetes Secrets, on the Kubernetes backend. nbsandboxd writes the secrets users enter under its own path and checks that references exist; it never reads a value. Each fetcher logs in itself and reads only its run's paths.
+
+```yaml
+connections:
+  secretsProvider: vault
+  vault:
+    address: https://vault.vault.svc:8200
+    mount: secret                     # the KV v2 mount
+    prefix: nbsandbox/connections     # managed secrets; nothing else writes here
+    authMount: kubernetes
+    role: nbsandbox                   # the API processes' role
+    fetcherRole: nbsandbox-fetcher    # the fetchers' role
+    references: [teams/data]          # prefixes connections may reference (path#key)
+    caConfigMap: ""                   # a ConfigMap with ca.crt, for a private CA
+```
+
+In Vault, enable the Kubernetes auth method and create two roles and policies:
+
+| Role | Bound to | Policy |
+|---|---|---|
+| `nbsandbox` | service account `nbsandbox-api` in the release namespace | `create`, `update` on `secret/data/nbsandbox/connections/*`; `read`, `delete` on `secret/metadata/nbsandbox/connections/*`; `read` on `secret/metadata/<each reference prefix>/*` |
+| `nbsandbox-fetcher` | service account `nbsandbox-fetcher` in the runs namespace, audience `vault` | `read` on `secret/data/nbsandbox/connections/*` and `secret/data/<each reference prefix>/*` |
+
+- **What a fetcher may read** is that role's policy, the same for every fetcher of the installation; what it does read is its own run's paths. It logs in with a token of its service account made for Vault's audience only (the Kubernetes API refuses it), and revokes its Vault token once it has read them.
+- **Fetchers reach Vault through the gateway,** like their sources: the gateway must be able to reach Vault's address. Vault's address needn't be in `connections.allowed`.
+- **A connection references** a secret as `path#key` under the KV mount (`teams/data/crm#password`), under one of `references`.
+- `deploy/kubernetes/kind/openbao-setup.sh` sets up OpenBao this way for the tests (`make test-k8s-vault`).
 
 ### On Docker
 
