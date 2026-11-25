@@ -158,7 +158,7 @@ fetcher-image: ## Build the fetcher image: reads runs' external data (Docker nee
 	@echo "built $(FETCHER_IMAGE)"
 
 .PHONY: fetcher-test
-fetcher-test: ## Fetcher gate and lockdown tests, inside the image (Docker needed)
+fetcher-test: fetcher-image ## Fetcher gate and lockdown tests, inside the image (Docker needed)
 	docker run --rm --network none --read-only --tmpfs /tmp -v "$(CURDIR)/fetcher-image/tests":/tests:ro \
 		--entrypoint python $(FETCHER_IMAGE) -m unittest discover -s /tests -v
 
