@@ -128,12 +128,16 @@ run 42 — one private network, removed with the run
 
 ### The fetcher
 
-- **Its own image, one Pod per run**, with the run's limits. It never runs notebook code. It holds only that run's resolved credentials.
-- **DuckDB** as the engine, with **external access locked** (no reading local files or arbitrary URLs from SQL, configuration locked, no community extensions), since its SQL comes from the notebook. DuckDB's own docs say SQL from untrusted sources needs sandboxing; the fetcher Pod is that sandbox.
+- **Its own image, one Pod per run**, with the run's limits. It never runs notebook code. It holds only that run's resolved credentials. **Written in Python** (`duckdb` and `pyarrow`, whose Arrow export and Flight are C++), with **DuckDB pinned to the 1.5 series** ([spike results](#spike-results-m0-2026-11-25)).
+- **DuckDB** as the engine, locked down in three layers, since its SQL comes from the notebook (DuckDB's own docs say SQL from untrusted sources needs sandboxing; the fetcher Pod is that sandbox):
+  - **a gate:** only a single `SELECT`, and no pass-through functions unless the connection allows them, checked with DuckDB's own parser before anything runs;
+  - **DuckDB's settings:** only the run's own sources allowed, then external access off, extensions off, configuration locked;
+  - **the database role:** read-only and least-privilege in the source.
+- **Credentials as DuckDB secrets** (its secret manager, attached by name), never in connection strings, which SQL can list.
 - **Reads in place:** Parquet and Iceberg statistics skip files and row groups, and only the needed columns are read.
-- **Databases:** PostgreSQL and MySQL through DuckDB's own core extensions; databases DuckDB has no connector for, SQL Server first, through ODBC (DuckDB's ODBC extension with the database vendor's driver, Microsoft's for SQL Server). The same connectors can write later.
+- **Databases:** PostgreSQL and MySQL through DuckDB's own core extensions; SQL Server through the community `mssql` extension (its native protocol, with `ATTACH` and pushdown), validated against a real SQL Server in CI. ODBC only as a fallback for databases nothing else covers: DuckDB's ODBC extension sends query text only, with no pushdown. The same connectors can write later.
 - **Simple reads by default:** a source receives only generated scans (these columns, these filters), and joins and aggregation run in DuckDB, so nbsandbox controls exactly what each source sees. Passing more SQL through to a source can be enabled per connection, relying on its database role.
-- **Serves Arrow over Flight SQL** to the run's runners. A query's result can be split, one stream per worker, which is the basis of distributed mode.
+- **Serves Arrow over Flight** (plain Flight, the query in the ticket; there is no Python Flight SQL server) to the run's runners. A query's result can be split, one stream per worker, which is the basis of distributed mode.
 - **The source's own permissions are the real boundary.** Each connection's database user should be **read-only and least-privilege in the database**. nbsandbox's table lists help users; they are not the security guarantee, and the docs and the connection form say so.
 
 ### Egress on AKS and on-premises
@@ -241,7 +245,8 @@ Verified with Cilium; the policies use only standard NetworkPolicy, still to be 
 - A run = an orchestrator, workers and a fetcher, on a private network per run.
 - The broker (resolving names and permissions, auditing) inside nbsandboxd; the fetcher a per-run Pod of its own image.
 - DuckDB first; other engines only for the cases above.
-- Databases: DuckDB's core extensions (PostgreSQL, MySQL); ODBC for those DuckDB has no connector for (SQL Server first).
+- The fetcher in Python, with DuckDB pinned to the 1.5 series (2.0 slower and its Python API changed); plain Arrow Flight, not Flight SQL.
+- Databases: DuckDB's core extensions (PostgreSQL, MySQL); SQL Server through the community `mssql` extension, validated in CI; ODBC only as a last resort.
 - Runs with workers start elastically, once a minimum fraction of their requested workers can be placed; nbsandbox's own admission, no external scheduler.
 - Simple reads by default; pass-through per connection.
 - Egress through our own Go gateway (one per cluster, with replicas; a role of the nbsandboxd binary), with each run's allowed endpoints in a signed token, so plain NetworkPolicy is enough everywhere.
