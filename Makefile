@@ -465,6 +465,25 @@ soak: dev-data ## Soak test (default 45m): leaks judged on trends, cleanup timer
 	$(SOAK_ENV) $(COMPOSE) up -d --build --force-recreate nbsandboxd
 	$(SOAK_ENV) SOAK_DURATION=$(SOAK_DURATION) $(GO) test -tags integration -count=1 -timeout 12h -v -run '^TestSoak$$' ./tests/integration/
 
+# Reading under load: a fetcher's cost per run, a burst of reading runs,
+# and throughput through the gateway (numbers for docs/perf.md).
+.PHONY: load-connections
+load-connections: ## Reading runs under load: per-run cost, a burst, gateway throughput (LOAD_RUNS, default 16)
+	NBSANDBOX_LOAD=1 NBSANDBOX_RUN_CONCURRENCY=$(or $(LOAD_CONCURRENCY),4) $(MAKE) test-connections TESTFLAGS="-v -run TestConnectionsLoad"
+
+# The soak with reading beside it: connections on, the test sources up, and
+# a space that reads runs, refused runs, function calls and sessions in turn.
+.PHONY: soak-connections
+soak-connections: dev-data fetcher-image ## Soak test with reading runs, sessions and function calls (connections on; default 45m)
+	@$(STOP_KIND)
+	-@$(CLUSTER) stop >/dev/null 2>&1
+	$(SOAK_ENV) NBSANDBOX_CONNECTIONS_ENABLED=true NBSANDBOX_CONNECTIONS_ALLOWED=$(TEST_SOURCES_ALLOWED) \
+		$(COMPOSE) up -d --build --force-recreate nbsandboxd gateway
+	mkdir -p bin/soak-connections
+	$(SOAK_ENV) NBSANDBOX_TEST_CONNECTIONS=1 SOAK_DURATION=$(SOAK_DURATION) REPORT_DIR="$(CURDIR)/bin/soak-connections" \
+		$(GO) test -tags integration -count=1 -timeout 12h -v -run '^TestSoak$$' ./tests/integration/; \
+		status=$$?; docker rm -fv $(TEST_SOURCES) >/dev/null 2>&1; exit $$status
+
 test-integration: dev-data ## Integration tests against the dev stack (Docker needed; restarts the stack)
 	@$(STOP_KIND)
 	-@$(CLUSTER) stop >/dev/null 2>&1

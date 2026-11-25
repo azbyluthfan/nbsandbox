@@ -70,6 +70,8 @@ type sample struct {
 	procs                    map[string]procSample
 	containers, dataMiB, run float64
 	sessionContainers        float64 // session containers (or Pods)
+	fetchers                 float64 // fetchers and their networks or policies (reading soak)
+	gatewayMiB               float64 // the gateway's memory (reading soak, Docker; -1 unmeasured)
 }
 
 // procSample is one nbsandboxd process's figures.
@@ -186,6 +188,14 @@ func TestSoak(t *testing.T) {
 		sessionSpaces[u] = space(t, u)
 		upload(t, u, sessionSpaces[u], "", map[string]string{"nb.ipynb": codeNotebook("1")})
 	}
+	// Reading (connections on): a space that reads, and one cycle of each kind.
+	var readSpace string
+	if soakReads() {
+		readSpace = soakReadSpace(t)
+		for n := range 4 {
+			soakRead(t, readSpace, n)
+		}
+	}
 
 	// Warm up: one cycle per space, then the baseline.
 	cycle := func(t *testing.T, i, n int) {
@@ -231,6 +241,11 @@ func TestSoak(t *testing.T) {
 		s.containers = float64(len(runContainersQuiet()))
 		s.sessionContainers = float64(len(sessionContainersQuiet()))
 		s.dataMiB = float64(dirBytes(dataDir)) / (1 << 20)
+		s.gatewayMiB = -1
+		if soakReads() {
+			s.fetchers = readingLeftoversQuiet()
+			s.gatewayMiB = gatewayMiB()
+		}
 		mu.Lock()
 		samples = append(samples, s)
 		mu.Unlock()
@@ -254,7 +269,7 @@ func TestSoak(t *testing.T) {
 
 	// The workload: every space busy at once until the time is up, and
 	// interactive sessions one after another beside them.
-	var cycles, sessionCycles atomic.Int64
+	var cycles, sessionCycles, readCycles atomic.Int64
 	end := start.Add(d)
 	t.Run("workers", func(t *testing.T) {
 		for i := range spaces {
@@ -274,10 +289,22 @@ func TestSoak(t *testing.T) {
 				sessionCycles.Add(1)
 			}
 		})
+		if readSpace != "" {
+			t.Run("reading", func(t *testing.T) {
+				t.Parallel()
+				for n := 0; time.Now().Before(end); n++ {
+					soakRead(t, readSpace, n)
+					readCycles.Add(1)
+				}
+			})
+		}
 	})
 	stop()
 	<-samplerDone
 	time.Sleep(3 * time.Second) // let the last containers go
+	if readSpace != "" {
+		assertNoReadLeftovers(t) // waits up to a minute for the last fetchers
+	}
 	take()
 
 	// Cleanup worked: no finished run older than retention plus two cleanup
@@ -366,9 +393,30 @@ func TestSoak(t *testing.T) {
 		}
 	}
 	last := all[len(all)-1]
+	// Reading: no fetcher outlives its run or session; the gateway's memory
+	// doesn't grow (judged where measured).
+	readNote := ""
+	readOK := true
+	if readSpace != "" {
+		var gws []sample
+		for _, s := range tail {
+			if s.gatewayMiB >= 0 {
+				gws = append(gws, s)
+			}
+		}
+		gwNote := "gateway memory not measured"
+		gwOK := true
+		if len(gws) >= 5 {
+			g := perHour(gws, func(s sample) float64 { return s.gatewayMiB })
+			gwOK = g <= 20
+			gwNote = fmt.Sprintf("gateway memory %+.1f MiB per hour, %.0f MiB at the end", g, gws[len(gws)-1].gatewayMiB)
+		}
+		readOK = gwOK && last.fetchers == 0
+		readNote = fmt.Sprintf("; reading: %d cycles, %.0f fetchers left, %s", readCycles.Load(), last.fetchers, gwNote)
+	}
 	// Limits: growth that would matter over a day, well above sampling noise.
 	trendOK := gr <= 10 && fd <= 10 && rss <= 20 && (!dataJudged || data <= 50) && last.containers == 0 && last.sessionContainers == 0 &&
-		call(t, "GET", "/readyz", "", nil, nil).Code == http.StatusOK
+		readOK && call(t, "GET", "/readyz", "", nil, nil).Code == http.StatusOK
 	dataNote := fmt.Sprintf("%+.1f MiB", data)
 	switch {
 	case dataDir == "":
@@ -377,12 +425,12 @@ func TestSoak(t *testing.T) {
 		dataNote = "not judged (run longer than retention plus two cleanups)"
 	}
 	var csv strings.Builder
-	csv.WriteString("minutes,process,goroutines,open_fds,rss_mib,run_containers,data_mib,active_runs,session_containers\n")
+	csv.WriteString("minutes,process,goroutines,open_fds,rss_mib,run_containers,data_mib,active_runs,session_containers,fetchers,gateway_mib\n")
 	for _, s := range all {
 		for _, src := range sources {
 			if p, ok := s.procs[src.name]; ok {
-				fmt.Fprintf(&csv, "%.1f,%s,%.0f,%.0f,%.1f,%.0f,%.1f,%.0f,%.0f\n", s.at.Minutes(), src.name, p.goroutines, p.fds, p.rssMiB, s.containers, s.dataMiB, s.run,
-					s.sessionContainers)
+				fmt.Fprintf(&csv, "%.1f,%s,%.0f,%.0f,%.1f,%.0f,%.1f,%.0f,%.0f,%.0f,%.1f\n", s.at.Minutes(), src.name, p.goroutines, p.fds, p.rssMiB, s.containers, s.dataMiB, s.run,
+					s.sessionContainers, s.fetchers, s.gatewayMiB)
 			}
 		}
 	}
@@ -401,7 +449,7 @@ func TestSoak(t *testing.T) {
 		nSpaces, d, runs, sessionCycles.Load(), len(sources), every, map[bool]string{true: "shortened", false: "default"}[retention > 0]),
 		"no steady growth in goroutines, open files, memory or data; no leftover run or session containers; cleanup removes old runs, events and keys",
 		fmt.Sprintf("worst per hour: goroutines %+.1f (%s), open fds %+.1f (%s), RSS %+.1f MiB (%s), data %s; end: %s; %.0f MiB data, %.0f run and %.0f session containers; %s",
-			gr, grProc, fd, fdProc, rss, rssProc, dataNote, strings.Join(ends, "; "), last.dataMiB, last.containers, last.sessionContainers, strings.Join(checks, "; ")),
+			gr, grProc, fd, fdProc, rss, rssProc, dataNote, strings.Join(ends, "; "), last.dataMiB, last.containers, last.sessionContainers, strings.Join(checks, "; "))+readNote,
 		trendOK && cleanupOK)
 	if !trendOK || !cleanupOK {
 		t.Fatalf("soak failed: trends ok %v, cleanup ok %v (%s)", trendOK, cleanupOK, strings.Join(checks, "; "))

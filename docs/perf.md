@@ -68,13 +68,26 @@ Measured on Docker Desktop (Apple silicon, 4 CPUs, 3 GB), through the API and th
 
 In the kernel alone (the spike), completion takes 2–5 ms without Jedi and 36 ms median with it (323 ms worst), which is why Jedi stays off. A session holds a run slot's worth of memory and CPU for as long as it is open, so size workers for `runs.concurrency` plus `sessions.per_worker` containers.
 
+## Reading external data
+
+`make load-connections` (Docker Desktop, 4 CPUs, 5.8 GiB; runs 4 at a time; three runs, 2026-11-25/26):
+
+| | Measured |
+|---|---|
+| A one-cell run, median of 5: without reading, then with one query (its fetcher started and attached first) | 3.3–3.6 s, then 3.8–4.1 s: a fetcher adds about 0.3–0.5 s |
+| 16 reading runs at once, one space each | all done in 25–27 s; request to result p50 11–12 s, p95 13–14 s (queueing included) |
+| 32 reading runs at once | all done in 55 s; p50 13.1 s, p95 15.9 s |
+| A 59 MiB CSV (2 M rows) read from object storage through the gateway | 73–90 MiB/s for one run; 142–195 MiB/s in all for four at once |
+
+Every run succeeded and no fetcher, fetcher network or policy was left behind. The CSV is aggregated in the fetcher (DuckDB), so the rates are what the gateway and the source carry, not what reaches the notebook.
+
 ## A run's footprint
 
 The smoke notebook on Docker Desktop: about 3.7 s of container time, about 300 MB peak memory, 3 s of CPU. The tour's sales report (pandas, 4 months of data): 4.7 s, 124 MB peak, 4.3 s CPU ([tour.md](tour.md)).
 
 ## Soak tests
 
-A soak runs a mix of notebooks for a long time (succeeding, failing, crashing the kernel, streaming, cancelled), with interactive sessions one after another beside them (cells, completion, reattaching, interrupting, restarting, files written back), and fails on steady growth of goroutines, open files, memory, disk or leftover run or session containers; cleanup timers are shortened so every cleanup path runs many times. `make soak` (45 minutes, weekly; a 12 h soak before a minor or major release, [releasing.md](releasing.md)), `make soak-cluster` and `make soak-k8s` sample every process.
+A soak runs a mix of notebooks for a long time (succeeding, failing, crashing the kernel, streaming, cancelled), with interactive sessions one after another beside them (cells, completion, reattaching, interrupting, restarting, files written back), and fails on steady growth of goroutines, open files, memory, disk or leftover run or session containers; cleanup timers are shortened so every cleanup path runs many times. `make soak` (45 minutes, weekly; a 12 h soak before a minor or major release, [releasing.md](releasing.md)), `make soak-cluster` and `make soak-k8s` sample every process. `make soak-connections` adds a space that reads (a reading run, a run refused at start, a function call, a reading session, in turn) and fails if a fetcher is left or the gateway's memory grows more than 20 MiB an hour.
 
 | Date | Stack | Duration | Runs | Result |
 |---|---|---|---|---|
@@ -85,3 +98,4 @@ A soak runs a mix of notebooks for a long time (succeeding, failing, crashing th
 | 2026-11-15/16 (v0.2.0) | One process, Docker Desktop (4 CPUs, 3 GB) | 12 h, 4 spaces at once | 25,060 | passed: worst trends goroutines +0.0/h, open files −0.0/h, memory −2.6 MiB/h; at the end 31 goroutines, 21 open files, 54 MiB, no containers left; stored data flat at 174 MiB (not judged: the test judges data only past the retention plus two cleanups) |
 | 2026-11-22 (v0.3.0) | One process, Docker Engine on GitHub's Linux runner, `runc` and gVisor (the weekly) | 45 min each, 4 spaces at once, interactive sessions beside them | in the run's log | passed on both runtimes, cleanup timers shortened |
 | 2026-11-22 (v0.3.0) | One process, Docker Desktop (4 CPUs, 3 GB) | stopped by hand at 2 h 32 min of a planned 12 h, 4 spaces at once, sessions beside them | 3,559, and 3,889 sessions | no failure until stopped; trends not judged (the test judges them at the end). At the stop: 49 goroutines, 27 open files, 37 MiB, below their values at 1 h 44 min (54, 29, 43 MiB) |
+| 2026-11-25/26 | One process, Docker Desktop (4 CPUs, 5.8 GiB), connections on | 1 h, 4 spaces at once, sessions beside them, and a space that reads | 1,658, 877 sessions, 509 reading cycles (reading runs, runs refused at start, function calls, reading sessions) | passed: worst trends goroutines −5.7/h, open files −2.3/h, memory −0.5 MiB/h; 0 fetchers left; the gateway +3.1 MiB/h, 17 MiB at the end (`make soak-connections`) |

@@ -127,7 +127,8 @@ The API is described in [api/openapi.yaml](api/openapi.yaml). When you add a rou
 | Kubernetes | the backend conformance suite against real Pods; the integration suite through the kind stack | `make test-k8s-conformance`; `make test-k8s` (`K8S_VERSION=1.34` for the oldest supported Kubernetes; `K8S_RUN_MEMORY=512MiB` with Docker under 4 GB) | yes |
 | Authentication | a real Keycloak beside the dev stack: user tokens, scopes, audience, token exchange | `make test-keycloak` | yes |
 | Isolation | probe notebooks and the isolation reports | `make report` (this machine's Docker); `make report-linux` (Linux with Docker Engine, `runc` and gVisor, in a Lima VM: [docs/gvisor.md](docs/gvisor.md#reproduce)); `make report-k8s` (kind; `K8S_RUNTIME_CLASS=gvisor` adds gVisor); `nbsandbox-report check` against any running deployment ([docs/check-deployment.md](docs/check-deployment.md)) | yes, Linux for authoritative results |
-| Soak | a long mix of runs, failing on any steady growth | `make soak` (45 min), `make soak-cluster`, `make soak-k8s` | yes |
+| Connections | reading external data end to end: test sources (Postgres, MySQL, SQL Server, S3, with and without TLS) beside the dev stack, failures of a fetcher, a source, the gateway | `make test-connections`; `make load-connections` for reading under load (`LOAD_RUNS`, default 16) | yes |
+| Soak | a long mix of runs, failing on any steady growth | `make soak` (45 min), `make soak-cluster`, `make soak-k8s`; `make soak-connections` adds reading runs, function calls and sessions | yes |
 | Web UI | the main screens in a headless browser, retaking the tour's screenshots | `make tour` (with `make up` running) | yes |
 | Fuzzing | the parsers of outside input | `make fuzz` (every target, 30 s each; `FUZZTIME=3m` for longer) or one target with `go test ./internal/<pkg> -run '^$' -fuzz '^FuzzName$'` ([docs/security/review.md](docs/security/review.md#fuzzing) lists them) | no |
 
