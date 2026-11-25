@@ -83,7 +83,7 @@ nbsandbox.connections()                                                         
 - **Big results:** `stream()` hands over a few MB at a time, so a run can process far more than its memory. Write what you keep to the run's output folder (`NBSANDBOX_OUTPUT_DIR`), as Parquet for example.
 - The SQL is DuckDB's dialect.
 
-**What a query may not do** (it fails with `nbsandbox.QueryError`, saying why): anything but one `SELECT`; send SQL to a source as is (`postgres_query`, …); read files or URLs other than its names' buckets; change settings or load extensions.
+**What a query may not do** (it fails with `nbsandbox.QueryError`, saying why): anything but one `SELECT`; send SQL to a source as is (`postgres_query`, …); read files or URLs other than its names' buckets; put a path in `FROM` (`FROM 's3://…'`: use `lake.parquet('…')`); compute a table function's arguments (write paths out: `lake.csv('a.csv')`, not `lake.csv(x || '.csv')`); change settings or load extensions.
 
 ### 4. Run, in an environment
 

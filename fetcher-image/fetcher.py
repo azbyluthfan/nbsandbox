@@ -80,11 +80,42 @@ def gate(con, sql):
             if low in REFUSED or low.startswith(REFUSED_PREFIXES):
                 raise Refused(f"{name}() isn't allowed")
         if n.get("type") == "TABLE_FUNCTION":
+            # A table function's arguments are written out, never computed:
+            # 's3://b/.' || './x' or chr(46) || chr(46) would make a path
+            # the '..' check below can't see.
+            for arg in n.get("function", {}).get("children", []):
+                if not _written_out(arg):
+                    raise Refused("a table function's arguments must be written out as values, not computed")
             for s in _strings(n.get("function", {})):
                 if DOTDOT.search(s):
                     raise Refused("paths may not contain '..'")
+        if n.get("type") == "BASE_TABLE":
+            # A path or URL in FROM (a "replacement scan") reads a file with
+            # no function to check: files are read through a name's
+            # functions, lake.parquet('path').
+            t = str(n.get("table_name", ""))
+            if "/" in t or ":" in t or "\\" in t:
+                raise Refused("read files through a name's functions, e.g. lake.parquet('path'), not a path in FROM")
 
     _walk(tree, check)
+
+
+# What a value written out in a table function's arguments may be: a
+# constant, a cast of one, a list or struct of them, or name = value.
+_WRITTEN = {"list_value", "struct_pack", "row", "array_value"}
+
+
+def _written_out(e):
+    cls = e.get("class")
+    if cls == "CONSTANT":
+        return True
+    if cls == "CAST":
+        return _written_out(e.get("child", {}))
+    if cls == "COMPARISON" and e.get("type") == "COMPARE_EQUAL" and e.get("left", {}).get("class") == "COLUMN_REF":
+        return _written_out(e.get("right", {}))
+    if cls == "FUNCTION" and str(e.get("function_name", "")).lower() in _WRITTEN:
+        return all(_written_out(c) for c in e.get("children", []))
+    return False
 
 
 def _lit(v):
