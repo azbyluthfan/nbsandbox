@@ -1,0 +1,41 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# OpenBao in development mode, for the Vault tests on kind (make
+# test-k8s-vault): in memory, a fixed root token. Never in production.
+# It reviews service account tokens for its Kubernetes auth with its own.
+apiVersion: v1
+kind: Namespace
+metadata: { name: vault }
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: { name: openbao, namespace: vault }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: { name: openbao-token-review }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: system:auth-delegator }
+subjects: [{ kind: ServiceAccount, name: openbao, namespace: vault }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: openbao, namespace: vault }
+spec:
+  selector: { matchLabels: { app: openbao } }
+  template:
+    metadata: { labels: { app: openbao } }
+    spec:
+      serviceAccountName: openbao
+      containers:
+        - name: openbao
+          image: quay.io/openbao/openbao:2.4.1@sha256:597f62847dd382382056a1d6704d50465908c2040038c4611832a23269a67112
+          args: [server, -dev, -dev-root-token-id=dev-root, -dev-listen-address=0.0.0.0:8200]
+          ports: [{ containerPort: 8200 }]
+          readinessProbe: { httpGet: { path: /v1/sys/health, port: 8200 }, periodSeconds: 2 }
+          resources: { limits: { memory: 256Mi } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: openbao, namespace: vault }
+spec: { selector: { app: openbao }, ports: [{ port: 8200 }] }
