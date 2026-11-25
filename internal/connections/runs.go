@@ -105,7 +105,7 @@ type fetcherConfig struct {
 
 // served are the types a fetcher reads; the others (http) reach notebooks
 // another way.
-var served = map[string]bool{TypePostgreSQL: true, TypeS3: true}
+var served = map[string]bool{TypePostgreSQL: true, TypeMySQL: true, TypeSQLServer: true, TypeS3: true}
 
 // Fetcher makes a run's fetcher: its configuration with the credentials of
 // each name the run resolved, and a gateway token for exactly their

@@ -340,7 +340,7 @@ test-k8s-conformance: k8s-up ## The backend conformance suite against the local 
 
 test-k8s: k8s-up ## Integration tests through the local Kubernetes stack (K8S_CNI=cilium|calico)
 	$(K8S_TEST_ENV) $(GO) test -tags integration -count=1 -timeout 40m $(TESTFLAGS) ./tests/integration/; \
-		status=$$?; docker rm -f nbsandbox-src-pg nbsandbox-src-s3 >/dev/null 2>&1; exit $$status
+		status=$$?; docker rm -f nbsandbox-src-pg nbsandbox-src-s3 nbsandbox-src-mysql nbsandbox-src-mssql >/dev/null 2>&1; exit $$status
 
 # kind's own network plugin (kindnet) doesn't enforce the deny-all policy
 # (run Pods reach the API server, kubelet, workers, internet): the workers must notice and refuse runs.
@@ -445,10 +445,10 @@ test-integration: dev-data ## Integration tests against the dev stack (Docker ne
 test-connections: dev-data fetcher-image ## Reading external data, end to end: the dev stack with connections on, sources on the gateway's network
 	@$(STOP_KIND)
 	-@$(CLUSTER) stop >/dev/null 2>&1
-	NBSANDBOX_CONNECTIONS_ENABLED=true NBSANDBOX_CONNECTIONS_ALLOWED=nbsandbox-src-pg,nbsandbox-src-s3 \
+	NBSANDBOX_CONNECTIONS_ENABLED=true NBSANDBOX_CONNECTIONS_ALLOWED=nbsandbox-src-pg,nbsandbox-src-s3,nbsandbox-src-mysql,nbsandbox-src-mssql \
 		NBSANDBOX_SHUTDOWN_GRACE=5s NBSANDBOX_RUN_TIMEOUT=120s NBSANDBOX_SESSIONS_PER_USER=0 $(COMPOSE) up -d --build
 	NBSANDBOX_TEST_CONNECTIONS=1 NBSANDBOX_RUN_TIMEOUT=120s $(GO) test -tags integration -count=1 -timeout 20m -run 'TestConnections' $(TESTFLAGS) ./tests/integration/; \
-		status=$$?; docker rm -f nbsandbox-src-pg nbsandbox-src-s3 >/dev/null 2>&1; exit $$status
+		status=$$?; docker rm -f nbsandbox-src-pg nbsandbox-src-s3 nbsandbox-src-mysql nbsandbox-src-mssql >/dev/null 2>&1; exit $$status
 
 KEYCLOAK_COMPOSE := $(COMPOSE) -f deploy/docker-compose.keycloak.yml
 

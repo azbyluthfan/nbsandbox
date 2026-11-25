@@ -170,12 +170,16 @@ class Forwarder:
 
 def connect(cfg):
     """A DuckDB connection with the run's sources attached, then locked."""
+    # SQL Server's extension is a community one (signed with the community
+    # key): allowed only when a source needs it, to load the copy installed
+    # in the image. Once locked, nothing else can be installed or loaded.
+    community = any(src.get("type") == "sqlserver" for src in cfg.get("sources", []))
     con = duckdb.connect(
         config={
             "extension_directory": EXTENSIONS,
             "autoinstall_known_extensions": "false",
             "autoload_known_extensions": "false",
-            "allow_community_extensions": "false",
+            "allow_community_extensions": "true" if community else "false",
             "allow_unsigned_extensions": "false",
             "allow_persistent_secrets": "false",
         }
@@ -203,6 +207,17 @@ def connect(cfg):
                 f"DATABASE {_lit(s['database'])}, USER {_lit(s['user'])}, PASSWORD {_lit(secret)})"
             )
             con.execute(f"ATTACH '' AS {_ident(name)} (TYPE postgres, SECRET {sec}, READ_ONLY)")
+        elif typ in ("mysql", "sqlserver"):
+            ext, kind = ("mysql", "mysql") if typ == "mysql" else ("mssql", "mssql")
+            if ext not in loaded:
+                con.execute(f"LOAD {ext}")
+                loaded.add(ext)
+            fwd = Forwarder(gw["address"], gw["token"], f"{s['host']}:{s['port']}")
+            con.execute(
+                f"CREATE SECRET {sec} (TYPE {kind}, HOST '127.0.0.1', PORT {fwd.port}, "
+                f"DATABASE {_lit(s['database'])}, USER {_lit(s['user'])}, PASSWORD {_lit(secret)})"
+            )
+            con.execute(f"ATTACH '' AS {_ident(name)} (TYPE {kind}, SECRET {sec}, READ_ONLY)")
         elif typ == "s3":
             if "httpfs" not in loaded:
                 con.execute("LOAD httpfs")

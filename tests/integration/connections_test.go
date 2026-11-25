@@ -28,6 +28,9 @@ import (
 const (
 	srcPG      = "nbsandbox-src-pg"
 	srcS3      = "nbsandbox-src-s3"
+	srcMySQL   = "nbsandbox-src-mysql"
+	srcMSSQL   = "nbsandbox-src-mssql"
+	mssqlSA    = "Owner-pw-12345"
 	readerPass = "reader-SECRET-pw"
 	s3Secret   = "s3-SECRET-key-0123"
 )
@@ -87,7 +90,13 @@ var sourcesOnce sync.Once
 func sources(t *testing.T) {
 	t.Helper()
 	sourcesOnce.Do(func() {
-		_, _ = runDocker("rm", "-f", srcPG, srcS3)
+		_, _ = runDocker("rm", "-f", srcPG, srcS3, srcMySQL, srcMSSQL)
+		docker(t, "run", "-d", "--name", srcMySQL, "--network", sourcesNet(), "-e", "MYSQL_ROOT_PASSWORD=owner-pw", "-e", "MYSQL_DATABASE=crm",
+			"mysql:8.4@sha256:8c233bad33d520a7aae1c1e619c3a9775f4a1ba2d463d692fada04ec7f40be00")
+		// SQL Server publishes amd64 images only (emulated on arm64 hosts).
+		docker(t, "run", "-d", "--name", srcMSSQL, "--network", sourcesNet(), "--platform", "linux/amd64",
+			"-e", "ACCEPT_EULA=Y", "-e", "MSSQL_SA_PASSWORD="+mssqlSA,
+			"mcr.microsoft.com/mssql/server:2022-latest@sha256:4525e3efac9f3e241cb003bb2ff2a82818b502f37e12049d788b1a9fa7e13b7f")
 		docker(t, "run", "-d", "--name", srcPG, "--network", sourcesNet(), "-e", "POSTGRES_PASSWORD=owner-pw", "-e", "POSTGRES_DB=crm",
 			"postgres:17-alpine@sha256:3540c0362c809df084ffac0ae69fe794515f9de92692f02178bcdce0ef0302ac")
 		docker(t, "run", "-d", "--name", srcS3, "--network", sourcesNet(), "-p", "127.0.0.1::9000",
@@ -111,6 +120,29 @@ func sources(t *testing.T) {
 			}
 			time.Sleep(time.Second)
 		}
+		// MySQL and SQL Server: the same orders, and a role that may read only them.
+		retry(t, "source MySQL", 120*time.Second, func() (string, error) {
+			return runDocker("exec", srcMySQL, "mysql", "-uroot", "-powner-pw", "crm", "-e", `
+				CREATE TABLE orders (id int, region varchar(10), amount int);
+				INSERT INTO orders WITH RECURSIVE s(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM s WHERE n<1000)
+				  SELECT n, IF(n % 2 = 0, 'eu', 'us'), n FROM s;
+				CREATE TABLE payroll (name varchar(10), salary int);
+				CREATE USER 'reader'@'%' IDENTIFIED BY '`+readerPass+`';
+				GRANT SELECT ON crm.orders TO 'reader'@'%';`)
+		})
+		sqlcmd := func(db, q string) (string, error) {
+			return runDocker("exec", srcMSSQL, "/opt/mssql-tools18/bin/sqlcmd", "-C", "-b", "-S", "localhost", "-U", "sa", "-P", mssqlSA, "-d", db, "-Q", q)
+		}
+		retry(t, "source SQL Server", 180*time.Second, func() (string, error) { return sqlcmd("master", "CREATE DATABASE crm") })
+		retry(t, "source SQL Server tables", 30*time.Second, func() (string, error) {
+			return sqlcmd("crm", `CREATE TABLE orders (id int, region nvarchar(10), amount int);
+				INSERT INTO orders SELECT n, CASE WHEN n % 2 = 0 THEN 'eu' ELSE 'us' END, n
+				  FROM (SELECT TOP 1000 ROW_NUMBER() OVER (ORDER BY (SELECT 1)) AS n FROM sys.all_objects a CROSS JOIN sys.all_objects b) s;
+				CREATE TABLE payroll (name nvarchar(10), salary int);
+				CREATE LOGIN reader WITH PASSWORD = '`+readerPass+`', CHECK_POLICY = OFF;
+				CREATE USER reader FOR LOGIN reader;
+				GRANT SELECT ON orders TO reader;`)
+		})
 		// The object store: a CSV in the bound bucket, another bucket beside it.
 		port := strings.TrimPrefix(docker(t, "port", srcS3, "9000/tcp"), "127.0.0.1:")
 		for bucket, obj := range map[string][2]string{
@@ -414,4 +446,69 @@ func expectRefused(t *testing.T, id, attempted, observed string, refused bool) {
 	if !refused {
 		t.Errorf("%s: %s was not refused: %q", id, attempted, observed)
 	}
+}
+
+// retry runs f until it succeeds or the time is up (a source starting).
+func retry(t *testing.T, what string, within time.Duration, f func() (string, error)) {
+	t.Helper()
+	deadline := time.Now().Add(within)
+	for {
+		out, err := f()
+		if err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s: %v\n%s", what, err, out)
+		}
+		time.Sleep(2 * time.Second)
+	}
+}
+
+// MySQL and SQL Server, read and joined with PostgreSQL in one query; the
+// databases' own roles still hold.
+func TestConnectionsMoreDatabases(t *testing.T) {
+	needConnections(t)
+	sources(t)
+	pgc := connection(t, "crm", "postgresql", pgSettings(), readerPass)
+	my := connection(t, "shop", "mysql", map[string]any{"host": srcMySQL, "database": "crm", "user": "reader"}, readerPass)
+	ms := connection(t, "erp", "sqlserver", map[string]any{"host": srcMSSQL, "database": "crm", "user": "reader"}, readerPass)
+	sp := space(t, "alice")
+	upload(t, "alice", sp, "", map[string]string{"read.ipynb": codeNotebook(`import nbsandbox
+def count(q):
+    return int(nbsandbox.sql(q).iloc[0, 0])
+out = {
+    "shop": count("SELECT sum(amount) FROM shop.orders WHERE region = 'eu'"),
+    "erp": count("SELECT sum(amount) FROM erp.dbo.orders WHERE region = 'eu'"),
+    "joined": count("""SELECT count(*) FROM crm.orders c JOIN shop.orders s USING (id) JOIN erp.dbo.orders e USING (id)
+                       WHERE c.region = s.region AND s.region = e.region"""),
+}
+for name, q in {"shop_role": "SELECT * FROM shop.payroll", "erp_role": "SELECT * FROM erp.dbo.payroll",
+                "shop_pass_through": "SELECT * FROM mysql_query('shop', 'SELECT 1')",
+                "erp_pass_through": "SELECT mssql_exec('erp', 'DROP TABLE orders')",
+                "erp_write": "INSERT INTO erp.dbo.orders VALUES (1, 'eu', 1)"}.items():
+    try:
+        nbsandbox.sql(q)
+        out[name] = "allowed"
+    except Exception as e:
+        out[name] = "refused: " + str(e)[:200]
+nbsandbox.output(out)`)})
+	bind(t, sp, "main", map[string]map[string]string{"main": {"crm": pgc, "shop": my, "erp": ms}})
+	run := startRun(t, "alice", sp, "read.ipynb", nil)
+	res := runResult(t, "alice", sp, run.ID)
+	if res.Status != "succeeded" {
+		t.Fatalf("run: %+v\n%s", res, call(t, "GET", "/v1/spaces/"+sp+"/runs/"+run.ID+"/log", "alice", nil, nil).Body)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(res.Output, &out); err != nil {
+		t.Fatal(err)
+	}
+	// eu: the even ids 2..1000, summed.
+	if out["shop"] != float64(250500) || out["erp"] != float64(250500) || out["joined"] != float64(1000) {
+		t.Errorf("reads: %v", out)
+	}
+	for _, k := range []string{"shop_role", "erp_role", "shop_pass_through", "erp_pass_through", "erp_write"} {
+		s, _ := out[k].(string)
+		expectRefused(t, "connections-"+k, "a notebook tries "+k, s, strings.HasPrefix(s, "refused"))
+	}
+	assertNoReadLeftovers(t)
 }
