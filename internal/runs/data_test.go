@@ -33,6 +33,18 @@ func (f *fakeData) Resolve(_ context.Context, _, env string) (string, map[string
 	return "", nil, &spaces.InvalidError{Msg: "no such environment"}
 }
 
+// Types: conn-prod is a postgresql connection; anything else mysql.
+func (f *fakeData) Types(_ context.Context, _ string, names map[string]string) (map[string]string, error) {
+	out := map[string]string{}
+	for n, id := range names {
+		out[n] = "mysql"
+		if id == "conn-prod" || id == "conn-dev" {
+			out[n] = "postgresql"
+		}
+	}
+	return out, nil
+}
+
 func (f *fakeData) Fetcher(_ context.Context, runID, _ string, names map[string]string, _ time.Time) (*isolation.Fetcher, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -109,5 +121,57 @@ func TestEnvironmentWithoutConnections(t *testing.T) {
 	v := e.submit(t, "alice", sp, "")
 	if v.Environment != "" {
 		t.Fatalf("environment: %+v", v)
+	}
+}
+
+// A published version declares the names its space binds, and their
+// types; an invocation reads only those, and only if its environment binds
+// them alike.
+func TestFunctionsReadDeclaredConnections(t *testing.T) {
+	ctx := context.Background()
+	data := &fakeData{}
+	e := newEnvWith(t, func(d *Deps, _ *store.DB, _ string) { d.Data = data })
+	sid := e.space(t, "alice")
+	v, err := e.m.Publish(ctx, "alice", sid, "fn", PublishRequest{Notebook: "nb.ipynb"})
+	if err != nil || v.Connections["crm"] != "postgresql" {
+		t.Fatalf("publish: %+v %v", v, err)
+	}
+	run, _, err := e.m.Invoke(ctx, "alice", sid, "fn", InvokeRequest{Environment: "prod"})
+	if err != nil || run.Environment != "prod" {
+		t.Fatalf("invoke: %+v %v", run, err)
+	}
+	e.wait(t, "alice", sid, run.ID, true)
+	if names, _ := e.db.RunConnections(ctx, run.ID); names["crm"] != "conn-prod" {
+		t.Fatalf("recorded: %v", names)
+	}
+	var inv *spaces.InvalidError
+	if _, _, err := e.m.Invoke(ctx, "alice", sid, "fn", InvokeRequest{Environment: "staging"}); !errors.As(err, &inv) {
+		t.Fatalf("unknown environment: %v", err)
+	}
+}
+
+func TestFunctionNeedsMatchingConnections(t *testing.T) {
+	ctx := context.Background()
+	e := newEnvWith(t, func(d *Deps, _ *store.DB, _ string) { d.Data = &fakeData{} })
+	sid := e.space(t, "alice")
+	cases := map[string]map[string]string{
+		"not bound":    {"billing": "postgresql"},
+		"another type": {"crm": "sqlserver"},
+	}
+	for name, declared := range cases {
+		_, _, err := e.m.resolveData(ctx, "alice", sid, SubmitRequest{}, submission{function: "fn", connections: declared})
+		var inv *spaces.InvalidError
+		if !errors.As(err, &inv) || !strings.Contains(err.Error(), "fn needs connections") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	// A function that reads nothing takes no environment.
+	if _, _, err := e.m.resolveData(ctx, "alice", sid, SubmitRequest{Environment: "dev"}, submission{function: "fn"}); err == nil {
+		t.Error("an environment for a function that reads nothing")
+	}
+	// Connections off: a function that reads some can't run.
+	off := newEnv(t)
+	if _, _, err := off.m.resolveData(ctx, "alice", sid, SubmitRequest{}, submission{function: "fn", connections: map[string]string{"crm": "postgresql"}}); err == nil {
+		t.Error("ran with connections off")
 	}
 }

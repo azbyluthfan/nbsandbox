@@ -302,6 +302,7 @@ message FunctionVersion {
   string created_by = 7;
   google.protobuf.Timestamp created_at = 8;
   Contract contract = 9;
+  map<string, string> connections = 10; // the names it reads and their connection types
 }
 
 message Contract {
@@ -355,6 +356,7 @@ message InvokeFunctionRequest {
   google.protobuf.Value parameters = 4;
   string idempotency_key = 5;
   int32 wait_seconds = 6; // 0..60
+  string environment = 7; // the space environment the function's names are read in ("": the default)
 }
 
 // ---------------------------------------------------------------- runs

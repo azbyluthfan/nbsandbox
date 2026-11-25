@@ -129,7 +129,7 @@ func (s *server) InvokeFunction(ctx context.Context, req *connect.Request[pb.Inv
 		return nil, invalid("parameters: " + err.Error())
 	}
 	v, replay, err := s.d.Runs.Invoke(context.WithoutCancel(ctx), owner(ctx), m.SpaceId, m.Name, runs.InvokeRequest{
-		Version: int(m.Version), Parameters: params, IdempotencyKey: m.IdempotencyKey,
+		Version: int(m.Version), Parameters: params, IdempotencyKey: m.IdempotencyKey, Environment: m.Environment,
 	})
 	if err != nil {
 		return nil, s.toErr(err)
@@ -164,7 +164,7 @@ func (s *server) InvokeFunctionStream(ctx context.Context, req *connect.Request[
 		return invalid("parameters: " + err.Error())
 	}
 	v, _, err := s.d.Runs.Invoke(context.WithoutCancel(ctx), owner(ctx), m.SpaceId, m.Name, runs.InvokeRequest{
-		Version: int(m.Version), Parameters: params, IdempotencyKey: m.IdempotencyKey,
+		Version: int(m.Version), Parameters: params, IdempotencyKey: m.IdempotencyKey, Environment: m.Environment,
 	})
 	if err != nil {
 		return s.toErr(err)

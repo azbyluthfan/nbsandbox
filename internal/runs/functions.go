@@ -34,6 +34,9 @@ type VersionView struct {
 	CreatedBy      string        `json:"created_by"`
 	CreatedAt      time.Time     `json:"created_at"`
 	Contract       *ContractView `json:"contract,omitempty"`
+	// Connections are the names it reads and their types; an invocation
+	// needs the same names, of the same types, bound in its environment.
+	Connections map[string]string `json:"connections,omitempty"`
 }
 
 // ContractView is a version's contract: JSON Schemas, null when absent.
@@ -53,6 +56,7 @@ func versionView(fv store.FunctionVersion, withContract bool) VersionView {
 	v := VersionView{Function: fv.Function, Version: fv.Version, Notebook: fv.Notebook, NotebookSHA256: fv.NotebookSHA256,
 		BundleBytes: fv.BundleBytes, CreatedBy: fv.CreatedBy, CreatedAt: fv.CreatedAt.UTC(), Files: []string{}}
 	_ = json.Unmarshal([]byte(fv.FilesJSON), &v.Files)
+	_ = json.Unmarshal([]byte(connectionsJSON(fv.Connections)), &v.Connections)
 	if withContract {
 		v.Contract = contractView(fv)
 	}
@@ -164,6 +168,9 @@ func (m *Manager) Publish(ctx context.Context, owner, spaceID, name string, req 
 		fv.ContractOutput = string(c.OutputJSON)
 	}
 	fv.ContractMode, fv.ContractModeDeclared = c.GetMode(), c.ModeDeclared
+	if fv.Connections, err = m.declaredConnections(ctx, owner, spaceID); err != nil {
+		return VersionView{}, err
+	}
 	if err := m.d.DB.AddFunctionVersion(ctx, fv); err != nil {
 		return VersionView{}, err
 	}
@@ -176,6 +183,9 @@ type InvokeRequest struct {
 	Version        int // 0 = the latest
 	Parameters     json.RawMessage
 	IdempotencyKey string
+	// Environment is the space environment the function's names are read
+	// in ("": the space's default).
+	Environment string
 }
 
 // Invoke runs a published version: an ordinary run, with the version's
@@ -211,8 +221,13 @@ func (m *Manager) Invoke(ctx context.Context, owner, spaceID, name string, req I
 	if err := c.ValidateInput(json.RawMessage(params)); err != nil {
 		return View{}, false, err
 	}
-	return m.submit(ctx, owner, spaceID, SubmitRequest{Notebook: fv.Notebook, IdempotencyKey: req.IdempotencyKey},
-		submission{notebook: nb, params: params, outputSchema: c, function: name, version: fv.Version, packageLock: fv.PackageLock})
+	var conns map[string]string
+	if err := json.Unmarshal([]byte(connectionsJSON(fv.Connections)), &conns); err != nil {
+		return View{}, false, err
+	}
+	return m.submit(ctx, owner, spaceID, SubmitRequest{Notebook: fv.Notebook, IdempotencyKey: req.IdempotencyKey, Environment: req.Environment},
+		submission{notebook: nb, params: params, outputSchema: c, function: name, version: fv.Version, packageLock: fv.PackageLock,
+			connections: conns})
 }
 
 // Functions lists a space's functions.
@@ -301,3 +316,10 @@ func (m *Manager) DeleteFunction(ctx context.Context, owner, spaceID, name strin
 // ErrFunctionBusy: a function with queued or running invocations can't be
 // deleted (409).
 var ErrFunctionBusy = errors.New("the function has queued or running invocations")
+
+func connectionsJSON(s string) string {
+	if s == "" {
+		return "{}"
+	}
+	return s
+}

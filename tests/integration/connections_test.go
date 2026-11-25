@@ -563,3 +563,35 @@ func TestConnectionsSession(t *testing.T) {
 	assertNoSessionContainer(t, s.ID)
 	assertNoReadLeftovers(t)
 }
+
+// A published function reads the names its version declared, in the
+// environment the call names; a call whose bindings don't match is refused
+// before anything runs.
+func TestConnectionsFunction(t *testing.T) {
+	needConnections(t)
+	sp := readerSpace(t, codeNotebook(`import nbsandbox
+nbsandbox.output(int(nbsandbox.sql("SELECT count(*) FROM crm.orders WHERE region = 'eu'").iloc[0, 0]))`))
+	r := jsonCall(t, "POST", "/v1/spaces/"+sp+"/functions/eu_orders/versions", "alice", map[string]any{"notebook": "read.ipynb"}, nil)
+	if r.Code != http.StatusCreated {
+		t.Fatalf("publish: %d %s", r.Code, r.Body)
+	}
+	var v struct{ Connections map[string]string }
+	r.json(t, &v)
+	if v.Connections["crm"] != "postgresql" || v.Connections["lake"] != "s3" {
+		t.Fatalf("declared: %v", v.Connections)
+	}
+	r = jsonCall(t, "POST", "/v1/spaces/"+sp+"/functions/eu_orders/invoke?wait=50s", "alice", map[string]any{"environment": "dev"}, nil)
+	var res callerResult
+	_ = json.Unmarshal(r.Body, &res)
+	if res.Status != "succeeded" || string(res.Output) != "500" {
+		t.Fatalf("invoke: %d %s", r.Code, r.Body)
+	}
+	// The space now binds crm to an object store: the version's crm is gone.
+	lake := connection(t, "lake2", "s3", s3Settings(), s3Secret)
+	bind(t, sp, "main", map[string]map[string]string{"main": {"crm": lake, "lake": lake}})
+	r = jsonCall(t, "POST", "/v1/spaces/"+sp+"/functions/eu_orders/invoke", "alice", map[string]any{}, nil)
+	if r.Code != http.StatusBadRequest || !strings.Contains(string(r.Body), "crm (postgresql, bound to a s3 connection)") {
+		t.Fatalf("mismatched bindings: %d %s", r.Code, r.Body)
+	}
+	assertNoReadLeftovers(t)
+}

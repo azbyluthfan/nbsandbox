@@ -866,6 +866,7 @@ paths:
               additionalProperties: false
               properties:
                 parameters: { $ref: "#/components/schemas/Parameters" }
+                environment: { type: string, description: "The space environment the function's connection names are read in (default: the space's default). It must bind every name the version reads, with connections of the same types." }
       responses:
         "200":
           description: |
@@ -917,6 +918,7 @@ paths:
               additionalProperties: false
               properties:
                 parameters: { $ref: "#/components/schemas/Parameters" }
+                environment: { type: string, description: "The space environment the function's connection names are read in (default: the space's default). It must bind every name the version reads, with connections of the same types." }
       responses:
         "200":
           description: With wait, the result; or a replay of an earlier request with the same Idempotency-Key (the run)
@@ -2028,6 +2030,10 @@ components:
         created_by: { type: string }
         created_at: { type: string, format: date-time }
         contract: { $ref: "#/components/schemas/Contract" }
+        connections:
+          type: object
+          additionalProperties: { type: string }
+          description: "The names it reads and their connection types ({\"crm\": \"postgresql\"}), from its space's bindings when it was published"
     Contract:
       type: object
       required: [function, version, input, mode, mode_inferred, output, item]

@@ -83,6 +83,7 @@ type invokeInput struct {
 	Version     int            `json:"version,omitempty" jsonschema:"a published version (default: the latest)"`
 	Parameters  map[string]any `json:"parameters,omitempty" jsonschema:"the function's input, matching its contract (get_function)"`
 	WaitSeconds *int           `json:"wait_seconds,omitempty" jsonschema:"how long to wait for the result, 0 to 600 (default 120)"`
+	Environment string         `json:"environment,omitempty" jsonschema:"the space environment its connections' names are read in, e.g. dev or prod (default: the space's default)"`
 }
 
 func readOnly(title string) *mcp.ToolAnnotations {
@@ -251,6 +252,9 @@ func (t *tools) register(s *mcp.Server) {
 			body := map[string]any{}
 			if in.Parameters != nil {
 				body["parameters"] = in.Parameters
+			}
+			if in.Environment != "" {
+				body["environment"] = in.Environment
 			}
 			v, _, err := t.call(ctx, req, "POST", p+"/invoke", body, http.StatusCreated, http.StatusOK)
 			if err != nil {
