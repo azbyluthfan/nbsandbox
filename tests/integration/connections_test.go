@@ -349,7 +349,10 @@ nbsandbox.output(found)`))
 	if err := json.Unmarshal(res.Output, &found); err != nil {
 		t.Fatal(err)
 	}
-	if found["secret_seen"] != false {
+	seen := found["secret_seen"] != false
+	finding(t, "connections-credentials", "a notebook looks for its connections' credentials (environment, run folder)", "not found",
+		fmt.Sprintf("found: %v", seen), !seen)
+	if seen {
 		t.Errorf("the run saw a credential")
 	}
 	for k, v := range found {

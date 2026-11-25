@@ -12,6 +12,7 @@ Run Jupyter notebooks headless, each in its own isolated sandbox, with live logs
 - **Web editor:** browse spaces, edit notebooks and files with completion from the runner's packages, run, follow the log, see charts and maps in the results. Users sign in with your identity provider (or a users file) ([docs/auth.md](docs/auth.md#signing-in-to-the-web-ui)).
 - **Interactive sessions:** run a notebook's cells one by one in a live kernel, as in Jupyter, with a run's isolation. Completion comes from the real objects (`df.` lists a DataFrame's columns). In the editor, or over a WebSocket of Jupyter messages ([docs/sessions.md](docs/sessions.md)).
 - **A space's own packages:** a `requirements.txt` is built once into a package set the space's runs import, with no network in the runs ([docs/packages.md](docs/packages.md)).
+- **Data where it lives:** notebooks query PostgreSQL, MySQL, SQL Server and S3-compatible storage by names their space defines (`nbsandbox.sql("SELECT … FROM crm.orders")`), per environment (dev, prod), never seeing a host or a password: a fetcher of the run's own reads for it ([docs/connections.md](docs/connections.md)).
 - **For operators:** an audit log of every change and download, administrators who can list and stop any run, and draining before maintenance ([docs/operations.md](docs/operations.md#audit-log)).
 
 Every run executes in a **fresh, locked-down container or Pod**. Code in one space can't see another space's files, processes or memory, can't reach the network, and can't use up another run's resources. An automated test suite checks each of these and writes a report: Docker ([report](docs/isolation-report.md)), Linux with Docker Engine with `runc` and gVisor side by side ([report](docs/isolation-report-linux.md)), and Kubernetes ([report](docs/isolation-report-kubernetes.md)).
@@ -84,13 +85,14 @@ Stop with `make down`. `make report` runs the isolation suite on your machine an
 | Sign-in with your identity provider (OpenID Connect) | [docs/auth.md](docs/auth.md) |
 | Monitoring, backups, upgrades, runbooks | [docs/operations.md](docs/operations.md) |
 | More Python packages for a space (`requirements.txt`) | [docs/packages.md](docs/packages.md) |
+| Reading databases and object storage (connections, Vault) | [docs/connections.md](docs/connections.md) |
 
 ## Limitations
 
 Read [docs/security/threat-model.md](docs/security/threat-model.md) before deploying. In short:
 - **Users are trusted** not to attack the platform on purpose. Runs are hardened and tested, but with `runc` they share the host's kernel. For less trusted users, run notebooks under gVisor ([docs/gvisor.md](docs/gvisor.md)) or another sandbox RuntimeClass on Kubernetes.
 - **Python notebooks only.** Runs use the Python 3 kernel; a notebook written for another kernel (R, Julia, …) is refused when you run or publish it.
-- **No network in runs.** Notebooks can't `pip install`. A space's `requirements.txt` can add packages (wheels from the package index, built once into a set the space's runs import) when the operator turns it on, on Docker for now ([docs/packages.md](docs/packages.md)); otherwise build a runner image with the packages you need.
+- **No network in runs.** Notebooks can't `pip install`, and reach outside data only through their connections ([docs/connections.md](docs/connections.md)): no HTTP APIs from notebook code yet. A space's `requirements.txt` can add packages (wheels from the package index, built once into a set the space's runs import) when the operator turns it on, on Docker for now ([docs/packages.md](docs/packages.md)); otherwise build a runner image with the packages you need.
 - **Authentication:** bearer tokens from any OpenID Connect provider, or basic auth from a users file, with revocation, a limit on failed sign-ins, and a web UI sign-in. Not yet: sharing a space between users.
 - **No widgets or `input()` in sessions:** an interactive session's kernel can't ask for input, and ipywidgets and other JavaScript outputs show as text.
 - **Custom packages on Docker only** for now; Kubernetes is next.

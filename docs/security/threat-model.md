@@ -11,6 +11,7 @@ Status: **reviewed for v0.3.0** (2026-11-21: interactive sessions added; 2026-11
 | Fair share of CPU, memory, PIDs and disk for each run | host kernel cgroups, host disk |
 | The host and the Docker daemon | outside every container |
 | User credentials and service configuration | `users.yaml`, `settings.yaml`, nbsandboxd's environment |
+| Connections' credentials (database passwords, storage keys) and the data behind them | a secret provider (Kubernetes Secrets, Vault/OpenBao, or the built-in store); while a run reads, its fetcher's memory |
 
 ## Who might cause harm
 
@@ -57,6 +58,20 @@ client ──HTTPS──▶ Caddy ──▶ nbsandboxd ──▶ socket proxy �
 | An interactive session's kernel does more than a run could | A session is a run's container (or Pod) for longer, with the same settings, pinned by the same tests: no network, uid 1000, no capabilities, a read-only system, the run limits, the runtime. A read-write session over its space's quota ends, as a writing run is stopped (Docker; on Kubernetes the Pod's disk limit). A viewer that stops reading is disconnected past 32 MiB behind. Its main process (the session bridge) passes only some Jupyter messages both ways: no `input()`, comms (widgets) or history; restart only on nbsandboxd's own request. It holds no credentials. It ends when idle (no cell running, nobody connected) or past `sessions.max`; users hold at most `sessions.per_user` | `session-network`, `session-isolation`, `session-memory-limit`, `session-read-only`; session container and Pod spec tests; bridge tests (refused messages) |
 | A session writes over the space while someone else does | A read-write session holds the space's write lock with writing runs (checked under the space's row lock in the database, both ways); its file changes are written back checked against the version it started from, edits made meanwhile kept | store tests (`TestOpenSessionShareTheWriteLock`), `TestSessionEndToEnd` |
 | Another site opens a signed-in user's session WebSocket (cross-site WebSocket hijacking) | The channel checks the `Origin`: only this host's pages (a browser always sends it); programs send none. The UI's CSRF header can't cover a WebSocket's GET, so this check does | `TestSessionChannelRefusals` |
+
+### Notebook → data sources (connections)
+
+A reading run has a network of its own, shared only with its fetcher ([connections.md](../connections.md)). The tests run with `make test-connections` (Docker) and `make test-k8s`, `make test-k8s-vault` (Kubernetes); the report's Connections section lists them.
+
+| Threat | Mitigation | Checked by |
+|---|---|---|
+| Notebook reads a connection's credentials | Only the fetcher holds them (mounted Secret, Vault login, or its configuration); the run gets a token for its own fetcher | `connections-credentials` (environment and run folder searched) |
+| Notebook reaches a source, the internet or the gateway directly | Docker: an `internal` network per run, with only the fetcher and the gateway on it. Kubernetes: the namespace's deny-all, and per-run policies letting the runner reach only its fetcher. The gateway needs the fetcher's token | `connections-direct_db`, `…_by_address`, `connections-internet`, `connections-gateway_with_runner_token` |
+| One run reaches another run's fetcher (and its credentials' reach) | A network (Docker) or policies (Kubernetes) per run; each fetcher needs its own run's token | `connections-cross-run` (by address) |
+| Notebook makes the fetcher do more than read | A gate (one `SELECT`; no pass-through, `query()`, `duckdb_*` or `pragma_*` functions, `..` in paths); DuckDB locked after set-up (no files or URLs beyond the run's buckets, no extensions, settings locked); sources attached read-only; the database's own role | `connections-pass_through`, `…write`, `…two_statements`, `…local_file`, `…other_bucket`, `…dotdot`, `…settings`, `…db_role`, and the MySQL and SQL Server rows |
+| The fetcher reaches places its run doesn't need | Its only way out is the gateway, which allows the endpoints in the run's signed token, resolves names itself, and refuses loopback and link-local addresses whatever the token says | gateway unit tests; `connections-direct_*` |
+| A connection points somewhere it shouldn't (the metadata service, nbsandbox's own database) | `connections.allowed`, checked when a connection is created and when a run starts; loopback and link-local refused always; the gateway alone on its own network on Docker | unit tests (`internal/connections`, `internal/gateway`) |
+| nbsandboxd leaks a credential | It never returns one; with Kubernetes Secrets and Vault it never reads one (the fetcher mounts or reads it); with the built-in store (development) it decrypts it only into the fetcher's configuration | unit tests (`internal/secrets`: no value read from Vault) |
 
 ### User → another user's data
 
@@ -114,4 +129,4 @@ client ──HTTPS──▶ Caddy ──▶ nbsandboxd ──▶ socket proxy �
 
 - **Kernel exploits.** No test attempts a kernel escape; protection relies on seccomp and, optionally, gVisor.
 - **A compromised nbsandboxd** (out of scope; see the proxy limitation above).
-- **Egress allowlists.** Runs have no network, so there are no tests of partial network access.
+- **Injected mode** (a credential given to notebook code, with one endpoint open) isn't built, so there is nothing to test yet; reading runs reach only their fetcher.

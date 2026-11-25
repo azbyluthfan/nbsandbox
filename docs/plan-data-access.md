@@ -1,6 +1,6 @@
 # Plan: data outside nbsandbox
 
-**Status (2026-11-24):** design under discussion; not scheduled. Getting the design right comes first; when and in what order to build it is decided later. The [ROADMAP](../ROADMAP.md) links here.
+**Status (2026-11-25):** phase 1 of the [order of work](#order-of-work) is built, in milestones M0 to M5: connections, secret providers (Kubernetes Secrets, Vault/OpenBao, a built-in store for development), names and environments, mediated reads (PostgreSQL, MySQL, SQL Server, S3-compatible storage) for runs, sessions and functions, the egress gateway, on Docker and Kubernetes, the web UI, and the isolation rows. User and operator documentation: [connections.md](connections.md). The later phases are on the [ROADMAP](../ROADMAP.md).
 
 ## Today
 
@@ -195,10 +195,10 @@ New guarantees, each with an isolation-report row, as for runs and sessions:
 - **The fetcher stays locked:** no file or URL access through SQL, no extension loading, its own limits.
 - **Audit:** connection and environment changes, and every read (run, connection, table).
 
-## Order of work (to decide later)
+## Order of work
 
-A possible order, each phase usable on its own:
-1. **Connections, secret providers, names and environments;** mediated reads with one runner plus a fetcher (PostgreSQL, MySQL, SQL Server, object storage with Parquet); the egress gateway; runs, sessions and function calls with the caller's connections; the isolation rows.
+Each phase usable on its own:
+1. **Connections, secret providers, names and environments;** mediated reads with one runner plus a fetcher (PostgreSQL, MySQL, SQL Server, object storage with Parquet); the egress gateway; runs, sessions and function calls with the caller's connections; the isolation rows. **Built** (M0 to M5, 2026-11-25).
 2. **Injected mode** (HTTP and SSE APIs, custom storage) with redaction.
 3. **Iceberg tables and catalogs.**
 4. **Runs with several runners:** orchestrator and workers, splits, partial aggregation with DuckDB, limits per run (and so run sizes).

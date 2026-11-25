@@ -72,6 +72,12 @@ var Sections = []Section{
 	{"Notebook functions", []string{"function-invoke", "function-immutable", "function-errors", "read-only-invocation",
 		"parallel-invocations", "status-stream", "start-latency"}},
 	{"Cluster (make test-cluster)", []string{"cluster-worker-crash", "cluster-worker-stop", "cluster-api-crash", "cluster-postgres-blip"}},
+	{"Connections (make test-connections, test-k8s)", []string{"connections-credentials",
+		"connections-direct_db", "connections-direct_db_by_address", "connections-direct_s3", "connections-direct_s3_by_address",
+		"connections-internet", "connections-gateway_with_runner_token", "connections-cross-run",
+		"connections-pass_through", "connections-write", "connections-two_statements", "connections-local_file",
+		"connections-other_bucket", "connections-dotdot", "connections-settings", "connections-db_role",
+		"connections-shop_role", "connections-shop_pass_through", "connections-erp_role", "connections-erp_pass_through", "connections-erp_write"}},
 	{"Network plugin (make test-k8s-cni-refuses)", []string{"cni-refuses"}},
 }
 
