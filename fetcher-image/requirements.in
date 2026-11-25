@@ -3,4 +3,4 @@
 # DuckDB stays on 1.5.x: 2.0 was slower in the spike and changed the API
 # the fetcher uses (docs/plan-data-access.md).
 duckdb==1.5.6
-pyarrow==22.0.0
+pyarrow==26.0.1  # the runner's too; >= 23.0.1 for CVE-2026-25087
