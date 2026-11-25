@@ -141,9 +141,15 @@ func (m *Manager) launch(ctx context.Context, s store.Session) {
 			pkgDir, note = "", fmt.Sprintf("the session started without the space's packages: %v", err)
 		}
 	}
+	fetcher, err := m.fetcherFor(sctx, s)
+	if err != nil {
+		fail(fmt.Sprintf("could not give the session its connections: %v", err))
+		return
+	}
 	conn, err := m.d.Backend.StartSession(sctx, isolation.SessionSpec{
 		SessionID: s.ID, SpaceID: s.SpaceID, SpaceDir: dir, SpaceReadOnly: s.Mode == store.SessionReadOnly,
 		Image: m.cfg.Image, Runtime: m.cfg.Runtime, Limits: m.cfg.Limits, PackagesDir: pkgDir, MaxMessage: m.cfg.MaxMessage,
+		Fetcher: fetcher,
 	})
 	if err != nil {
 		fail(err.Error())
@@ -427,4 +433,17 @@ func (m *Manager) Held() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return len(m.live)
+}
+
+// fetcherFor makes a starting session's fetcher, if its space binds names:
+// its gateway token lasts the session's longest life, and a little more.
+func (m *Manager) fetcherFor(ctx context.Context, s store.Session) (*isolation.Fetcher, error) {
+	if s.Environment == "" || m.d.Data == nil {
+		return nil, nil
+	}
+	names, err := m.d.DB.SessionConnections(ctx, s.ID)
+	if err != nil || len(names) == 0 {
+		return nil, err
+	}
+	return m.d.Data.Fetcher(ctx, s.ID, s.Owner, names, m.d.Now().Add(m.cfg.Max+5*time.Minute))
 }

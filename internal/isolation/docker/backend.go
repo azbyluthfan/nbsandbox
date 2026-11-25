@@ -46,7 +46,7 @@ func (b *Backend) Name() string { return "docker" }
 func (b *Backend) Run(ctx context.Context, spec isolation.RunSpec, out isolation.LineSink) (isolation.RunResult, error) {
 	cfg, host := buildContainerConfig(spec)
 	if spec.Fetcher != nil {
-		cleanup, err := b.startFetcher(ctx, spec, out)
+		cleanup, err := b.startFetcher(ctx, spec, runFetcher, out)
 		defer cleanup()
 		if err != nil {
 			return isolation.RunResult{}, err
@@ -260,7 +260,7 @@ func (b *Backend) Kill(ctx context.Context, runID string) error {
 	if err := b.client.ContainerRemove(cctx, name); err != nil && !IsNotFound(err) {
 		return err
 	}
-	return b.killFetcher(cctx, runID)
+	return b.killFetcher(cctx, runID, runFetcher)
 }
 
 var _ isolation.Backend = (*Backend)(nil)

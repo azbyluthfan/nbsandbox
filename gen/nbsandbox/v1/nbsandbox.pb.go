@@ -6714,8 +6714,9 @@ type Session struct {
 	EndedAt       *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=ended_at,json=endedAt,proto3" json:"ended_at,omitempty"`
 	EndReason     string                 `protobuf:"bytes,8,opt,name=end_reason,json=endReason,proto3" json:"end_reason,omitempty"`
 	EndedBy       string                 `protobuf:"bytes,9,opt,name=ended_by,json=endedBy,proto3" json:"ended_by,omitempty"`
-	Owner         string                 `protobuf:"bytes,10,opt,name=owner,proto3" json:"owner,omitempty"`   // administrators only
-	Worker        string                 `protobuf:"bytes,11,opt,name=worker,proto3" json:"worker,omitempty"` // administrators only
+	Owner         string                 `protobuf:"bytes,10,opt,name=owner,proto3" json:"owner,omitempty"`             // administrators only
+	Worker        string                 `protobuf:"bytes,11,opt,name=worker,proto3" json:"worker,omitempty"`           // administrators only
+	Environment   string                 `protobuf:"bytes,12,opt,name=environment,proto3" json:"environment,omitempty"` // the space environment it reads its names in
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6827,11 +6828,19 @@ func (x *Session) GetWorker() string {
 	return ""
 }
 
+func (x *Session) GetEnvironment() string {
+	if x != nil {
+		return x.Environment
+	}
+	return ""
+}
+
 type OpenSessionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SpaceId       string                 `protobuf:"bytes,1,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"`
 	Notebook      string                 `protobuf:"bytes,2,opt,name=notebook,proto3" json:"notebook,omitempty"`
-	Mode          string                 `protobuf:"bytes,3,opt,name=mode,proto3" json:"mode,omitempty"` // read-write (default) or read-only
+	Mode          string                 `protobuf:"bytes,3,opt,name=mode,proto3" json:"mode,omitempty"`               // read-write (default) or read-only
+	Environment   string                 `protobuf:"bytes,4,opt,name=environment,proto3" json:"environment,omitempty"` // the space environment to read names in ("": the default)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6883,6 +6892,13 @@ func (x *OpenSessionRequest) GetNotebook() string {
 func (x *OpenSessionRequest) GetMode() string {
 	if x != nil {
 		return x.Mode
+	}
+	return ""
+}
+
+func (x *OpenSessionRequest) GetEnvironment() string {
+	if x != nil {
+		return x.Environment
 	}
 	return ""
 }
@@ -8837,7 +8853,7 @@ const file_nbsandbox_v1_nbsandbox_proto_rawDesc = "" +
 	"\t_fractionB\r\n" +
 	"\v_cell_indexB\x13\n" +
 	"\x11_duration_secondsJ\x04\b\t\x10\n" +
-	"\"\xd6\x02\n" +
+	"\"\xf8\x02\n" +
 	"\aSession\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
 	"\bspace_id\x18\x02 \x01(\tR\aspaceId\x12\x1a\n" +
@@ -8852,11 +8868,13 @@ const file_nbsandbox_v1_nbsandbox_proto_rawDesc = "" +
 	"\bended_by\x18\t \x01(\tR\aendedBy\x12\x14\n" +
 	"\x05owner\x18\n" +
 	" \x01(\tR\x05owner\x12\x16\n" +
-	"\x06worker\x18\v \x01(\tR\x06worker\"_\n" +
+	"\x06worker\x18\v \x01(\tR\x06worker\x12 \n" +
+	"\venvironment\x18\f \x01(\tR\venvironment\"\x81\x01\n" +
 	"\x12OpenSessionRequest\x12\x19\n" +
 	"\bspace_id\x18\x01 \x01(\tR\aspaceId\x12\x1a\n" +
 	"\bnotebook\x18\x02 \x01(\tR\bnotebook\x12\x12\n" +
-	"\x04mode\x18\x03 \x01(\tR\x04mode\"0\n" +
+	"\x04mode\x18\x03 \x01(\tR\x04mode\x12 \n" +
+	"\venvironment\x18\x04 \x01(\tR\venvironment\"0\n" +
 	"\x13ListSessionsRequest\x12\x19\n" +
 	"\bspace_id\x18\x01 \x01(\tR\aspaceId\"C\n" +
 	"\x14ListSessionsResponse\x12+\n" +

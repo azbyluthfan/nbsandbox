@@ -48,7 +48,7 @@ func newCluster(t *testing.T) *cluster {
 func TestAPINodeReachesTheWorkersSession(t *testing.T) {
 	c := newCluster(t)
 	ctx := context.Background()
-	s, _, err := c.api.Open(ctx, "alice", c.space, "a.ipynb", "")
+	s, _, err := c.api.Open(ctx, "alice", c.space, "a.ipynb", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func TestAPINodeReachesTheWorkersSession(t *testing.T) {
 func TestEndWhenTheWorkerCantBeReached(t *testing.T) {
 	c := newCluster(t)
 	ctx := context.Background()
-	s, _, err := c.api.Open(ctx, "alice", c.space, "a.ipynb", "")
+	s, _, err := c.api.Open(ctx, "alice", c.space, "a.ipynb", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestEndWhenTheWorkerCantBeReached(t *testing.T) {
 
 func TestInternalHandlerNeedsTheSecret(t *testing.T) {
 	c := newCluster(t)
-	s, _, err := c.api.Open(context.Background(), "alice", c.space, "a.ipynb", "")
+	s, _, err := c.api.Open(context.Background(), "alice", c.space, "a.ipynb", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func TestInternalHandlerNeedsTheSecret(t *testing.T) {
 func TestSessionsOfAGoneWorkerEnd(t *testing.T) {
 	c := newCluster(t)
 	ctx := context.Background()
-	s, _, err := c.api.Open(ctx, "alice", c.space, "a.ipynb", "")
+	s, _, err := c.api.Open(ctx, "alice", c.space, "a.ipynb", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +198,7 @@ func TestUnclaimedSessionEnds(t *testing.T) {
 	// No worker takes it: the worker is stopped first (draining it instead
 	// races with a claim already on its way to the database).
 	c.m.Shutdown(context.Background())
-	s, _, err := c.api.Open(context.Background(), "alice", c.space, "a.ipynb", "")
+	s, _, err := c.api.Open(context.Background(), "alice", c.space, "a.ipynb", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -69,6 +69,7 @@ type DB interface {
 	OpenSessions(ctx context.Context, f store.SessionFilter) ([]store.Session, error)
 	DeleteEndedSessionsBefore(ctx context.Context, t time.Time) (int64, error)
 	Notify(ctx context.Context, channel, payload string) error
+	SessionConnections(ctx context.Context, sessionID string) (map[string]string, error)
 }
 
 // Spaces is the space service the manager uses (*spaces.Service).
@@ -101,6 +102,9 @@ type Deps struct {
 	// Workers lists the live workers (with Shared): who else holds
 	// sessions, and where API nodes reach them.
 	Workers func(ctx context.Context) ([]store.Worker, error)
+	// Data gives sessions their space's connections, as runs get theirs
+	// (internal/connections; nil: connections are off).
+	Data DataAccess
 	// HTTP reaches other workers (nil: a default client).
 	HTTP *http.Client
 	Log  *slog.Logger
@@ -176,7 +180,16 @@ func (m *Manager) Wake() {
 // store.SessionReadWrite (the default) or store.SessionReadOnly; a
 // read-write session is given only while nothing else can write the space,
 // otherwise the session is read-only (Session.Mode says which).
-func (m *Manager) Open(ctx context.Context, owner, spaceID, notebook, mode string) (store.Session, bool, error) {
+// DataAccess resolves a session's names and makes its fetcher.
+type DataAccess interface {
+	Resolve(ctx context.Context, spaceID, environment string) (string, map[string]string, error)
+	Fetcher(ctx context.Context, id, owner string, names map[string]string, expires time.Time) (*isolation.Fetcher, error)
+}
+
+// Open opens a session on the notebook, reading the space's names in
+// environment ("": the space's default), or returns the notebook's open
+// session (which keeps the environment it was opened in).
+func (m *Manager) Open(ctx context.Context, owner, spaceID, notebook, mode, environment string) (store.Session, bool, error) {
 	if !m.Enabled() {
 		return store.Session{}, false, ErrDisabled
 	}
@@ -200,8 +213,19 @@ func (m *Manager) Open(ctx context.Context, owner, spaceID, notebook, mode strin
 	if m.d.Draining() {
 		return store.Session{}, false, ErrDraining
 	}
+	var env string
+	var names map[string]string
+	switch {
+	case m.d.Data != nil:
+		if env, names, err = m.d.Data.Resolve(ctx, spaceID, environment); err != nil {
+			return store.Session{}, false, err
+		}
+	case environment != "":
+		return store.Session{}, false, &InvalidError{Msg: "environment: connections are off on this nbsandbox"}
+	}
 	s, created, err := m.d.DB.OpenSession(ctx, store.Session{
 		ID: spaces.NewID(), SpaceID: spaceID, Owner: owner, Notebook: path.Clean(notebook), Mode: mode, CreatedAt: m.d.Now(),
+		Environment: env, Connections: names,
 	}, m.cfg.PerUser)
 	if err != nil {
 		return store.Session{}, false, err

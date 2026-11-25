@@ -11,6 +11,7 @@ import (
 	"github.com/azbyluthfan/nbsandbox/internal/connections"
 	"github.com/azbyluthfan/nbsandbox/internal/isolation/kubernetes"
 	"github.com/azbyluthfan/nbsandbox/internal/secrets"
+	"github.com/azbyluthfan/nbsandbox/internal/sessions"
 	"github.com/azbyluthfan/nbsandbox/internal/store"
 )
 
@@ -57,4 +58,13 @@ func newConnections(cfg config.Settings, db *store.DB, logger *slog.Logger) (*co
 	fs := connections.FetcherSettings{Image: c.FetcherImage, GatewayAddress: c.Gateway.Address, GatewayContainer: gw, GatewayKey: key,
 		MemoryBytes: int64(c.FetcherMemory), NanoCPUs: int64(c.FetcherCPUs * 1e9)}
 	return connections.New(connections.Deps{DB: db, Secrets: provider, Allowed: connections.NewAllowed(c.Allowed), Fetcher: fs, Log: logger}), nil
+}
+
+// sessionData is the connections service for sessions (a nil interface,
+// not a nil pointer, when connections are off).
+func sessionData(c *connections.Service) sessions.DataAccess {
+	if c == nil {
+		return nil
+	}
+	return c
 }

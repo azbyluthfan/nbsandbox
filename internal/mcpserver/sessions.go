@@ -24,9 +24,10 @@ import (
 // its variables go on until end_session or until it is left idle.
 
 type openSessionInput struct {
-	SpaceID  string `json:"space_id" jsonschema:"the space's ID"`
-	Notebook string `json:"notebook" jsonschema:"path of the .ipynb file in the space the session belongs to"`
-	ReadOnly bool   `json:"read_only,omitempty" jsonschema:"mount the space read-only: the kernel can't change its files (and can open beside a run that changes them)"`
+	SpaceID     string `json:"space_id" jsonschema:"the space's ID"`
+	Notebook    string `json:"notebook" jsonschema:"path of the .ipynb file in the space the session belongs to"`
+	ReadOnly    bool   `json:"read_only,omitempty" jsonschema:"mount the space read-only: the kernel can't change its files (and can open beside a run that changes them)"`
+	Environment string `json:"environment,omitempty" jsonschema:"the space environment its connections' names are read in, e.g. dev or prod (default: the space's default)"`
 }
 
 type sessionInput struct {
@@ -61,8 +62,11 @@ func (t *tools) registerSessions(s *mcp.Server) {
 			if in.ReadOnly {
 				mode = "read-only"
 			}
-			v, _, err := t.call(ctx, req, "POST", "/v1/spaces/"+seg(in.SpaceID)+"/sessions",
-				map[string]string{"notebook": in.Notebook, "mode": mode}, http.StatusCreated, http.StatusOK)
+			body := map[string]string{"notebook": in.Notebook, "mode": mode}
+			if in.Environment != "" {
+				body["environment"] = in.Environment
+			}
+			v, _, err := t.call(ctx, req, "POST", "/v1/spaces/"+seg(in.SpaceID)+"/sessions", body, http.StatusCreated, http.StatusOK)
 			return nil, v, err
 		})
 

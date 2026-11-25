@@ -242,7 +242,7 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 		PerUser: cfg.Sessions.PerUser, PerWorker: cfg.Sessions.PerWorker, MaxMessage: int64(cfg.Sessions.MaxMessage),
 		WorkerID: id, NoExecute: !cfg.Executes(), Shared: cfg.Role != config.RoleAll,
 	}, sessions.Deps{
-		DB: db, Spaces: spaceSvc, Backend: sessBackend, Log: logger,
+		DB: db, Spaces: spaceSvc, Backend: sessBackend, Log: logger, Data: sessionData(conns),
 		Packages: sessionPackages(pkgs, spaceSvc, runDeps.ImageID),
 		Draining: func() bool {
 			d, err := db.GetDrain(context.WithoutCancel(ctx))

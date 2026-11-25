@@ -74,8 +74,8 @@ func TestOpenMigratesAndIsIdempotent(t *testing.T) {
 			t.Fatalf("open #%d: %v", i+1, err)
 		}
 		v, err := db.SchemaVersion(ctx)
-		if err != nil || v != 14 {
-			t.Fatalf("schema version = %d, %v; want 14", v, err)
+		if err != nil || v != 15 {
+			t.Fatalf("schema version = %d, %v; want 15", v, err)
 		}
 		if err := db.Ping(ctx); err != nil {
 			t.Fatal(err)

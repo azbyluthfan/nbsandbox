@@ -19,7 +19,7 @@ import (
 
 func toSession(s store.Session, admin bool) *pb.Session {
 	out := &pb.Session{Id: s.ID, SpaceId: s.SpaceID, Notebook: s.Notebook, Mode: s.Mode, Status: s.Status,
-		CreatedAt: timestamppb.New(s.CreatedAt), EndReason: s.EndReason, EndedBy: s.EndedBy}
+		CreatedAt: timestamppb.New(s.CreatedAt), EndReason: s.EndReason, EndedBy: s.EndedBy, Environment: s.Environment}
 	if !s.EndedAt.IsZero() {
 		out.EndedAt = timestamppb.New(s.EndedAt)
 	}
@@ -66,7 +66,7 @@ func (s *server) OpenSession(ctx context.Context, req *connect.Request[pb.OpenSe
 	if err := s.sessionIDs(req.Msg.SpaceId, ""); err != nil {
 		return nil, err
 	}
-	sess, _, err := s.d.Sessions.Open(ctx, owner(ctx), req.Msg.SpaceId, req.Msg.Notebook, req.Msg.Mode)
+	sess, _, err := s.d.Sessions.Open(ctx, owner(ctx), req.Msg.SpaceId, req.Msg.Notebook, req.Msg.Mode, req.Msg.Environment)
 	if err != nil {
 		return nil, s.sessionErr(err)
 	}

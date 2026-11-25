@@ -43,18 +43,20 @@ type Session struct {
 	CreatedAt                    time.Time
 	EndedAt                      time.Time // zero while open
 	EndReason, EndedBy           string
+	Environment                  string            // the space environment it read its names in ("" if none)
+	Connections                  map[string]string // when opening: name -> connection id (not read back here)
 }
 
 // Open reports whether the session hasn't ended.
 func (s Session) Open() bool { return s.Status != SessionEnded }
 
-const sessionCols = "id, space_id, owner, notebook, mode, status, worker, created_at, ended_at, end_reason, ended_by"
+const sessionCols = "id, space_id, owner, notebook, mode, status, worker, created_at, ended_at, end_reason, ended_by, environment"
 
 func scanSession(sc interface{ Scan(...any) error }) (Session, error) {
 	var s Session
 	var created int64
 	var ended sql.NullInt64
-	err := sc.Scan(&s.ID, &s.SpaceID, &s.Owner, &s.Notebook, &s.Mode, &s.Status, &s.Worker, &created, &ended, &s.EndReason, &s.EndedBy)
+	err := sc.Scan(&s.ID, &s.SpaceID, &s.Owner, &s.Notebook, &s.Mode, &s.Status, &s.Worker, &created, &ended, &s.EndReason, &s.EndedBy, &s.Environment)
 	if err != nil {
 		return Session{}, err
 	}
@@ -107,9 +109,15 @@ func (db *DB) OpenSession(ctx context.Context, s Session, perUser int) (Session,
 		}
 	}
 	s.Status, s.Worker, s.EndedAt, s.EndReason, s.EndedBy = SessionStarting, "", time.Time{}, "", ""
-	if _, err := tx.ExecContext(ctx, `INSERT INTO sessions(id, space_id, owner, notebook, mode, status, created_at)
-		VALUES (?, ?, ?, ?, ?, 'starting', ?)`, s.ID, s.SpaceID, s.Owner, s.Notebook, s.Mode, s.CreatedAt.UnixMilli()); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO sessions(id, space_id, owner, notebook, mode, status, created_at, environment)
+		VALUES (?, ?, ?, ?, ?, 'starting', ?, ?)`, s.ID, s.SpaceID, s.Owner, s.Notebook, s.Mode, s.CreatedAt.UnixMilli(), s.Environment); err != nil {
 		return Session{}, false, err
+	}
+	for name, id := range s.Connections {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO session_connections(session_id, name, connection_id) VALUES (?, ?, ?)",
+			s.ID, name, id); err != nil {
+			return Session{}, false, err
+		}
 	}
 	if err := db.notifyTx(ctx, tx, ChanSessions, s.ID); err != nil {
 		return Session{}, false, err

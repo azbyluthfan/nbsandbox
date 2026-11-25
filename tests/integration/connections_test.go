@@ -121,8 +121,12 @@ func sources(t *testing.T) {
 			time.Sleep(time.Second)
 		}
 		// MySQL and SQL Server: the same orders, and a role that may read only them.
-		retry(t, "source MySQL", 120*time.Second, func() (string, error) {
-			return runDocker("exec", srcMySQL, "mysql", "-uroot", "-powner-pw", "crm", "-e", `
+		// Over TCP: while it initialises, MySQL runs a temporary server on its
+		// socket only, and what it is given is lost when the real one starts.
+		retry(t, "source MySQL", 180*time.Second, func() (string, error) {
+			return runDocker("exec", srcMySQL, "mysql", "-h127.0.0.1", "--protocol=TCP", "-uroot", "-powner-pw", "crm", "-e", `
+				DROP TABLE IF EXISTS orders, payroll;
+				DROP USER IF EXISTS 'reader'@'%';
 				CREATE TABLE orders (id int, region varchar(10), amount int);
 				INSERT INTO orders WITH RECURSIVE s(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM s WHERE n<1000)
 				  SELECT n, IF(n % 2 = 0, 'eu', 'us'), n FROM s;
@@ -416,9 +420,13 @@ func assertNoReadLeftovers(t *testing.T) {
 	for {
 		var left string
 		if onKubernetes {
-			left = kubectl(t, "-n", "nbsandbox-runs", "get", "pods,secrets,networkpolicies", "-l", "nbsandbox.fetcher", "-o", "name")
+			for _, l := range []string{"nbsandbox.fetcher", "nbsandbox.session.fetcher"} {
+				left += kubectl(t, "-n", "nbsandbox-runs", "get", "pods,secrets,networkpolicies", "-l", l, "-o", "name")
+			}
 		} else {
-			left = docker(t, "ps", "-aq", "--filter", "label=nbsandbox.fetcher") + docker(t, "network", "ls", "-q", "--filter", "label=nbsandbox.network")
+			left = docker(t, "ps", "-aq", "--filter", "label=nbsandbox.fetcher") + docker(t, "network", "ls", "-q", "--filter", "label=nbsandbox.network") +
+				docker(t, "ps", "-aq", "--filter", "label=nbsandbox.session.fetcher") +
+				docker(t, "network", "ls", "-q", "--filter", "label=nbsandbox.session.network")
 		}
 		if left == "" {
 			return
@@ -510,5 +518,48 @@ nbsandbox.output(out)`)})
 		s, _ := out[k].(string)
 		expectRefused(t, "connections-"+k, "a notebook tries "+k, s, strings.HasPrefix(s, "refused"))
 	}
+	assertNoReadLeftovers(t)
+}
+
+// An interactive session reads its space's names too, through a fetcher of
+// its own that goes when the session ends.
+func TestConnectionsSession(t *testing.T) {
+	needConnections(t)
+	sp := readerSpace(t, codeNotebook("1"))
+	r := jsonCall(t, "POST", "/v1/spaces/"+sp+"/sessions", "alice", map[string]string{"notebook": "read.ipynb", "environment": "dev"}, nil)
+	if r.Code != http.StatusCreated {
+		t.Fatalf("open: %d %s", r.Code, r.Body)
+	}
+	var s struct{ ID, Environment string }
+	r.json(t, &s)
+	if s.Environment != "dev" {
+		t.Fatalf("environment %q", s.Environment)
+	}
+	ended := false
+	end := func() {
+		if !ended {
+			ended = true
+			call(t, "DELETE", "/v1/spaces/"+sp+"/sessions/"+s.ID, "alice", nil, nil)
+		}
+	}
+	t.Cleanup(end)
+	k := connectSession(t, "alice", sp, s.ID)
+	k.run("import nbsandbox")
+	if out, _ := k.run(`print(int(nbsandbox.sql("SELECT count(*) FROM crm.orders").iloc[0, 0]))`); out != "1000\n" {
+		t.Fatalf("query: %q", out)
+	}
+	// Variables stay: a result kept between cells.
+	k.run(`df = nbsandbox.sql("SELECT region, sum(amount)::BIGINT AS total FROM lake.csv('sales/2026.csv') GROUP BY 1 ORDER BY 1")`)
+	if out, _ := k.run("print(df.total.tolist())"); out != "[17, 5]\n" {
+		t.Fatalf("lake: %q", out)
+	}
+	if out, _ := k.run(`import os, json; print(any(s[::-1] in json.dumps(dict(os.environ)) for s in ["` + reverse(readerPass) + `", "` + reverse(s3Secret) + `"]))`); out != "False\n" {
+		t.Fatalf("the session saw a credential: %q", out)
+	}
+	if r := jsonCall(t, "POST", "/v1/spaces/"+sp+"/sessions", "alice", map[string]string{"notebook": "read.ipynb", "environment": "staging"}, nil); r.Code != http.StatusBadRequest {
+		t.Fatalf("unknown environment: %d %s", r.Code, r.Body)
+	}
+	end()
+	assertNoSessionContainer(t, s.ID)
 	assertNoReadLeftovers(t)
 }
