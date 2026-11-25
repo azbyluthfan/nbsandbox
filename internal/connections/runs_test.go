@@ -15,6 +15,7 @@ import (
 	"github.com/azbyluthfan/nbsandbox/internal/gateway"
 	"github.com/azbyluthfan/nbsandbox/internal/spaces"
 	"github.com/azbyluthfan/nbsandbox/internal/store"
+	"github.com/azbyluthfan/nbsandbox/internal/store/storetest"
 )
 
 var gwKey = []byte(strings.Repeat("g", 32))
@@ -117,5 +118,44 @@ func TestResolveAndFetcher(t *testing.T) {
 	s.d.Allowed = NewAllowed([]string{"minio.internal"})
 	if _, err := s.Fetcher(ctx, "run3", "alice", names, exp); !errors.Is(err, ErrUnavailable) || !strings.Contains(err.Error(), "no longer allows") {
 		t.Fatalf("no longer allowed: %v", err)
+	}
+}
+
+// mountProvider is a provider whose values the platform mounts (Kubernetes).
+type mountProvider struct{ stored map[string]string }
+
+func (m *mountProvider) Name() string { return "kubernetes" }
+func (m *mountProvider) Store(_ context.Context, id string, v []byte) (string, error) {
+	m.stored[id] = string(v)
+	return "nbsandbox-conn-" + id + "#secret", nil
+}
+func (m *mountProvider) Remove(context.Context, string) error { return nil }
+func (m *mountProvider) Check(context.Context, string) error  { return nil }
+func (m *mountProvider) Mount(ref string) (string, string, error) {
+	name, key, _ := strings.Cut(ref, "#")
+	return name, key, nil
+}
+
+func TestFetcherMountsKubernetesSecrets(t *testing.T) {
+	ctx := context.Background()
+	db := storetest.Open(t)
+	s := New(Deps{DB: db, Secrets: &mountProvider{stored: map[string]string{}}, Allowed: NewAllowed([]string{"*.internal"}),
+		Fetcher: FetcherSettings{Image: "f", GatewayAddress: "gw.svc:3128", GatewayContainer: "gw.svc:3128", GatewayKey: gwKey}})
+	crm, err := s.Create(ctx, "alice", pg("crm", "pg.internal"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := s.Fetcher(ctx, "r1", "alice", map[string]string{"crm": crm.ID}, time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(f.Config), "pa55") {
+		t.Fatal("nbsandboxd put the credential in the configuration")
+	}
+	var cfg fetcherConfig
+	_ = json.Unmarshal(f.Config, &cfg)
+	if len(f.Mounts) != 1 || f.Mounts[0].Secret != "nbsandbox-conn-"+crm.ID || f.Mounts[0].Key != "secret" ||
+		cfg.Sources[0].SecretFile != "/etc/nbsandbox-fetcher/secrets/"+f.Mounts[0].Path || f.Gateway != "gw.svc:3128" {
+		t.Fatalf("mounts %+v, source %+v", f.Mounts, cfg.Sources[0])
 	}
 }

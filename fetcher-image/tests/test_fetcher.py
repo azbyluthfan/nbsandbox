@@ -117,6 +117,37 @@ class LockdownTest(unittest.TestCase):
         self.assertNotIn("disabled by configuration", str(e.exception))
 
 
+class MountedSecretTest(unittest.TestCase):
+    def test_secret_file_and_gateway_override(self):
+        import os
+        import tempfile
+        from unittest import mock
+
+        with tempfile.NamedTemporaryFile("w", dir="/tmp", delete=False) as f:
+            f.write("from-a-file\n")
+        cfg = json.loads(json.dumps(CFG))
+        cfg["sources"][0].pop("secret")
+        cfg["sources"][0]["secret_file"] = f.name
+        with mock.patch.dict(os.environ, {"NBSANDBOX_FETCHER_GATEWAY": "10.96.0.9:3128"}):
+            con, _ = fetcher.connect(cfg)
+        rows = con.cursor().execute("SELECT current_setting('http_proxy')").fetchall()
+        self.assertEqual(rows, [("10.96.0.9:3128",)])
+
+
+class MemoryTest(unittest.TestCase):
+    def test_spills_under_its_limit(self):
+        import os
+        from unittest import mock
+
+        with mock.patch.dict(os.environ, {"NBSANDBOX_FETCHER_MEMORY": str(256 << 20)}):
+            con, _ = fetcher.connect(CFG)
+        cur = con.cursor()
+        self.assertEqual(cur.execute("SELECT current_setting('memory_limit')").fetchone()[0], "192.0 MiB")
+        # Sorting more than the limit spills to /tmp instead of failing.
+        n = cur.execute("SELECT count(*) FROM (SELECT range AS r, md5(range::VARCHAR) AS h FROM range(6000000) ORDER BY h)").fetchone()[0]
+        self.assertEqual(n, 6000000)
+
+
 class FlightTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

@@ -14,9 +14,9 @@ This is off unless the operator turns it on ([below](#for-operators)).
 
 **What works today:**
 - PostgreSQL databases, and S3-compatible object storage (AWS S3, MinIO, Ceph, RustFS), with CSV and Parquet files.
-- Runs on the Docker backend.
+- Runs, on Docker and on Kubernetes.
 
-**Not yet:** MySQL and SQL Server, Azure Blob storage, HTTP APIs (connections of those types can be created and bound, but runs can't read them yet); interactive sessions and published functions (a function will read with its caller's connections); the Kubernetes backend (a run whose space binds names is refused there for now); connections in the web UI.
+**Not yet:** MySQL and SQL Server, Azure Blob storage, HTTP APIs (connections of those types can be created and bound, but runs can't read them yet); interactive sessions and published functions (a function will read with its caller's connections); connections in the web UI.
 
 ## For users
 
@@ -100,7 +100,7 @@ Without `environment`, the space's default. The run records which environment it
 |---|---|
 | The credentials | Never in the run: only the fetcher has them. The run gets a token for its own fetcher. |
 | The sources directly | No: the run's network is private to it and its fetcher (and the gateway, which needs the fetcher's own token). |
-| Another run's fetcher | No: each reading run has its own network. |
+| Another run's fetcher | No: each reading run has its own network (Docker), or its own network policies (Kubernetes). |
 | The internet | No. |
 | The fetcher's files and settings | No: it reads only its run's buckets, and its configuration is locked after start. |
 | The gateway | Only to the endpoints in the run's token, never loopback or link-local (cloud metadata) addresses, whatever the token says. |
@@ -109,7 +109,25 @@ The integration tests check each row (`make test-connections`).
 
 ## For operators
 
-On the Docker backend:
+### On Kubernetes (Helm)
+
+```yaml
+connections:
+  enabled: true
+  allowed: ["*.db.internal", "10.20.0.0/16", "s3.eu-west-1.amazonaws.com"]
+  secretsProvider: kubernetes       # Secrets in the runs namespace
+  gateway:
+    keySecret: nbsandbox-gateway    # a Secret with key "key": openssl rand -base64 32
+    replicas: 2
+  fetcherImage: ghcr.io/azbyluthfan/nbsandbox-fetcher:<version>
+```
+
+- **Secrets:** a connection's secret is a Secret in the runs namespace: one nbsandbox writes (`nbsandbox-conn-<id>`, labelled), or one you manage and reference as `name#key` (GitOps, Sealed Secrets, External Secrets Operator). The fetcher Pod **mounts** it: nbsandboxd never reads it. With the `kubernetes` provider, the API processes get a token and a Role limited to Secrets in the runs namespace; otherwise they still have none.
+- **The gateway** is a Deployment and a Service in the release namespace, with a NetworkPolicy that lets only fetchers in. Allow its egress to your sources in whatever egress controls the cluster has (it needs DNS too).
+- **Each reading run** gets a fetcher Pod in the runs namespace (its own limits, reserved like a run's: `connections.fetcherMemory` and `fetcherCpus`; the run's runtime class; no API credentials, no DNS: the worker resolves the gateway's address), a Secret with its configuration and tokens, and two NetworkPolicies: its runner may reach its fetcher, and nothing else may. A chart policy lets fetchers reach the gateway's port. The workers' Role gains Secrets and NetworkPolicies in the runs namespace.
+- The namespace's deny-all and the workers' check that it's enforced are unchanged: the network plugin must enforce NetworkPolicy (Cilium, Calico, Azure's).
+
+### On Docker
 
 1. **Settings** (`settings.yaml`, or the environment):
    ```yaml
@@ -129,6 +147,6 @@ On the Docker backend:
 3. **The Docker socket proxy** must allow network calls: `GET /networks`, `POST /networks/create`, `POST /networks/{id}/connect` and `/disconnect`, `DELETE /networks/{id}`. The Compose files in `deploy/` do.
 4. **The fetcher image** must be on the Docker host, like the runner image.
 
-**What each reading run costs:** a second container (the fetcher, with the run's memory and CPU limits) and a Docker network, both removed when the run ends; leftovers after a crash are removed at the next start. The run starts once the fetcher has attached its sources.
+**What each reading run costs:** a second container or Pod (the fetcher, with its own limits: `connections.fetcher_memory`, 1 GiB, and `fetcher_cpus`, 1; DuckDB spills to disk past three quarters of the memory) and a Docker network or two NetworkPolicies and a Secret, all removed when the run ends; leftovers after a crash are removed at the next start. The run starts once the fetcher has attached its sources.
 
 **Audit:** creating, changing and deleting connections and bindings are audited; the gateway logs each tunnel and request it allows or refuses (run, endpoint, bytes, duration).

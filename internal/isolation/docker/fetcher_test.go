@@ -140,3 +140,13 @@ func TestOrphanFetchersAndNetworks(t *testing.T) {
 		t.Fatalf("calls %v", calls)
 	}
 }
+
+func TestFetcherOwnLimits(t *testing.T) {
+	spec := fetcherSpec()
+	spec.Fetcher.MemoryBytes, spec.Fetcher.NanoCPUs = 512<<20, 5e8
+	cfg, host := buildFetcherConfig(spec)
+	if host.Memory != 512<<20 || host.MemorySwap != host.Memory || host.NanoCPUs != 5e8 ||
+		!slices.Contains(cfg.Env, "NBSANDBOX_FETCHER_MEMORY=536870912") {
+		t.Fatalf("limits: %d %d %v", host.Memory, host.NanoCPUs, cfg.Env)
+	}
+}

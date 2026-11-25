@@ -313,15 +313,3 @@ func TestAppenderCounts(t *testing.T) {
 		t.Fatalf("counted %d", a.n)
 	}
 }
-
-func TestRefusesFetcherForNow(t *testing.T) {
-	client := fake.NewClientset()
-	b := NewBackend(Config{Namespace: "runs"}, client, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	_, err := b.Run(context.Background(), isolation.RunSpec{RunID: "r1", Fetcher: &isolation.Fetcher{}}, isolation.LineFunc(func(string) {}))
-	if !errors.Is(err, isolation.ErrStart) {
-		t.Fatalf("run with a fetcher: %v", err)
-	}
-	if pods, _ := client.CoreV1().Pods("runs").List(context.Background(), metav1.ListOptions{}); len(pods.Items) != 0 {
-		t.Fatal("a Pod was created")
-	}
-}

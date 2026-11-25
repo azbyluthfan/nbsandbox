@@ -25,6 +25,12 @@ kind: Secret
 metadata: { name: nbsandbox-sessions, namespace: nbsandbox }
 stringData: { secret: nbsandbox-dev-sessions-secret }
 ---
+# Signs and checks runs' gateway tokens (connections). Development only.
+apiVersion: v1
+kind: Secret
+metadata: { name: nbsandbox-gateway, namespace: nbsandbox }
+stringData: { key: ZGV2LW9ubHktZ2F0ZXdheS1rZXktMDEyMzQ1Njc4OWE= }
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata: { name: postgres, namespace: nbsandbox }

@@ -135,6 +135,34 @@ sessions:
   perUser: 2
   perWorker: 4              # per worker pod, beside runs.concurrency
 
+# Connections: notebooks read databases and object storage where they live
+# (docs/connections.md). Each reading run gets a fetcher Pod beside its run
+# Pod; fetchers reach sources only through the egress gateway, which this
+# chart runs in the release namespace.
+connections:
+  enabled: false
+  # Where connections may point: host names, "*.domain" patterns, CIDRs.
+  allowed: []
+  # kubernetes: Secrets in the runs namespace (the API writes managed ones;
+  # fetcher Pods mount them, nbsandboxd never reads them). builtin: encrypted
+  # in the database, for development, with masterKeySecret.
+  secretsProvider: kubernetes
+  masterKeySecret: ""       # builtin: a Secret with key master-key (openssl rand -base64 32)
+  fetcherImage: ghcr.io/azbyluthfan/nbsandbox-fetcher:0.3.0
+  # Each reading run's fetcher Pod, beside its run Pod: reserved like a
+  # run's (requests = limits). DuckDB spills past three quarters of it.
+  fetcherMemory: 1GiB
+  fetcherCpus: 1
+  gateway:
+    # A Secret with key "key": openssl rand -base64 32. It signs runs'
+    # gateway tokens (workers) and checks them (the gateway). Required.
+    keySecret: ""
+    replicas: 2
+    resources:
+      requests: { cpu: 50m, memory: 32Mi }
+      limits: { memory: 256Mi }
+    podLabels: {}
+
 # The audit log (docs/operations.md#audit-log).
 audit:
   enabled: true

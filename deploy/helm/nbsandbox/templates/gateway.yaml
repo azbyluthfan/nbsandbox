@@ -1,0 +1,75 @@
+# Copyright 2026 The nbsandbox Authors
+# SPDX-License-Identifier: Apache-2.0
+# The egress gateway (nbsandboxd gateway): fetchers' only way out, and only
+# to the endpoints their run's signed token names. It keeps no state.
+{{- if .Values.connections.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nbsandbox.fullname" . }}-gateway
+  labels: {{- include "nbsandbox.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+spec:
+  replicas: {{ .Values.connections.gateway.replicas }}
+  selector:
+    matchLabels: {{- include "nbsandbox.selector" . | nindent 6 }}
+      app.kubernetes.io/component: gateway
+  template:
+    metadata:
+      labels: {{- include "nbsandbox.selector" . | nindent 8 }}
+        app.kubernetes.io/component: gateway
+        {{- with .Values.connections.gateway.podLabels }}{{ toYaml . | nindent 8 }}{{ end }}
+    spec:
+      # No API access at all.
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: gateway
+          image: {{ include "nbsandbox.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: [gateway, -listen, ":3128"]
+          ports: [{ name: proxy, containerPort: 3128 }]
+          env:
+            - name: NBSANDBOX_GATEWAY_KEY
+              valueFrom: { secretKeyRef: { name: {{ required "connections.gateway.keySecret is required with connections.enabled" .Values.connections.gateway.keySecret | quote }}, key: key } }
+          securityContext: {{- include "nbsandbox.containerSecurity" . | nindent 12 }}
+          resources: {{- toYaml .Values.connections.gateway.resources | nindent 12 }}
+          readinessProbe:
+            tcpSocket: { port: proxy }
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket: { port: proxy }
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nbsandbox.fullname" . }}-gateway
+  labels: {{- include "nbsandbox.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+spec:
+  selector: {{- include "nbsandbox.selector" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+  ports: [{ name: proxy, port: 3128, targetPort: proxy }]
+---
+# Only fetchers reach the gateway; it reaches out where the tokens allow.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "nbsandbox.fullname" . }}-gateway
+  labels: {{- include "nbsandbox.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {{- include "nbsandbox.selector" . | nindent 6 }}
+      app.kubernetes.io/component: gateway
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: {{ .Values.runs.namespace }} } }
+          podSelector: { matchLabels: { nbsandbox.role: fetcher } }
+      ports: [{ port: 3128, protocol: TCP }]
+{{- end }}

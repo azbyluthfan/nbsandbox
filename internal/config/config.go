@@ -214,6 +214,11 @@ type Connections struct {
 	// FetcherImage is the fetcher's image: it holds a run's credentials
 	// and reads its sources (make fetcher-image).
 	FetcherImage string `yaml:"fetcher_image"`
+	// FetcherMemory and FetcherCPUs are each fetcher's limits, beside its
+	// run's (on Kubernetes also its reservation). DuckDB keeps under three
+	// quarters of the memory and spills the rest to /tmp.
+	FetcherMemory Size    `yaml:"fetcher_memory"`
+	FetcherCPUs   float64 `yaml:"fetcher_cpus"`
 }
 
 // Gateway configures how runs reach the egress gateway.
@@ -494,7 +499,7 @@ func Default() Settings {
 		Sessions: Sessions{Enabled: true, Idle: 30 * time.Minute, Max: 8 * time.Hour, PerUser: 2, PerWorker: 4,
 			WriteBack: 5 * time.Minute, MaxMessage: 2 * MiB, Retention: 7 * 24 * time.Hour, Listen: ":8091"},
 		Connections: Connections{Enabled: false, Allowed: []string{}, Secrets: ConnectionSecrets{Provider: SecretsBuiltin},
-			Gateway: Gateway{Address: "nbsandbox-gateway:3128"}, FetcherImage: "nbsandbox-fetcher:dev"},
+			Gateway: Gateway{Address: "nbsandbox-gateway:3128"}, FetcherImage: "nbsandbox-fetcher:dev", FetcherMemory: GiB, FetcherCPUs: 1},
 		UI: UI{Enabled: false, Listen: "127.0.0.1:8090", Auth: "none",
 			Session: UISession{Idle: time.Hour, Max: 12 * time.Hour},
 			OIDC: UIOIDC{Scopes: []string{"openid", "profile", auth.ScopeRead, auth.ScopeSpacesWrite, auth.ScopeFilesWrite,
@@ -950,6 +955,9 @@ func (s Settings) Validate() error {
 		}
 		if strings.TrimSpace(c.FetcherImage) == "" {
 			add("connections.fetcher_image must be set")
+		}
+		if c.FetcherMemory < 256*MiB || c.FetcherCPUs <= 0 {
+			add("connections: fetcher_memory must be at least 256MiB and fetcher_cpus positive (got %s, %v)", c.FetcherMemory, c.FetcherCPUs)
 		}
 		for _, a := range c.Allowed {
 			if err := ValidAllowedEntry(a); err != nil {

@@ -58,9 +58,22 @@ seccompProfile: { type: RuntimeDefault }
 - name: NBSANDBOX_SESSIONS_SECRET
   valueFrom: { secretKeyRef: { name: {{ .Values.sessions.secretName | quote }}, key: secret } }
 {{- end }}
+{{- if .Values.connections.enabled }}
+- name: NBSANDBOX_GATEWAY_KEY
+  valueFrom: { secretKeyRef: { name: {{ required "connections.gateway.keySecret is required with connections.enabled" .Values.connections.gateway.keySecret | quote }}, key: key } }
+{{- if eq .Values.connections.secretsProvider "builtin" }}
+- name: NBSANDBOX_CONNECTIONS_MASTER_KEY
+  valueFrom: { secretKeyRef: { name: {{ required "connections.masterKeySecret is required with the builtin provider" .Values.connections.masterKeySecret | quote }}, key: master-key } }
+{{- end }}
+{{- end }}
 {{- with .Values.extraEnv }}
 {{ toYaml . }}
 {{- end }}
+{{- end }}
+
+{{/* The API processes manage connections' Kubernetes Secrets. */}}
+{{- define "nbsandbox.apiManagesSecrets" -}}
+{{- if and .Values.connections.enabled (eq .Values.connections.secretsProvider "kubernetes") }}true{{ end }}
 {{- end }}
 
 {{/* users.yaml: for basic auth on the API, or the UI's sign-in form. */}}
