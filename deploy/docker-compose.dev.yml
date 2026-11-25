@@ -151,6 +151,7 @@ services:
     # reading run's private network. The fixed name is how fetchers find it
     # (connections.gateway.address).
     image: nbsandboxd:dev
+    pull_policy: never # the nbsandboxd service builds it
     container_name: nbsandbox-gateway
     command: ["gateway"]
     user: "1000:1000"
@@ -162,7 +163,7 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     depends_on:
-      nbsandboxd: { condition: service_started } # built by nbsandboxd's service
+      nbsandboxd: { condition: service_started }
     restart: unless-stopped
 
 networks:

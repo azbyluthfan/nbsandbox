@@ -70,7 +70,7 @@ orders = nbsandbox.sql("SELECT region, sum(amount) FROM crm.orders WHERE year = 
   ```
 
   A run, session or function call picks the environment (the space's default otherwise), so the same notebook reads dev or prod data without edits. Every name must be bound in every environment, checked when the environment is saved.
-- `nbsandbox.connections()` lists the names a run can use and their tables, never hosts or secrets. The editor can complete `crm.` with table names.
+- `nbsandbox.connections()` lists the names a run can use and their type, never hosts or secrets. Table lists come with the editor, which will complete `crm.` with table names.
 
 **How a name is resolved, all on nbsandbox's side:**
 
@@ -144,7 +144,7 @@ run 42 — one private network, removed with the run
 
 How a notebook talks to its fetcher, so that any image can, not only nbsandbox's runner (custom images are on the ROADMAP):
 - **Plain Arrow Flight,** an open standard with clients in Python (`pyarrow`), R (`arrow`), Julia, Go, Java and more.
-- **Two environment variables** in the run: `NBSANDBOX_FETCHER` (the fetcher's address, `grpc://fetcher:8815`) and `NBSANDBOX_FETCHER_TOKEN` (the run's token, sent as `authorization: Bearer …` on every call).
+- **Two environment variables** in the run: `NBSANDBOX_FETCHER` (the fetcher's address, a `grpc://` URL) and `NBSANDBOX_FETCHER_TOKEN` (the run's token, sent as `authorization: Bearer …` on every call).
 - **A query is a `DoGet` whose ticket is the SQL text,** answered with Arrow record batches. The action `connections` lists the run's names and their type.
 - **The `nbsandbox` Python helper** (`sql`, `stream`, `connections`) is a thin layer over this, needing only `pyarrow` (in nbsandbox's runner image; a custom Python image installs `nbsandbox` and `pyarrow`).
 
@@ -163,11 +163,11 @@ DuckDB's allow-list keeps reads inside the bucket. Databases are ordinary tables
 
 Kubernetes NetworkPolicy works on IP addresses. DNS-name rules exist only in some engines (Cilium; on AKS, an add-on), so they aren't portable. Instead:
 - **Runs and fetchers may reach only the egress gateway** (plus their run's private network): plain NetworkPolicy, enforced by every engine AKS offers and by Calico or Cilium on-premises. nbsandbox already refuses to run where network policies aren't enforced.
-- **The egress gateway** is our own small proxy in Go: a role of the nbsandboxd binary (`role: gateway`), **one per cluster**, run with several replicas. It **resolves names itself** and allows only the run's connection endpoints: HTTPS by name (`CONNECT`), databases as a TCP tunnel per connection. Each connection is logged.
+- **The egress gateway** is our own small proxy in Go: the nbsandboxd binary's `gateway` command, **one per cluster**, run with several replicas. It **resolves names itself** and allows only the run's connection endpoints: HTTPS by name (`CONNECT`), databases as a TCP tunnel per connection. Each connection is logged.
 - **A run's allowed endpoints reach the gateway in a signed token.** When a run starts, nbsandboxd issues it a token naming the run, its allowed `host:port` list and an expiry. The gateway only checks the signature: it keeps no state and makes no lookup per connection, and the token dies with the run.
 - **Injected mode:** notebook database clients can't talk to a proxy, so the runner starts a small forwarder inside the run, and `nbsandbox.connection("crm")` gives the notebook a local address (`127.0.0.1:15432`) that tunnels through the gateway. HTTP clients use `HTTPS_PROXY`.
 - It can later move to one gateway per node, or to Envoy, if traffic calls for it, without changing the rest of the design.
-- **The same on Docker:** the gateway is a container of the stack (`role: gateway`), and nbsandboxd connects it to each run's private network. The fetcher has no way out of its own there either, so both backends have one egress path and one set of isolation tests.
+- **The same on Docker:** the gateway is a container of the stack (`nbsandboxd gateway`), alone on its own network, and nbsandboxd connects it to each run's private network. The fetcher has no way out of its own there either, so both backends have one egress path and one set of isolation tests.
 - No dependency on a particular CNI, no DNS inside runs, and endpoints whose addresses change (cloud storage) work.
 
 ### Results and writes
@@ -269,11 +269,15 @@ Verified with Cilium; the policies use only standard NetworkPolicy, still to be 
 - Databases: DuckDB's core extensions (PostgreSQL, MySQL); SQL Server through the community `mssql` extension, validated in CI; ODBC only as a last resort.
 - Runs with workers start elastically, once a minimum fraction of their requested workers can be placed; nbsandbox's own admission, no external scheduler.
 - Simple reads by default; pass-through per connection.
-- Egress through our own Go gateway (one per cluster, with replicas; a role of the nbsandboxd binary), with each run's allowed endpoints in a signed token, so plain NetworkPolicy is enough everywhere.
+- Egress through our own Go gateway (one per cluster, with replicas; a command of the nbsandboxd binary), with each run's allowed endpoints in a signed token, so plain NetworkPolicy is enough everywhere.
 - Object storage: any credential that is a secret (access keys, connection strings, SAS tokens). Workload identity (AKS) is parked: it changes how the fetcher Pod is set up, not the design.
 - Results streamed or written as artifacts; external writes later.
 - On Docker, a private `internal` network per run (runner and fetcher; it works under gVisor, unlike a shared Unix socket), and the gateway as on Kubernetes: one egress path for both backends. The socket proxy allows creating, connecting and removing networks.
 - The run ↔ fetcher contract is plain Arrow Flight with two environment variables, so any image can use it; `pyarrow` joins the runner image.
 - Runs choose an environment (`"environment"`, the space's default otherwise) and record which connection each name meant; the fetcher starts only for runs whose space binds names.
 - M2 covers runs; sessions and functions get their fetchers in M4.
+- The gate also refuses `query()` and `query_table()` (they run SQL from a string), `duckdb_*` and `pragma_*` functions, and `..` in a table function's paths (DuckDB's `allowed_directories` doesn't normalise `s3://bucket/../other`). Secrets are kept in memory only (`allow_persistent_secrets` off), created before the lockdown.
+- The fetcher attaches every source when it starts; one it can't attach (a wrong password, a source down) fails the run at start with the fetcher's own message. Its output until it serves goes to the run's log, prefixed `[fetcher]`.
+- On Docker, the fetcher's configuration, credentials included, is in its container's environment, dropped from the process once read: no file on the host, visible only to whoever holds the Docker API, who holds the host anyway. On Kubernetes it will be a mounted Secret. The fetcher gets the run's limits.
+- The gateway token lives until the run's time limit plus five minutes; a connection deleted, or pointing somewhere the operator no longer allows, fails a queued run at start.
 - Live data is the source's concern: for repeatable results, read a snapshot.

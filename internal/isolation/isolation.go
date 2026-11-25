@@ -78,7 +78,7 @@ type Fetcher struct {
 const (
 	FetcherPort     = 8815
 	FetcherEnv      = "NBSANDBOX_FETCHER"
-	FetcherTokenEnv = "NBSANDBOX_FETCHER_TOKEN"
+	FetcherTokenEnv = "NBSANDBOX_FETCHER_TOKEN" //nolint:gosec // a variable's name, not a credential
 )
 
 // PackagesPath is where a run sees its space's package set.

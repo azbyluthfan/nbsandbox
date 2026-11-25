@@ -94,6 +94,7 @@ nb -H 'Content-Type: application/json' \
 - **`parameters`** is a JSON object. Each top-level key becomes a Python variable after the cell tagged `parameters`, so keys must be valid Python names. Values can be any JSON (nested objects and arrays, `null`), up to 32 levels deep and 1 MiB in total by default.
 - **The notebook is snapshotted** when you submit: editing it afterwards doesn't change this run. `notebook_sha256` says which version ran.
 - **`"space": "read-only"`** mounts the space's files read-only. Such runs can't change the space, so they may run alongside others.
+- **`"environment": "prod"`** reads the space's connection names in that environment (the space's default otherwise); the run shows it as `environment` ([connections.md](connections.md)).
 - **One writing run per space:** while a run that can write the space is queued or running, starting another one is `409`. Wait for it, or cancel it.
 - **`Idempotency-Key` header:** send one when you may retry the request (for example after a timeout). The same key and body within 24 hours return the original run with `200` instead of starting another; the same key with a different body is `422`.
 - **`dependency_warnings`** on the run lists imports the runner image doesn't have. With the server's `dependency_check: reject`, such a run is refused with `422` instead.
@@ -320,7 +321,7 @@ curl -su alice:… -X PUT "$URL/v1/spaces/$SPACE/connections" -H 'Content-Type: 
   "environments": {"dev": {"crm": "crm-dev"}, "prod": {"crm": "crm-prod"}}}'
 ```
 
-Every environment binds the same names; connections by name or ID; an empty `environments` unbinds everything.
+Every environment binds the same names; connections by name or ID; an empty `environments` unbinds everything. Notebooks then read them with `nbsandbox.sql("SELECT … FROM crm.orders")`, in the environment the run names: [connections.md](connections.md).
 
 ## 9. Errors and retries
 

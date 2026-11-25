@@ -439,6 +439,15 @@ test-integration: dev-data ## Integration tests against the dev stack (Docker ne
 	NBSANDBOX_SHUTDOWN_GRACE=5s NBSANDBOX_RUN_TIMEOUT=60s NBSANDBOX_SESSIONS_PER_USER=0 $(COMPOSE) up -d --build
 	NBSANDBOX_SHUTDOWN_GRACE=5s NBSANDBOX_RUN_TIMEOUT=60s $(GO) test -tags integration -count=1 -timeout 30m $(TESTFLAGS) ./tests/integration/
 
+.PHONY: test-connections
+test-connections: dev-data fetcher-image ## Reading external data, end to end: the dev stack with connections on, sources on the gateway's network
+	@$(STOP_KIND)
+	-@$(CLUSTER) stop >/dev/null 2>&1
+	NBSANDBOX_CONNECTIONS_ENABLED=true NBSANDBOX_CONNECTIONS_ALLOWED=nbsandbox-src-pg,nbsandbox-src-s3 \
+		NBSANDBOX_SHUTDOWN_GRACE=5s NBSANDBOX_RUN_TIMEOUT=120s NBSANDBOX_SESSIONS_PER_USER=0 $(COMPOSE) up -d --build
+	NBSANDBOX_TEST_CONNECTIONS=1 NBSANDBOX_RUN_TIMEOUT=120s $(GO) test -tags integration -count=1 -timeout 20m -run 'TestConnections' $(TESTFLAGS) ./tests/integration/; \
+		status=$$?; docker rm -f nbsandbox-src-pg nbsandbox-src-s3 >/dev/null 2>&1; exit $$status
+
 KEYCLOAK_COMPOSE := $(COMPOSE) -f deploy/docker-compose.keycloak.yml
 
 .PHONY: test-keycloak

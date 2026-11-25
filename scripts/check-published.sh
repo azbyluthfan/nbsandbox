@@ -66,7 +66,7 @@ chmod 700 "$WORK/srv" # as the provisioning script makes it; preflight checks it
 step "Published images (anonymous pulls: they must be public)"
 # An empty Docker config has no registry logins; keep the current daemon.
 host=${DOCKER_HOST:-$(docker context inspect --format '{{.Endpoints.docker.Host}}')}
-for image in nbsandboxd nbsandbox-runner nbsandbox-runner-builder; do
+for image in nbsandboxd nbsandbox-runner nbsandbox-runner-builder nbsandbox-fetcher; do
 	DOCKER_CONFIG=$WORK/no-login DOCKER_HOST=$host docker pull -q "$REG/$image:$VERSION"
 done
 

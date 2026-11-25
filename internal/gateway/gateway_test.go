@@ -116,7 +116,7 @@ func connect(t *testing.T, gw, to, auth string) (net.Conn, *bufio.Reader, int) {
 		t.Fatal(err)
 	}
 	br := bufio.NewReader(c)
-	resp, err := http.ReadResponse(br, &http.Request{Method: http.MethodConnect})
+	resp, err := http.ReadResponse(br, &http.Request{Method: http.MethodConnect}) //nolint:bodyclose // a CONNECT's answer: what follows is the tunnel
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +139,9 @@ func TestTunnel(t *testing.T) {
 		t.Fatalf("CONNECT: %d", code)
 	}
 	_, _ = c.Write([]byte("select 1"))
-	_ = c.(*net.TCPConn).CloseWrite()
+	if tc, ok := c.(*net.TCPConn); ok {
+		_ = tc.CloseWrite()
+	}
 	got, _ := io.ReadAll(br)
 	if string(got) != "SELECT 1" {
 		t.Fatalf("through the tunnel: %q", got)

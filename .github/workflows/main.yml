@@ -50,6 +50,11 @@ jobs:
           REPORT_DIR: ${{ github.workspace }}/findings
         run: make test-integration TESTFLAGS=-v
 
+      - name: Reading external data (connections, the fetcher and the gateway)
+        env:
+          REPORT_DIR: ${{ github.workspace }}/findings
+        run: make fetcher-test test-connections TESTFLAGS=-v
+
       - name: Stack logs on failure
         if: failure()
         run: docker compose -f deploy/docker-compose.dev.yml logs --no-color | tail -300
