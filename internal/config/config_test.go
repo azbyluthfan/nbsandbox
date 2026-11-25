@@ -401,14 +401,16 @@ func TestConnectionsSettings(t *testing.T) {
 	}
 	key := "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=" // 32 bytes
 	s, err := Load("", envOf(map[string]string{"NBSANDBOX_CONNECTIONS_ENABLED": "true", "NBSANDBOX_CONNECTIONS_MASTER_KEY": key,
+		"NBSANDBOX_GATEWAY_KEY": key, "NBSANDBOX_GATEWAY_ADDRESS": "gw:3128", "NBSANDBOX_FETCHER_IMAGE": "f:1",
 		"NBSANDBOX_CONNECTIONS_ALLOWED": "*.internal, 10.0.0.0/8,db.corp.example"}))
-	if err != nil || !s.Connections.Enabled || len(s.Connections.Allowed) != 3 || s.Connections.Allowed[1] != "10.0.0.0/8" {
+	if err != nil || !s.Connections.Enabled || len(s.Connections.Allowed) != 3 || s.Connections.Allowed[1] != "10.0.0.0/8" ||
+		s.Connections.Gateway.Address != "gw:3128" || s.Connections.FetcherImage != "f:1" {
 		t.Fatalf("env: %+v %v", s.Connections, err)
 	}
 	if s, err := Load("", envOf(map[string]string{"NBSANDBOX_CONNECTIONS_ALLOWED": "not valid"})); err != nil || s.Connections.Enabled {
 		t.Fatalf("off: settings aren't checked: %v", err)
 	}
-	on := map[string]string{"NBSANDBOX_CONNECTIONS_ENABLED": "true", "NBSANDBOX_CONNECTIONS_MASTER_KEY": key}
+	on := map[string]string{"NBSANDBOX_CONNECTIONS_ENABLED": "true", "NBSANDBOX_CONNECTIONS_MASTER_KEY": key, "NBSANDBOX_GATEWAY_KEY": key}
 	for name, extra := range map[string]map[string]string{
 		"no master key":                  {"NBSANDBOX_CONNECTIONS_MASTER_KEY": ""},
 		"a short master key":             {"NBSANDBOX_CONNECTIONS_MASTER_KEY": "c2hvcnQ="},
@@ -417,6 +419,9 @@ func TestConnectionsSettings(t *testing.T) {
 		"a bad CIDR":                     {"NBSANDBOX_CONNECTIONS_ALLOWED": "10.0.0.0/99"},
 		"a wildcard in the middle":       {"NBSANDBOX_CONNECTIONS_ALLOWED": "db.*.example"},
 		"a URL instead of a host":        {"NBSANDBOX_CONNECTIONS_ALLOWED": "https://db.example"},
+		"no gateway key":                 {"NBSANDBOX_GATEWAY_KEY": ""},
+		"a short gateway key":            {"NBSANDBOX_GATEWAY_KEY": "c2hvcnQ="},
+		"a gateway without a port":       {"NBSANDBOX_GATEWAY_ADDRESS": "gw"},
 	} {
 		env := map[string]string{}
 		for k, v := range on {
