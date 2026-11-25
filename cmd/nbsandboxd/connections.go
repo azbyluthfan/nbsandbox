@@ -5,6 +5,7 @@ package main
 
 import (
 	"log/slog"
+	"net"
 
 	"github.com/azbyluthfan/nbsandbox/internal/config"
 	"github.com/azbyluthfan/nbsandbox/internal/connections"
@@ -43,5 +44,11 @@ func newConnections(cfg config.Settings, db *store.DB, logger *slog.Logger) (*co
 		provider = b
 	}
 	logger.Info("connections on", "secrets", provider.Name(), "allowed", c.Allowed)
-	return connections.New(connections.Deps{DB: db, Secrets: provider, Allowed: connections.NewAllowed(c.Allowed), Log: logger}), nil
+	key, err := config.GatewayKey(c.Gateway.Key)
+	if err != nil {
+		return nil, err
+	}
+	gwHost, _, _ := net.SplitHostPort(c.Gateway.Address)
+	fs := connections.FetcherSettings{Image: c.FetcherImage, GatewayAddress: c.Gateway.Address, GatewayContainer: gwHost, GatewayKey: key}
+	return connections.New(connections.Deps{DB: db, Secrets: provider, Allowed: connections.NewAllowed(c.Allowed), Fetcher: fs, Log: logger}), nil
 }

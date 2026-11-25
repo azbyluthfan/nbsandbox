@@ -183,6 +183,13 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 		StopGrace: cfg.Runs.StopGrace,
 	}
 	runDeps := runs.Deps{DB: db, Spaces: spaceSvc, Backend: backend, Metrics: metrics, Log: logger}
+	conns, err := newConnections(cfg, db, logger)
+	if err != nil {
+		return fmt.Errorf("connections: %w", err)
+	}
+	if conns != nil {
+		runDeps.Data = conns
+	}
 	comps := completions.NewPublisher(context.WithoutCancel(ctx), blobs, logger)
 	runtime := func() (api.RuntimeInfo, error) { //nolint:contextcheck // the index is stored under the publisher's own (process) context
 		return runtimeInfo(cfg, sup.Status(), comps)
@@ -295,10 +302,6 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 	recorder := audit.New(audit.Config{Enabled: cfg.Audit.Enabled, Retention: cfg.Audit.Retention, Downloads: cfg.Audit.Downloads},
 		db, logger, metrics.AuditFailures)
 	go recorder.Run(ctx, cfg.Runs.CleanupEvery)
-	conns, err := newConnections(cfg, db, logger)
-	if err != nil {
-		return fmt.Errorf("connections: %w", err)
-	}
 	deps := api.Deps{
 		Connections: conns,
 		Auth:        authn, Users: users, Health: health, Metrics: metrics, Logger: logger, Spaces: spaceSvc, Audit: recorder,

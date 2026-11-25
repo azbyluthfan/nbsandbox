@@ -1074,6 +1074,9 @@ paths:
                   enum: [read-write, read-only]
                   default: read-write
                   description: read-only mounts the space's files read-only, so the run can't change them.
+                environment:
+                  type: string
+                  description: "The space environment the notebook reads its connections' names in (dev, prod...). Default: the space's default environment."
       responses:
         "201": { description: Queued, content: { application/json: { schema: { $ref: "#/components/schemas/Run" } } } }
         "200": { description: Replay of an earlier request with the same Idempotency-Key, content: { application/json: { schema: { $ref: "#/components/schemas/Run" } } } }
@@ -1949,6 +1952,7 @@ components:
         client: { type: string, description: "The application that started the run: the token's client (azp / client_id); absent for basic auth" }
         version: { type: integer, description: The function version, for an invocation }
         read_only_space: { type: boolean, description: The run sees the space (or the function's bundle) read-only }
+        environment: { type: string, description: "The space environment the run read its connections' names in; absent if the space binds none" }
         parameters: { $ref: "#/components/schemas/Parameters" }
         status: { $ref: "#/components/schemas/RunStatus" }
         error_kind: { type: string, description: "e.g. execution_error, resource_pids, resource_tmp, missing_package, packages, output_invalid, output_too_large, oom, timeout, docker_lost" }

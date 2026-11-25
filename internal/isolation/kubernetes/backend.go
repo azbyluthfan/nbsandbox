@@ -67,6 +67,11 @@ func freshContext(ctx context.Context) (context.Context, context.CancelFunc) {
 // back out through the files container, and the Pod is deleted.
 func (b *Backend) Run(ctx context.Context, spec isolation.RunSpec, out isolation.LineSink) (isolation.RunResult, error) {
 	var res isolation.RunResult
+	if spec.Fetcher != nil {
+		// The fetcher Pod, its Secret and NetworkPolicy come with the
+		// Kubernetes milestone (docs/plan-data-access.md).
+		return res, fmt.Errorf("%w: reading connections isn't available on the kubernetes backend yet", isolation.ErrStart)
+	}
 	pods := b.client.CoreV1().Pods(b.cfg.Namespace)
 	name := PodName(spec.RunID)
 	cctx, cancel := freshContext(ctx)

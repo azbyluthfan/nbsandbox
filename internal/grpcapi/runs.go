@@ -93,7 +93,7 @@ func (s *server) CreateRun(ctx context.Context, req *connect.Request[pb.CreateRu
 	}
 	// The request is read: record it even if the caller goes away now.
 	v, _, err := s.d.Runs.Submit(context.WithoutCancel(ctx), owner(ctx), m.SpaceId, runs.SubmitRequest{
-		Notebook: m.Notebook, Parameters: params, IdempotencyKey: m.IdempotencyKey, ReadOnlySpace: m.ReadOnlySpace,
+		Notebook: m.Notebook, Parameters: params, IdempotencyKey: m.IdempotencyKey, ReadOnlySpace: m.ReadOnlySpace, Environment: m.Environment,
 	})
 	if err != nil {
 		return nil, s.toErr(err)

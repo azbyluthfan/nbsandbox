@@ -87,9 +87,11 @@ type Deps struct {
 	ImageID  func() string
 	// Packages builds spaces' package sets (nil or disabled: none).
 	Packages *packages.Service
-	Metrics  *obs.Metrics
-	Log      *slog.Logger
-	Now      func() time.Time
+	// Data gives runs their external data (nil: connections are off).
+	Data    DataAccess
+	Metrics *obs.Metrics
+	Log     *slog.Logger
+	Now     func() time.Time
 	// Available reports whether some worker can run notebooks now; nil: this
 	// process's own executor decides (Docker up, not shutting down).
 	Available func() bool
@@ -211,6 +213,9 @@ type SubmitRequest struct {
 	Parameters     json.RawMessage
 	IdempotencyKey string
 	ReadOnlySpace  bool // mount /space read-only (the run can't change the space's files)
+	// Environment is the space environment the run reads its names in
+	// ("": the space's default).
+	Environment string
 }
 
 // ContractError rejects parameters that don't match the notebook's input
@@ -295,6 +300,10 @@ func (m *Manager) submit(ctx context.Context, owner, spaceID string, req SubmitR
 	if err != nil {
 		return View{}, false, err
 	}
+	env, names, err := m.resolveData(ctx, spaceID, req, sub)
+	if err != nil {
+		return View{}, false, err
+	}
 	var warnings []deps.Warning
 	if man := m.d.Manifest(); man != nil {
 		var unsure bool
@@ -313,6 +322,9 @@ func (m *Manager) submit(ctx context.Context, owner, spaceID string, req SubmitR
 			return View{}, false, &spaces.InvalidError{Msg: "Idempotency-Key is longer than 255 characters"}
 		}
 		target := req.Notebook
+		if req.Environment != "" {
+			target += "@" + req.Environment
+		}
 		if sub.function != "" {
 			target = fmt.Sprintf("function:%s:%d", sub.function, sub.version)
 		}
@@ -343,6 +355,7 @@ func (m *Manager) submit(ctx context.Context, owner, spaceID string, req SubmitR
 		Function: sub.function, Version: sub.version, NotebookSHA256: hex.EncodeToString(sum[:]), Files: runFiles,
 		OutputSchema: outputSchema, OutputMode: sub.outputSchema.GetMode(), ClientApp: clientApp(ctx),
 		ReadOnlySpace: req.ReadOnlySpace || sub.function != "", PackageKey: pkgs.Key,
+		Environment: env, Connections: names,
 	}
 	pos := 1
 	if n, err := m.d.DB.QueueLength(ctx); err == nil {
