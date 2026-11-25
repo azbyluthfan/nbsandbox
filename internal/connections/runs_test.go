@@ -1,0 +1,121 @@
+// Copyright 2026 The nbsandbox Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package connections
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"reflect"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/azbyluthfan/nbsandbox/internal/gateway"
+	"github.com/azbyluthfan/nbsandbox/internal/spaces"
+	"github.com/azbyluthfan/nbsandbox/internal/store"
+)
+
+var gwKey = []byte(strings.Repeat("g", 32))
+
+func TestResolveAndFetcher(t *testing.T) {
+	ctx := context.Background()
+	s, db, _ := newService(t)
+	s.d.Fetcher = FetcherSettings{Image: "fetcher:1", GatewayAddress: "nbsandbox-gateway:3128", GatewayContainer: "nbsandbox-gateway", GatewayKey: gwKey}
+	now := time.Now()
+	for _, id := range []string{"s1", "s2"} {
+		if err := db.CreateSpace(ctx, store.Space{ID: id, Owner: "alice", Name: id, CreatedAt: now, UpdatedAt: now}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.Create(ctx, "alice", pg("crm-dev", "pg-dev.internal")); err != nil {
+		t.Fatal(err)
+	}
+	prod, _ := s.Create(ctx, "alice", pg("crm-prod", "pg.internal"))
+	lake, err := s.Create(ctx, "alice", Input{Name: "lake", Type: TypeS3, Settings: map[string]any{
+		"endpoint": "minio.internal:9000", "bucket": "data", "access_key_id": "AK", "use_ssl": false, "url_style": "path"},
+		Secret: SecretInput{Value: ptr("s3-SECRET")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	aws, _ := s.Create(ctx, "alice", Input{Name: "aws", Type: TypeS3, Settings: map[string]any{
+		"endpoint": "s3.eu-west-1.amazonaws.internal", "bucket": "logs"}, Secret: SecretInput{None: true}})
+	api, _ := s.Create(ctx, "alice", Input{Name: "api", Type: TypeHTTP, Settings: map[string]any{"url": "https://api.example.com"},
+		Secret: SecretInput{Value: ptr("tok")}})
+	if _, err := s.SetSpace(ctx, "alice", "s1", SpaceInput{Default: "dev", Environments: map[string]map[string]string{
+		"dev":  {"crm": "crm-dev", "lake": lake.ID, "logs": aws.ID, "api": api.ID},
+		"prod": {"crm": prod.ID, "lake": lake.ID, "logs": aws.ID, "api": api.ID},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Resolve: the default, a named environment, refusals.
+	env, names, err := s.Resolve(ctx, "s1", "")
+	if err != nil || env != "dev" || len(names) != 4 {
+		t.Fatalf("default: %q %v %v", env, names, err)
+	}
+	if env, names, err = s.Resolve(ctx, "s1", "prod"); err != nil || env != "prod" || names["crm"] != prod.ID {
+		t.Fatalf("prod: %q %v %v", env, names, err)
+	}
+	var inv *spaces.InvalidError
+	if _, _, err := s.Resolve(ctx, "s1", "staging"); !errors.As(err, &inv) || !strings.Contains(err.Error(), "dev, prod") {
+		t.Fatalf("unknown environment: %v", err)
+	}
+	if env, names, err := s.Resolve(ctx, "s2", ""); err != nil || env != "" || names != nil {
+		t.Fatalf("a space binding nothing: %q %v %v", env, names, err)
+	}
+	if _, _, err := s.Resolve(ctx, "s2", "prod"); !errors.As(err, &inv) {
+		t.Fatalf("an environment where there are none: %v", err)
+	}
+
+	// Fetcher: credentials for the fetcher; a token for exactly its endpoints.
+	exp := now.Add(time.Hour)
+	f, err := s.Fetcher(ctx, "run1", "alice", names, exp)
+	if err != nil || f == nil {
+		t.Fatalf("fetcher: %v", err)
+	}
+	if f.Image != "fetcher:1" || f.Gateway != "nbsandbox-gateway" || len(f.Token) != 64 {
+		t.Fatalf("fetcher: %+v", f)
+	}
+	var cfg fetcherConfig
+	if err := json.Unmarshal(f.Config, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	secretsOf := map[string]string{}
+	for _, src := range cfg.Sources {
+		got = append(got, src.Name)
+		secretsOf[src.Name] = src.Secret
+	}
+	if !reflect.DeepEqual(got, []string{"crm", "lake", "logs"}) { // sorted; http isn't the fetcher's
+		t.Fatalf("sources: %v", got)
+	}
+	if secretsOf["crm"] != "pa55" || secretsOf["lake"] != "s3-SECRET" || secretsOf["logs"] != "" || cfg.Token != f.Token {
+		t.Fatalf("secrets: %v", secretsOf)
+	}
+	c, err := gateway.Verify(gwKey, cfg.Gateway.Token, now)
+	if err != nil || c.Run != "run1" || c.Exp != exp.Unix() || cfg.Gateway.Address != "nbsandbox-gateway:3128" {
+		t.Fatalf("gateway token: %+v %v", c, err)
+	}
+	want := []string{"pg.internal:5432", "minio.internal:9000", "logs.s3.eu-west-1.amazonaws.internal:443"}
+	if !reflect.DeepEqual(c.Allow, want) {
+		t.Fatalf("allowed endpoints: %v, want %v", c.Allow, want)
+	}
+
+	// Nothing the fetcher reads: no fetcher.
+	if f, err := s.Fetcher(ctx, "run2", "alice", map[string]string{"api": api.ID}, exp); err != nil || f != nil {
+		t.Fatalf("http only: %+v %v", f, err)
+	}
+	// Someone else's run, a connection gone, an endpoint no longer allowed.
+	if _, err := s.Fetcher(ctx, "run3", "bob", names, exp); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("another owner: %v", err)
+	}
+	if _, err := s.Fetcher(ctx, "run3", "alice", map[string]string{"crm": "gone"}, exp); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("deleted: %v", err)
+	}
+	s.d.Allowed = NewAllowed([]string{"minio.internal"})
+	if _, err := s.Fetcher(ctx, "run3", "alice", names, exp); !errors.Is(err, ErrUnavailable) || !strings.Contains(err.Error(), "no longer allows") {
+		t.Fatalf("no longer allowed: %v", err)
+	}
+}

@@ -332,6 +332,11 @@ func (e *executor) execute(runCtx context.Context, r store.Run) {
 		runErr = fmt.Errorf("%w: the space's packages: %w", isolation.ErrStart, err)
 		return
 	}
+	fetcher, err := e.fetcherFor(ctx, r)
+	if err != nil {
+		runErr = fmt.Errorf("%w: %w", isolation.ErrStart, err)
+		return
+	}
 	stopEvents := e.tailRunEvents(ctx, r, hub)
 	tl.BackendStart = e.d.Now()
 	res, runErr = e.d.Backend.Run(tctx, isolation.RunSpec{
@@ -339,6 +344,7 @@ func (e *executor) execute(runCtx context.Context, r store.Run) {
 		SpaceDir: spaceDir, SpaceReadOnly: !r.WritesSpace, RunDir: e.d.Spaces.RunPath(r.SpaceID, r.ID),
 		Image: e.cfg.Image, Runtime: e.cfg.Runtime, Limits: e.cfg.Limits, MaxOutputBytes: e.cfg.MaxOutput,
 		OutputMode: r.OutputMode, DiskBytes: e.diskAllowance(ctx, r.SpaceID), PackagesDir: pkgDir,
+		Fetcher: fetcher,
 	}, hub)
 	tl.BackendDone = e.d.Now()
 	outputErr = stopEvents() // everything it reported is recorded before its final status

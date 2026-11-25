@@ -90,6 +90,8 @@ func (a *API) createRun(w http.ResponseWriter, r *http.Request) {
 		Notebook   string          `json:"notebook"`
 		Parameters json.RawMessage `json:"parameters"`
 		Space      string          `json:"space"`
+		// Environment is the space environment the run reads its names in.
+		Environment string `json:"environment"`
 	}
 	if err := decodeJSON(r, &body, false); err != nil {
 		writeRunError(w, r, err)
@@ -110,7 +112,7 @@ func (a *API) createRun(w http.ResponseWriter, r *http.Request) {
 	ctx := context.WithoutCancel(r.Context())
 	v, replay, err := a.d.Runs.Submit(ctx, user(r), r.PathValue("id"), runs.SubmitRequest{
 		Notebook: body.Notebook, Parameters: body.Parameters, IdempotencyKey: r.Header.Get("Idempotency-Key"),
-		ReadOnlySpace: body.Space == "read-only",
+		ReadOnlySpace: body.Space == "read-only", Environment: body.Environment,
 	})
 	if err != nil {
 		writeRunError(w, r, err)

@@ -421,6 +421,7 @@ message Run {
   // While queued: what the run waits for ("packages": its space's package
   // set is being built), if anything.
   string waiting_for = 24;
+  string environment = 25; // the space environment the run read its names in
 }
 
 message DependencyWarning {
@@ -578,6 +579,7 @@ message CreateRunRequest {
   google.protobuf.Value parameters = 3;
   bool read_only_space = 4;
   string idempotency_key = 5;
+  string environment = 6; // the space environment to read names in ("": the default)
 }
 message ListRunsRequest {
   string space_id = 1;

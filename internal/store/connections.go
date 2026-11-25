@@ -247,3 +247,28 @@ func (db *DB) DeleteBuiltinSecret(ctx context.Context, id string) error {
 	_, err := db.w.ExecContext(ctx, "DELETE FROM builtin_secrets WHERE id = ?", id)
 	return err
 }
+
+// RunConnections returns which connection each of a run's names meant
+// (name -> connection id), as resolved when it was submitted.
+func (db *DB) RunConnections(ctx context.Context, runID string) (map[string]string, error) {
+	rows, err := db.r.QueryContext(ctx, "SELECT name, connection_id FROM run_connections WHERE run_id = ?", runID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]string{}
+	for rows.Next() {
+		var n, id string
+		if err := rows.Scan(&n, &id); err != nil {
+			return nil, err
+		}
+		out[n] = id
+	}
+	return out, rows.Err()
+}
+
+// ConnectionByID returns a connection whoever owns it (run start: the run
+// already settled whose it is).
+func (db *DB) ConnectionByID(ctx context.Context, id string) (Connection, error) {
+	return scanConnection(db.r.QueryRowContext(ctx, "SELECT "+connectionCols+" FROM connections WHERE id = ?", id))
+}

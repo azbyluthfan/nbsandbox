@@ -3487,6 +3487,7 @@ type Run struct {
 	// While queued: what the run waits for ("packages": its space's package
 	// set is being built), if anything.
 	WaitingFor    string `protobuf:"bytes,24,opt,name=waiting_for,json=waitingFor,proto3" json:"waiting_for,omitempty"`
+	Environment   string `protobuf:"bytes,25,opt,name=environment,proto3" json:"environment,omitempty"` // the space environment the run read its names in
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3685,6 +3686,13 @@ func (x *Run) GetResult() *RunRecord {
 func (x *Run) GetWaitingFor() string {
 	if x != nil {
 		return x.WaitingFor
+	}
+	return ""
+}
+
+func (x *Run) GetEnvironment() string {
+	if x != nil {
+		return x.Environment
 	}
 	return ""
 }
@@ -5136,6 +5144,7 @@ type CreateRunRequest struct {
 	Parameters     *structpb.Value        `protobuf:"bytes,3,opt,name=parameters,proto3" json:"parameters,omitempty"`
 	ReadOnlySpace  bool                   `protobuf:"varint,4,opt,name=read_only_space,json=readOnlySpace,proto3" json:"read_only_space,omitempty"`
 	IdempotencyKey string                 `protobuf:"bytes,5,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	Environment    string                 `protobuf:"bytes,6,opt,name=environment,proto3" json:"environment,omitempty"` // the space environment to read names in ("": the default)
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -5201,6 +5210,13 @@ func (x *CreateRunRequest) GetReadOnlySpace() bool {
 func (x *CreateRunRequest) GetIdempotencyKey() string {
 	if x != nil {
 		return x.IdempotencyKey
+	}
+	return ""
+}
+
+func (x *CreateRunRequest) GetEnvironment() string {
+	if x != nil {
+		return x.Environment
 	}
 	return ""
 }
@@ -8522,7 +8538,7 @@ const file_nbsandbox_v1_nbsandbox_proto_rawDesc = "" +
 	"parameters\x18\x04 \x01(\v2\x16.google.protobuf.ValueR\n" +
 	"parameters\x12'\n" +
 	"\x0fidempotency_key\x18\x05 \x01(\tR\x0eidempotencyKey\x12!\n" +
-	"\fwait_seconds\x18\x06 \x01(\x05R\vwaitSeconds\"\x91\a\n" +
+	"\fwait_seconds\x18\x06 \x01(\x05R\vwaitSeconds\"\xb3\a\n" +
 	"\x03Run\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
 	"\bspace_id\x18\x02 \x01(\tR\aspaceId\x12\x1a\n" +
@@ -8555,7 +8571,8 @@ const file_nbsandbox_v1_nbsandbox_proto_rawDesc = "" +
 	"finishedAt\x12/\n" +
 	"\x06result\x18\x16 \x01(\v2\x17.nbsandbox.v1.RunRecordR\x06result\x12\x1f\n" +
 	"\vwaiting_for\x18\x18 \x01(\tR\n" +
-	"waitingFor\"e\n" +
+	"waitingFor\x12 \n" +
+	"\venvironment\x18\x19 \x01(\tR\venvironment\"e\n" +
 	"\x11DependencyWarning\x12\x16\n" +
 	"\x06module\x18\x01 \x01(\tR\x06module\x12\x17\n" +
 	"\x04cell\x18\x02 \x01(\x05H\x00R\x04cell\x88\x01\x01\x12\x16\n" +
@@ -8701,7 +8718,7 @@ const file_nbsandbox_v1_nbsandbox_proto_rawDesc = "" +
 	"index_gzip\x18\x02 \x01(\fR\tindexGzip\"B\n" +
 	"\x12RuntimeCompletions\x12\x16\n" +
 	"\x06sha256\x18\x01 \x01(\tR\x06sha256\x12\x14\n" +
-	"\x05bytes\x18\x02 \x01(\x03R\x05bytes\"\xd2\x01\n" +
+	"\x05bytes\x18\x02 \x01(\x03R\x05bytes\"\xf4\x01\n" +
 	"\x10CreateRunRequest\x12\x19\n" +
 	"\bspace_id\x18\x01 \x01(\tR\aspaceId\x12\x1a\n" +
 	"\bnotebook\x18\x02 \x01(\tR\bnotebook\x126\n" +
@@ -8709,7 +8726,8 @@ const file_nbsandbox_v1_nbsandbox_proto_rawDesc = "" +
 	"parameters\x18\x03 \x01(\v2\x16.google.protobuf.ValueR\n" +
 	"parameters\x12&\n" +
 	"\x0fread_only_space\x18\x04 \x01(\bR\rreadOnlySpace\x12'\n" +
-	"\x0fidempotency_key\x18\x05 \x01(\tR\x0eidempotencyKey\"\xf6\x01\n" +
+	"\x0fidempotency_key\x18\x05 \x01(\tR\x0eidempotencyKey\x12 \n" +
+	"\venvironment\x18\x06 \x01(\tR\venvironment\"\xf6\x01\n" +
 	"\x0fListRunsRequest\x12\x19\n" +
 	"\bspace_id\x18\x01 \x01(\tR\aspaceId\x12\x16\n" +
 	"\x06status\x18\x02 \x01(\tR\x06status\x12?\n" +

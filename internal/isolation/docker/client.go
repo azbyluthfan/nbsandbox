@@ -43,6 +43,21 @@ type Client interface {
 	// ContainerAttach attaches to a container's stdin, stdout and stderr
 	// (an interactive session's): stdout and stderr come multiplexed.
 	ContainerAttach(ctx context.Context, id string) (Attached, error)
+
+	// Run networks: a run with a fetcher gets a private network of its
+	// own (internal: no way out but the gateway).
+	NetworkCreate(ctx context.Context, name string, labels map[string]string) (string, error)
+	NetworkConnect(ctx context.Context, network, container string) error
+	NetworkDisconnect(ctx context.Context, network, container string) error
+	NetworkRemove(ctx context.Context, network string) error
+	// NetworkList lists networks carrying label.
+	NetworkList(ctx context.Context, label string) ([]NetworkSummary, error)
+}
+
+// NetworkSummary is one entry of a network list.
+type NetworkSummary struct {
+	ID, Name string
+	Labels   map[string]string
 }
 
 // Attached is an attach's connection: write to stdin, read the multiplexed
@@ -199,7 +214,43 @@ func (m *mobyClient) ContainerAttach(ctx context.Context, id string) (Attached, 
 	return Attached{Conn: res.Conn, Reader: res.Reader}, nil
 }
 
+func (m *mobyClient) NetworkCreate(ctx context.Context, name string, labels map[string]string) (string, error) {
+	res, err := m.c.NetworkCreate(ctx, name, client.NetworkCreateOptions{Driver: "bridge", Internal: true, Labels: labels})
+	if err != nil {
+		return "", err
+	}
+	return res.ID, nil
+}
+
+func (m *mobyClient) NetworkConnect(ctx context.Context, network, container string) error {
+	_, err := m.c.NetworkConnect(ctx, network, client.NetworkConnectOptions{Container: container})
+	return err
+}
+
+func (m *mobyClient) NetworkDisconnect(ctx context.Context, network, container string) error {
+	_, err := m.c.NetworkDisconnect(ctx, network, client.NetworkDisconnectOptions{Container: container, Force: true})
+	return err
+}
+
+func (m *mobyClient) NetworkRemove(ctx context.Context, network string) error {
+	_, err := m.c.NetworkRemove(ctx, network, client.NetworkRemoveOptions{})
+	return err
+}
+
+func (m *mobyClient) NetworkList(ctx context.Context, label string) ([]NetworkSummary, error) {
+	res, err := m.c.NetworkList(ctx, client.NetworkListOptions{Filters: client.Filters{}.Add("label", label)})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]NetworkSummary, 0, len(res.Items))
+	for _, n := range res.Items {
+		out = append(out, NetworkSummary{ID: n.ID, Name: n.Name, Labels: n.Labels})
+	}
+	return out, nil
+}
+
 // IsNotFound reports whether err means the container or image doesn't exist.
 func IsNotFound(err error) bool {
-	return err != nil && (cerrdefs.IsNotFound(err) || strings.Contains(err.Error(), "No such container"))
+	return err != nil && (cerrdefs.IsNotFound(err) || strings.Contains(err.Error(), "No such container") ||
+		strings.Contains(err.Error(), "not found"))
 }

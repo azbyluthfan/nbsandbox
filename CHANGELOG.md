@@ -6,11 +6,14 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 
 ### Added
 
-- **Connections, the first part of reading data outside nbsandbox** ([docs/plan-data-access.md](docs/plan-data-access.md)): a user's data sources (PostgreSQL, MySQL, SQL Server, object storage, HTTP APIs), created through the API and gRPC (`ConnectionService`) and bound to a space's names per environment (dev, prod). Secrets go to a secret provider (Kubernetes Secrets, or a built-in encrypted store for development) and are never returned. Connections may point only where the operator allows (`connections.allowed`). Off by default (`connections.enabled`); notebooks read them in a later release. A new scope, `nbsandbox.connections`, for changing them.
+- **Connections, the first part of reading data outside nbsandbox** ([docs/plan-data-access.md](docs/plan-data-access.md)): a user's data sources (PostgreSQL, MySQL, SQL Server, object storage, HTTP APIs), created through the API and gRPC (`ConnectionService`) and bound to a space's names per environment (dev, prod). Secrets go to a secret provider (Kubernetes Secrets, or a built-in encrypted store for development) and are never returned. Connections may point only where the operator allows (`connections.allowed`). Off by default (`connections.enabled`). A new scope, `nbsandbox.connections`, for changing them.
+- **Notebooks read their space's connections** ([docs/connections.md](docs/connections.md)): `nbsandbox.sql("SELECT … FROM crm.orders")` returns a DataFrame, `nbsandbox.stream(…)` Arrow batches, `nbsandbox.connections()` the names. PostgreSQL databases, and CSV and Parquet in S3-compatible storage (`lake.parquet('sales/*.parquet')`), joined in one query if need be. Each reading run gets a **fetcher**, a container that holds its credentials (the run never sees them) and answers with DuckDB over Arrow Flight, locked to one `SELECT` on the run's own sources; and reaches them only through the new **egress gateway** (`nbsandboxd gateway`), with a token naming the run's endpoints. A run picks the space's environment (`"environment": "prod"`; the default otherwise) and records it. Runs on the Docker backend for now; sessions, functions and Kubernetes follow.
+- **The fetcher image** (`make fetcher-image`), and `pyarrow` in the runner image.
 
 ### Upgrading
 
-- **Database migration 13** runs at startup: connections, their bindings, and the built-in secret store.
+- **Database migrations 13 and 14** run at startup: connections, their bindings, and the built-in secret store; the environment a run read in, and which connection each name meant.
+- **With connections on,** the settings need `connections.gateway.key` (and the gateway the same key), and the Docker socket proxy must allow network create, connect, disconnect, list and delete: the Compose files in `deploy/` do.
 
 ## [0.3.0] - 2026-11-22
 

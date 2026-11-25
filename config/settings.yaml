@@ -199,6 +199,11 @@ connections:
                                     # Losing it loses every stored secret.
     namespace: ""                   # NBSANDBOX_CONNECTIONS_NAMESPACE: kubernetes only; default: the runs
                                     # namespace (a Pod mounts only its own namespace's Secrets)
+  gateway:                          # the egress gateway, runs' fetchers' only way out (docs/connections.md)
+    address: nbsandbox-gateway:3128 # NBSANDBOX_GATEWAY_ADDRESS: host:port; on Docker, host is its container
+    key: ""                         # NBSANDBOX_GATEWAY_KEY: signs run tokens, the gateway's key too;
+                                    # openssl rand -base64 32
+  fetcher_image: nbsandbox-fetcher:dev  # NBSANDBOX_FETCHER_IMAGE: reads a run's sources (make fetcher-image)
 
 # Who may call the API (docs/auth.md). Basic auth uses users_file; bearer
 # tokens come from an OpenID Connect provider. Spaces belong to the caller's ID.

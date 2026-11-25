@@ -208,6 +208,24 @@ type Connections struct {
 	Allowed []string `yaml:"allowed"`
 	// Secrets is where connections' credentials are kept.
 	Secrets ConnectionSecrets `yaml:"secrets"`
+	// Gateway is the egress gateway: a run's fetcher reaches its sources
+	// only through it (nbsandboxd gateway).
+	Gateway Gateway `yaml:"gateway"`
+	// FetcherImage is the fetcher's image: it holds a run's credentials
+	// and reads its sources (make fetcher-image).
+	FetcherImage string `yaml:"fetcher_image"`
+}
+
+// Gateway configures how runs reach the egress gateway.
+type Gateway struct {
+	// Address is where fetchers reach the gateway, host:port. On Docker,
+	// host is also the gateway container's name, joined to each run's
+	// network.
+	Address string `yaml:"address"`
+	// Key signs run tokens; the gateway verifies them with the same key
+	// (NBSANDBOX_GATEWAY_KEY): 32 random bytes or more, base64. Never
+	// logged.
+	Key string `yaml:"key"`
 }
 
 // Secret providers for connections.
@@ -228,6 +246,15 @@ type ConnectionSecrets struct {
 	// connections refer to: the runs namespace by default, since a Pod can
 	// mount only its own namespace's Secrets.
 	Namespace string `yaml:"namespace"`
+}
+
+// GatewayKey decodes the gateway's signing key: 32 bytes or more, base64.
+func GatewayKey(v string) ([]byte, error) {
+	k, err := base64.StdEncoding.DecodeString(strings.TrimSpace(v))
+	if err != nil || len(k) < 32 {
+		return nil, errors.New("32 random bytes or more, base64 (openssl rand -base64 32)")
+	}
+	return k, nil
 }
 
 // SessionsOn reports whether this process runs interactive sessions:
@@ -466,7 +493,8 @@ func Default() Settings {
 			BuilderImage: "nbsandbox-runner-builder:dev", Network: "bridge"},
 		Sessions: Sessions{Enabled: true, Idle: 30 * time.Minute, Max: 8 * time.Hour, PerUser: 2, PerWorker: 4,
 			WriteBack: 5 * time.Minute, MaxMessage: 2 * MiB, Retention: 7 * 24 * time.Hour, Listen: ":8091"},
-		Connections: Connections{Enabled: false, Allowed: []string{}, Secrets: ConnectionSecrets{Provider: SecretsBuiltin}},
+		Connections: Connections{Enabled: false, Allowed: []string{}, Secrets: ConnectionSecrets{Provider: SecretsBuiltin},
+			Gateway: Gateway{Address: "nbsandbox-gateway:3128"}, FetcherImage: "nbsandbox-fetcher:dev"},
 		UI: UI{Enabled: false, Listen: "127.0.0.1:8090", Auth: "none",
 			Session: UISession{Idle: time.Hour, Max: 12 * time.Hour},
 			OIDC: UIOIDC{Scopes: []string{"openid", "profile", auth.ScopeRead, auth.ScopeSpacesWrite, auth.ScopeFilesWrite,
@@ -621,6 +649,9 @@ func applyEnv(s *Settings, getenv func(string) string) error {
 		"NBSANDBOX_CONNECTIONS_PROVIDER":    &s.Connections.Secrets.Provider,
 		"NBSANDBOX_CONNECTIONS_MASTER_KEY":  &s.Connections.Secrets.MasterKey,
 		"NBSANDBOX_CONNECTIONS_NAMESPACE":   &s.Connections.Secrets.Namespace,
+		"NBSANDBOX_GATEWAY_ADDRESS":         &s.Connections.Gateway.Address,
+		"NBSANDBOX_GATEWAY_KEY":             &s.Connections.Gateway.Key,
+		"NBSANDBOX_FETCHER_IMAGE":           &s.Connections.FetcherImage,
 	}
 	for k, p := range str {
 		if v := getenv(k); v != "" {
@@ -910,6 +941,15 @@ func (s Settings) Validate() error {
 			}
 		default:
 			add("connections.secrets.provider: must be %s or %s, got %q", SecretsBuiltin, SecretsKubernetes, c.Secrets.Provider)
+		}
+		if _, err := GatewayKey(c.Gateway.Key); err != nil {
+			add("connections.gateway.key: %v", err)
+		}
+		if h, _, err := net.SplitHostPort(c.Gateway.Address); err != nil || h == "" {
+			add("connections.gateway.address: host:port, got %q", c.Gateway.Address)
+		}
+		if strings.TrimSpace(c.FetcherImage) == "" {
+			add("connections.fetcher_image must be set")
 		}
 		for _, a := range c.Allowed {
 			if err := ValidAllowedEntry(a); err != nil {

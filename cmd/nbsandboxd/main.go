@@ -5,6 +5,7 @@
 //
 //	nbsandboxd [-config settings.yaml]   run the service (default)
 //	nbsandboxd hash-password             print a bcrypt hash for users.yaml
+//	nbsandboxd gateway [-listen :3128]   run the egress gateway for runs' fetchers
 //	nbsandboxd health [-url URL]         exit 0 if nbsandboxd is ready (container healthcheck)
 //	nbsandboxd version                   print the version
 package main
@@ -30,12 +31,14 @@ func main() {
 		err = serve(args)
 	case "hash-password":
 		err = hashPassword(os.Stdin, os.Stdout, os.Stderr)
+	case "gateway":
+		err = gatewayCmd(args)
 	case "health":
 		err = health(args)
 	case "version", "-version", "--version":
 		fmt.Println("nbsandboxd", version)
 	default:
-		err = fmt.Errorf("unknown command %q (commands: serve, hash-password, health, version)", cmd)
+		err = fmt.Errorf("unknown command %q (commands: serve, gateway, hash-password, health, version)", cmd)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "nbsandboxd:", err)

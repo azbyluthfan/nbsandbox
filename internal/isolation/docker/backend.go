@@ -45,6 +45,13 @@ func (b *Backend) Name() string { return "docker" }
 // container running.
 func (b *Backend) Run(ctx context.Context, spec isolation.RunSpec, out isolation.LineSink) (isolation.RunResult, error) {
 	cfg, host := buildContainerConfig(spec)
+	if spec.Fetcher != nil {
+		cleanup, err := b.startFetcher(ctx, spec, out)
+		defer cleanup()
+		if err != nil {
+			return isolation.RunResult{}, err
+		}
+	}
 	return b.runContainer(ctx, ContainerName(spec.RunID), spec.RunID, cfg, host, spec.Limits.StopGrace, out)
 }
 
@@ -206,15 +213,38 @@ func (w *lineWriter) Flush() {
 	}
 }
 
-// Orphans implements isolation.Backend.
+// Orphans implements isolation.Backend: run containers, and the fetchers
+// and networks runs left without one (one entry per run).
 func (b *Backend) Orphans(ctx context.Context) ([]isolation.Orphan, error) {
 	list, err := b.client.ContainerList(ctx, LabelRun)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]isolation.Orphan, 0, len(list))
+	seen := map[string]bool{}
 	for _, c := range list {
 		out = append(out, isolation.Orphan{RunID: c.Labels[LabelRun], SpaceID: c.Labels[LabelSpace], ContainerID: c.ID, Running: c.Running})
+		seen[c.Labels[LabelRun]] = true
+	}
+	fetchers, err := b.client.ContainerList(ctx, LabelFetcher)
+	if err != nil {
+		return nil, err
+	}
+	nets, err := b.client.NetworkList(ctx, LabelNetwork)
+	if err != nil {
+		return nil, err
+	}
+	add := func(run, space string) {
+		if run != "" && !seen[run] {
+			seen[run] = true
+			out = append(out, isolation.Orphan{RunID: run, SpaceID: space})
+		}
+	}
+	for _, c := range fetchers {
+		add(c.Labels[LabelFetcher], c.Labels[LabelSpace])
+	}
+	for _, n := range nets {
+		add(n.Labels[LabelNetwork], n.Labels[LabelSpace])
 	}
 	return out, nil
 }
@@ -230,7 +260,7 @@ func (b *Backend) Kill(ctx context.Context, runID string) error {
 	if err := b.client.ContainerRemove(cctx, name); err != nil && !IsNotFound(err) {
 		return err
 	}
-	return nil
+	return b.killFetcher(cctx, runID)
 }
 
 var _ isolation.Backend = (*Backend)(nil)

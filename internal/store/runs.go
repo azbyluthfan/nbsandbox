@@ -41,12 +41,14 @@ type NewRun struct {
 	Function                                     string
 	Version                                      int
 	NotebookSHA256                               string
-	OutputSchema                                 string       // of the value, or of each item when streamed
-	OutputMode                                   string       // single (default) | stream
-	ClientApp                                    string       // the application that called on its user's behalf ('' if unknown)
-	ReadOnlySpace                                bool         // /space mounted read-only; may run beside other runs
-	Files                                        []ContentRef // the notebook snapshot and parameters, recorded with the run
-	PackageKey                                   string       // the package set it needs ("" if none): it waits until the set is ready
+	OutputSchema                                 string            // of the value, or of each item when streamed
+	OutputMode                                   string            // single (default) | stream
+	ClientApp                                    string            // the application that called on its user's behalf ('' if unknown)
+	ReadOnlySpace                                bool              // /space mounted read-only; may run beside other runs
+	Files                                        []ContentRef      // the notebook snapshot and parameters, recorded with the run
+	PackageKey                                   string            // the package set it needs ("" if none): it waits until the set is ready
+	Environment                                  string            // the space environment its names were read in ("" if none)
+	Connections                                  map[string]string // name -> connection id, as resolved at submission
 }
 
 func boolInt(b bool) int {

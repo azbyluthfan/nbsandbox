@@ -57,6 +57,8 @@ type Deps struct {
 	DB      *store.DB
 	Secrets secrets.Provider
 	Allowed Allowed
+	// Fetcher makes runs' fetchers (mediated reads).
+	Fetcher FetcherSettings
 	Log     *slog.Logger
 	Now     func() time.Time // default time.Now
 }

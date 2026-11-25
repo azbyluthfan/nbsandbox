@@ -110,11 +110,22 @@ jobs:
           sbom: true
           provenance: mode=max
           tags: ghcr.io/azbyluthfan/nbsandbox-runner-builder:${{ steps.v.outputs.version }}
+      - name: Fetcher image (reads runs' external data)
+        id: fetcher
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: fetcher-image
+          platforms: linux/amd64,linux/arm64
+          push: true
+          sbom: true
+          provenance: mode=max
+          tags: ghcr.io/azbyluthfan/nbsandbox-fetcher:${{ steps.v.outputs.version }}
       - name: Sign images (keyless)
         run: |
           cosign sign --yes ghcr.io/azbyluthfan/nbsandboxd@${{ steps.nbsandboxd.outputs.digest }}
           cosign sign --yes ghcr.io/azbyluthfan/nbsandbox-runner@${{ steps.runner.outputs.digest }}
           cosign sign --yes ghcr.io/azbyluthfan/nbsandbox-runner-builder@${{ steps.builder.outputs.digest }}
+          cosign sign --yes ghcr.io/azbyluthfan/nbsandbox-fetcher@${{ steps.fetcher.outputs.digest }}
 
   chart:
     needs: images

@@ -50,7 +50,36 @@ type RunSpec struct {
 	// mounted read-only at PackagesPath; the kernel adds it to sys.path
 	// after the image's own packages.
 	PackagesDir string
+	// Fetcher, if set, is the run's reader of external data: a second
+	// container the run reaches at the address in FetcherEnv, on a
+	// network only the two and the gateway share. Nil: the run reads
+	// nothing outside.
+	Fetcher *Fetcher
 }
+
+// Fetcher is a run's fetcher (docs/plan-data-access.md): it holds the
+// run's credentials, which the runner never sees, and reaches the run's
+// sources only through the egress gateway.
+type Fetcher struct {
+	Image string
+	// Config is the fetcher's configuration, credentials included: given
+	// to the fetcher alone (NBSANDBOX_FETCHER_CONFIG_JSON), never logged.
+	Config []byte
+	// Token is what the runner presents to the fetcher
+	// (NBSANDBOX_FETCHER_TOKEN).
+	Token string
+	// Gateway is the gateway's container (Docker): joined to the run's
+	// network so the fetcher can reach it.
+	Gateway string
+}
+
+// The fetcher's port, and the environment variables that tell a run where
+// its fetcher is (a grpc:// URL) and the token it presents.
+const (
+	FetcherPort     = 8815
+	FetcherEnv      = "NBSANDBOX_FETCHER"
+	FetcherTokenEnv = "NBSANDBOX_FETCHER_TOKEN" //nolint:gosec // a variable's name, not a credential
+)
 
 // PackagesPath is where a run sees its space's package set.
 const PackagesPath = "/opt/nbsandbox/packages"

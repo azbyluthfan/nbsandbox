@@ -5,6 +5,7 @@ package docker
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -52,6 +53,31 @@ func fakeDaemon(t *testing.T) *httptest.Server {
 			_, _ = w.Write([]byte(`{"message":"No such container: missing"}`))
 		case path == "/containers/json":
 			_, _ = w.Write([]byte(`[{"Id":"c1","Labels":{"nbsandbox.run":"r1","nbsandbox.space":"s1"},"State":"running"}]`))
+		case strings.Contains(path, "-r9"): // run r9's containers are gone; its network is left
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"message":"No such container"}`))
+		case path == "/networks" && r.Method == "GET":
+			if strings.Contains(r.URL.RawQuery, "r9") {
+				_, _ = w.Write([]byte(`[{"Id":"n9","Name":"nbsandbox-run-r9","Labels":{"nbsandbox.network":"r9","nbsandbox.gateway":"gw"}}]`))
+				return
+			}
+			_, _ = w.Write([]byte(`[]`))
+		case path == "/networks/create" && r.Method == "POST":
+			var body struct{ Internal bool }
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if !body.Internal {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"Id":"n1"}`))
+		case path == "/networks/n1/connect", path == "/networks/n1/disconnect", path == "/networks/n9/disconnect":
+			w.WriteHeader(http.StatusOK)
+		case (path == "/networks/n1" || path == "/networks/n9") && r.Method == "DELETE":
+			w.WriteHeader(http.StatusNoContent)
+		case path == "/networks/gone" && r.Method == "DELETE":
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"message":"network gone not found"}`))
 		case strings.HasPrefix(path, "/images/"):
 			w.WriteHeader(http.StatusNotFound)
 			_, _ = w.Write([]byte(`{"message":"No such image"}`))
@@ -152,5 +178,39 @@ func TestBackendThroughAdapter(t *testing.T) {
 	}
 	if IsNotFound(nil) || IsNotFound(errors.New("boom")) {
 		t.Fatal("IsNotFound too broad")
+	}
+}
+
+func TestMobyClientNetworks(t *testing.T) {
+	srv := fakeDaemon(t)
+	c, err := NewClient("tcp://" + strings.TrimPrefix(srv.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = c.Close() }()
+	ctx := context.Background()
+	if id, err := c.NetworkCreate(ctx, "nbsandbox-run-r1", map[string]string{LabelNetwork: "r1"}); err != nil || id != "n1" {
+		t.Fatalf("create (internal): %q %v", id, err)
+	}
+	if err := c.NetworkConnect(ctx, "n1", "gw"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.NetworkDisconnect(ctx, "n1", "gw"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.NetworkRemove(ctx, "n1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.NetworkRemove(ctx, "gone"); !IsNotFound(err) {
+		t.Fatalf("gone: %v", err)
+	}
+	nets, err := c.NetworkList(ctx, LabelNetwork+"=r9")
+	if err != nil || len(nets) != 1 || nets[0].ID != "n9" || nets[0].Labels[LabelGateway] != "gw" {
+		t.Fatalf("list: %+v %v", nets, err)
+	}
+	// Kill cleans up a run's leftover network, the gateway disconnected first.
+	b := NewBackend(c, quietLogger())
+	if err := b.Kill(ctx, "r9"); err != nil {
+		t.Fatalf("kill: %v", err)
 	}
 }

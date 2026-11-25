@@ -327,7 +327,7 @@ func TestServeConnections(t *testing.T) {
 		"NBSANDBOX_USERS_FILE": writeUsers(t, dir, 0o600), "NBSANDBOX_LISTEN": "127.0.0.1:0",
 		"NBSANDBOX_DOCKER_HOST":         "unix:///nonexistent/nbsandbox-test.sock",
 		"NBSANDBOX_CONNECTIONS_ENABLED": "true", "NBSANDBOX_CONNECTIONS_MASTER_KEY": masterKey,
-		"NBSANDBOX_CONNECTIONS_ALLOWED": "*.internal",
+		"NBSANDBOX_CONNECTIONS_ALLOWED": "*.internal", "NBSANDBOX_GATEWAY_KEY": masterKey,
 	})
 	req, _ := http.NewRequest(http.MethodPost, base+"/v1/connections", strings.NewReader(
 		`{"name":"crm","type":"postgresql","settings":{"host":"pg.internal","database":"crm","user":"ro"},"secret":{"value":"db-SECRET-pw"}}`))

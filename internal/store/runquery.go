@@ -34,6 +34,7 @@ type Run struct {
 	Token                                        int64  // the current lease's token (0 before the first claim)
 	LeaseUntil                                   time.Time
 	PackageKey                                   string // the package set it needs, "" if none
+	Environment                                  string // the space environment its names were read in, "" if none
 }
 
 // Terminal reports whether the run has finished.
@@ -41,7 +42,7 @@ func (r Run) Terminal() bool { return r.Status != "queued" && r.Status != "runni
 
 const runCols = "id, space_id, owner, notebook, parameters_json, status, error_kind, fault, message, dependency_warnings, " +
 	"created_at, started_at, finished_at, queue_seq, function, version, notebook_sha256, output_schema, output_mode, client_app, writes_space, " +
-	"cancelled_by, cancel_reason, output_bytes, worker, token, lease_until, package_key"
+	"cancelled_by, cancel_reason, output_bytes, worker, token, lease_until, package_key, environment"
 
 func scanRun(s interface{ Scan(...any) error }) (Run, error) {
 	var r Run
@@ -52,7 +53,7 @@ func scanRun(s interface{ Scan(...any) error }) (Run, error) {
 	err := s.Scan(&r.ID, &r.SpaceID, &r.Owner, &r.Notebook, &r.ParametersJSON, &r.Status, &r.ErrorKind,
 		&r.Fault, &r.Message, &r.DependencyWarnings, &created, &started, &finished, &r.QueueSeq,
 		&r.Function, &r.Version, &r.NotebookSHA256, &r.OutputSchema, &r.OutputMode, &r.ClientApp, &writes, &r.CancelledBy, &r.CancelReason, &r.OutputBytes,
-		&r.Worker, &r.Token, &lease, &r.PackageKey)
+		&r.Worker, &r.Token, &lease, &r.PackageKey, &r.Environment)
 	r.WritesSpace = writes != 0
 	if err != nil {
 		return Run{}, err
@@ -274,15 +275,21 @@ func (db *DB) submitRun(ctx context.Context, r NewRun, idem *Idempotency, ev *Ev
 	}
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO runs(id, space_id, owner, notebook, parameters_json, dependency_warnings, status, created_at,
-		                 function, version, notebook_sha256, output_schema, output_mode, client_app, writes_space, package_key)
-		VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		                 function, version, notebook_sha256, output_schema, output_mode, client_app, writes_space, package_key, environment)
+		VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		r.ID, r.SpaceID, r.Owner, r.Notebook, r.ParametersJSON, r.DependencyWarnings, r.CreatedAt.UnixMilli(),
-		r.Function, r.Version, r.NotebookSHA256, r.OutputSchema, modeOrSingle(r.OutputMode), r.ClientApp, boolInt(!r.ReadOnlySpace), r.PackageKey)
+		r.Function, r.Version, r.NotebookSHA256, r.OutputSchema, modeOrSingle(r.OutputMode), r.ClientApp, boolInt(!r.ReadOnlySpace), r.PackageKey, r.Environment)
 	if err != nil {
 		if uniqueViolation(err, "one_active_writer_per_space") {
 			return "", false, 0, ErrActiveRun
 		}
 		return "", false, 0, err
+	}
+	for name, id := range r.Connections {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO run_connections(run_id, name, connection_id) VALUES (?, ?, ?)",
+			r.ID, name, id); err != nil {
+			return "", false, 0, err
+		}
 	}
 	for _, f := range r.Files {
 		if _, err := tx.ExecContext(ctx, "INSERT INTO run_files(run_id, path, sha256, size) VALUES (?, ?, ?, ?)",

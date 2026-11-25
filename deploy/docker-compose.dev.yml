@@ -24,9 +24,9 @@ services:
       # Exactly the calls nbsandboxd needs; the proxy
       # anchors each pattern. Everything else gets 403.
       - -allowHEAD=(/v[0-9.]+)?/_ping
-      - -allowGET=(/v[0-9.]+)?/(_ping|version|info|containers/json|containers/[a-zA-Z0-9_.-]+/(json|logs|stats)|images/.+/json)
-      - -allowPOST=(/v[0-9.]+)?/containers/(create|[a-zA-Z0-9_.-]+/(start|stop|kill|wait|attach))
-      - -allowDELETE=(/v[0-9.]+)?/containers/[a-zA-Z0-9_.-]+
+      - -allowGET=(/v[0-9.]+)?/(_ping|version|info|containers/json|containers/[a-zA-Z0-9_.-]+/(json|logs|stats)|images/.+/json|networks)
+      - -allowPOST=(/v[0-9.]+)?/(containers/(create|[a-zA-Z0-9_.-]+/(start|stop|kill|wait|attach))|networks/(create|[a-zA-Z0-9_.-]+/(connect|disconnect)))
+      - -allowDELETE=(/v[0-9.]+)?/(containers|networks)/[a-zA-Z0-9_.-]+
       # Containers may only bind-mount folders under the spaces directory, and
       # under packages (package sets, read-only in runs, and their builds).
       - -allowbindmountfrom=${NBSANDBOX_DATA_DIR:?set NBSANDBOX_DATA_DIR}/spaces,${NBSANDBOX_DATA_DIR:?set NBSANDBOX_DATA_DIR}/packages
@@ -114,6 +114,13 @@ services:
       NBSANDBOX_PACKAGES_ENABLED: ${NBSANDBOX_PACKAGES_ENABLED:-false}
       NBSANDBOX_UI_LISTEN: 0.0.0.0:8090
       NBSANDBOX_UI_NO_LOGIN_BEYOND_LOOPBACK: "true"
+      # Connections (docs/plan-data-access.md): off unless set to true.
+      # Development keys; the allowed list says where connections may point.
+      NBSANDBOX_CONNECTIONS_ENABLED: ${NBSANDBOX_CONNECTIONS_ENABLED:-false}
+      NBSANDBOX_CONNECTIONS_MASTER_KEY: ZGV2LW9ubHktbWFzdGVyLWtleS0wMTIzNDU2Nzg5YWI=
+      NBSANDBOX_CONNECTIONS_ALLOWED: ${NBSANDBOX_CONNECTIONS_ALLOWED:-}
+      NBSANDBOX_GATEWAY_KEY: ZGV2LW9ubHktZ2F0ZXdheS1rZXktMDEyMzQ1Njc4OWE=
+      NBSANDBOX_FETCHER_IMAGE: ${NBSANDBOX_FETCHER_IMAGE:-nbsandbox-fetcher:dev}
     volumes:
       # Same absolute path inside and outside: Docker resolves run containers'
       # bind mounts on the host.
@@ -137,11 +144,36 @@ services:
     # cleanly before Docker kills nbsandboxd.
     stop_grace_period: 90s
 
+  gateway:
+    # The egress gateway (nbsandboxd gateway): the only way out for runs'
+    # fetchers, and only to the endpoints a run's token names. Alone on its
+    # own network, with nothing of nbsandbox's; nbsandboxd joins it to each
+    # reading run's private network. The fixed name is how fetchers find it
+    # (connections.gateway.address).
+    image: nbsandboxd:dev
+    pull_policy: never # the nbsandboxd service builds it
+    container_name: nbsandbox-gateway
+    command: ["gateway"]
+    user: "1000:1000"
+    environment:
+      NBSANDBOX_GATEWAY_KEY: ZGV2LW9ubHktZ2F0ZXdheS1rZXktMDEyMzQ1Njc4OWE=
+      NBSANDBOX_LOG_LEVEL: ${NBSANDBOX_LOG_LEVEL:-info}
+    networks: [egress]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      nbsandboxd: { condition: service_started }
+    restart: unless-stopped
+
 networks:
   # The Docker API is reachable only from nbsandboxd, never from run containers
   # (they have no network at all) or from outside.
   docker-api:
     internal: true
+  # The gateway's way out. The integration tests put their data sources here.
+  egress:
+    name: nbsandbox-dev-egress
 
 volumes:
   pgdata:

@@ -38,7 +38,7 @@ Before v1.0, a minor version may change behaviour; changes are listed in the cha
    - packages the Helm chart and pushes it to `oci://ghcr.io/azbyluthfan/charts`, signed with cosign;
    - builds the binaries with GoReleaser, with checksums, SBOMs and a signed checksum file;
    - creates the GitHub release with the changelog and **this commit's isolation report** attached.
-9. **Check the release:** verify the signatures (the same for `nbsandbox-runner`, `nbsandbox-runner-builder` and `charts/nbsandbox`):
+9. **Check the release:** verify the signatures (the same for `nbsandbox-runner`, `nbsandbox-runner-builder`, `nbsandbox-fetcher` and `charts/nbsandbox`):
    ```bash
    cosign verify ghcr.io/azbyluthfan/nbsandboxd:X.Y.Z \
      --certificate-identity-regexp 'https://github.com/azbyluthfan/nbsandbox/' \

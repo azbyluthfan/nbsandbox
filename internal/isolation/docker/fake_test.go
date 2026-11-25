@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -41,6 +42,15 @@ func (noContainers) ContainerList(context.Context, string) ([]ContainerSummary, 
 func (noContainers) ContainerAttach(context.Context, string) (Attached, error) {
 	return Attached{}, errors.New("not implemented")
 }
+func (noContainers) NetworkCreate(context.Context, string, map[string]string) (string, error) {
+	return "", errors.New("not implemented")
+}
+func (noContainers) NetworkConnect(context.Context, string, string) error    { return nil }
+func (noContainers) NetworkDisconnect(context.Context, string, string) error { return nil }
+func (noContainers) NetworkRemove(context.Context, string) error             { return nil }
+func (noContainers) NetworkList(context.Context, string) ([]NetworkSummary, error) {
+	return nil, nil
+}
 
 // fakeDocker scripts one container's life for backend tests.
 type fakeDocker struct {
@@ -55,6 +65,13 @@ type fakeDocker struct {
 	stopExits           bool // a stop makes the container exit with 143
 	attach              func(id string) (Attached, error)
 	containers          []ContainerSummary
+	fetchers            []ContainerSummary // listed for LabelFetcher
+	networks            []NetworkSummary
+	fetcherLogs         []byte // the fetcher container's output
+	fetcherCreated      struct {
+		cfg  *container.Config
+		host *container.HostConfig
+	}
 
 	calls         []string
 	cancelledCtxs []string // calls made with an already-cancelled context
@@ -89,7 +106,16 @@ func (f *fakeDocker) ImageInspect(ctx context.Context, _ string) (Image, error) 
 }
 func (f *fakeDocker) Close() error { return nil }
 
+// fetcherID is the id the fake gives a fetcher container: calls on it are
+// recorded as "fetcher-<call>".
+const fetcherID = "fid456"
+
 func (f *fakeDocker) ContainerCreate(ctx context.Context, name string, cfg *container.Config, host *container.HostConfig) (string, error) {
+	if strings.HasPrefix(name, "nbsandbox-fetch-") {
+		f.record(ctx, "fetcher-create")
+		f.fetcherCreated.cfg, f.fetcherCreated.host = cfg, host
+		return fetcherID, nil
+	}
 	f.record(ctx, "create")
 	f.created.name, f.created.cfg, f.created.host = name, cfg, host
 	if f.createErr != nil {
@@ -98,7 +124,11 @@ func (f *fakeDocker) ContainerCreate(ctx context.Context, name string, cfg *cont
 	return "cid123", nil
 }
 
-func (f *fakeDocker) ContainerStart(ctx context.Context, _ string) error {
+func (f *fakeDocker) ContainerStart(ctx context.Context, id string) error {
+	if id == fetcherID {
+		f.record(ctx, "fetcher-start")
+		return nil
+	}
 	f.record(ctx, "start")
 	return f.startErr
 }
@@ -120,7 +150,11 @@ func (f *fakeDocker) ContainerWait(ctx context.Context, _ string) (<-chan contai
 	return res, errc
 }
 
-func (f *fakeDocker) ContainerLogs(ctx context.Context, _ string) (io.ReadCloser, error) {
+func (f *fakeDocker) ContainerLogs(ctx context.Context, id string) (io.ReadCloser, error) {
+	if id == fetcherID {
+		f.record(ctx, "fetcher-logs")
+		return io.NopCloser(bytes.NewReader(f.fetcherLogs)), nil
+	}
 	f.record(ctx, "logs")
 	return io.NopCloser(bytes.NewReader(f.logs)), nil
 }
@@ -146,14 +180,51 @@ func (f *fakeDocker) ContainerInspect(ctx context.Context, _ string) (ContainerS
 	return f.inspect, f.inspectErr
 }
 
-func (f *fakeDocker) ContainerRemove(ctx context.Context, _ string) error {
+func (f *fakeDocker) ContainerRemove(ctx context.Context, id string) error {
+	if id == fetcherID || strings.HasPrefix(id, "nbsandbox-fetch-") {
+		f.record(ctx, "fetcher-remove")
+		return nil
+	}
 	f.record(ctx, "remove")
 	return nil
 }
 
-func (f *fakeDocker) ContainerList(ctx context.Context, _ string) ([]ContainerSummary, error) {
+func (f *fakeDocker) ContainerList(ctx context.Context, label string) ([]ContainerSummary, error) {
+	if label == LabelFetcher {
+		f.record(ctx, "list-fetchers")
+		return f.fetchers, nil
+	}
 	f.record(ctx, "list")
 	return f.containers, nil
+}
+
+func (f *fakeDocker) NetworkCreate(ctx context.Context, name string, _ map[string]string) (string, error) {
+	f.record(ctx, "network-create "+name)
+	return "nid", nil
+}
+func (f *fakeDocker) NetworkConnect(ctx context.Context, network, ctr string) error {
+	f.record(ctx, "network-connect "+network+" "+ctr)
+	return nil
+}
+func (f *fakeDocker) NetworkDisconnect(ctx context.Context, network, ctr string) error {
+	f.record(ctx, "network-disconnect "+network+" "+ctr)
+	return nil
+}
+func (f *fakeDocker) NetworkRemove(ctx context.Context, network string) error {
+	f.record(ctx, "network-remove "+network)
+	return nil
+}
+func (f *fakeDocker) NetworkList(ctx context.Context, label string) ([]NetworkSummary, error) {
+	f.record(ctx, "network-list "+label)
+	var out []NetworkSummary
+	for _, n := range f.networks {
+		if k, v, ok := strings.Cut(label, "="); !ok || n.Labels[k] == v {
+			if _, has := n.Labels[k]; has {
+				out = append(out, n)
+			}
+		}
+	}
+	return out, nil
 }
 
 func (f *fakeDocker) ContainerAttach(ctx context.Context, id string) (Attached, error) {
