@@ -621,3 +621,19 @@ pre.text code.hl { white-space: pre-wrap; }
 .packages-card pre.log { max-height: 260px; overflow: auto; white-space: pre-wrap; font-size: 12px; margin: 6px 0 0; }
 .packages-card .error-text { color: var(--bad); }
 .packages-card button { justify-self: start; }
+
+/* Connections (connections.js) */
+dialog.connection-dialog {
+  width: min(520px, calc(100vw - 32px)); border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); color: var(--text); padding: 20px; box-shadow: var(--shadow-lg);
+}
+dialog.connection-dialog::backdrop { background: rgba(10, 12, 16, .45); }
+dialog.connection-dialog h2 { font-size: 17px; margin-bottom: 10px; }
+dialog.connection-dialog label { display: grid; gap: 4px; margin: 8px 0; color: var(--muted); font-size: 13px; }
+dialog.connection-dialog input, dialog.connection-dialog select { width: 100%; }
+dialog.connection-dialog .actions { display: flex; gap: 8px; margin-top: 14px; }
+.env-picker { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+table.bindings select { min-width: 160px; }
+table.bindings th label { display: inline-flex; gap: 4px; align-items: center; }
+.space-connections .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+table.connections td { vertical-align: middle; }

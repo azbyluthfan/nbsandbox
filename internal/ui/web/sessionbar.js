@@ -8,6 +8,7 @@
 
 import { el, clear, toast, icon } from "./dom.js";
 import { KernelSession } from "./session.js";
+import { chosenEnvironment } from "./connections.js";
 
 const KERNEL_TEXT = {
   idle: "Idle",
@@ -79,6 +80,7 @@ export function sessionBar(ctx) {
     if (!starting) {
       starting = (async () => {
         try {
+          k.environment = chosenEnvironment(ctx.space); // the space's environment picker
           await k.start();
         } catch (e) {
           k.setState({ status: "none" });

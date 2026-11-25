@@ -26,6 +26,7 @@ import { openFilePage } from "./filepage.js";
 import { showFunction, publishDialog } from "./functions.js";
 import { loadCompletions } from "./complete.js";
 import { sessionBar } from "./sessionbar.js";
+import { connectionsOn, showConnections, spaceConnectionsSection, environmentPicker, chosenEnvironment } from "./connections.js";
 
 const $ = (id) => document.getElementById(id);
 const NEW_SPACE = "__new__";
@@ -119,6 +120,7 @@ async function route() {
     await reload();
   } else renderChrome();
 
+  if (h.space === "~connections" && state.connectionsOn) return showConnections(state.api, newPage());
   if (!space) return showSpaces();
   if (h.kind === "f" && h.target) return openFile(h.target);
   if (h.kind === "d" && h.target) return openFolder(h.target);
@@ -149,6 +151,7 @@ async function selectUser(user) {
     toast(e.message);
   }
   state.space = "";
+  state.connectionsOn = await connectionsOn(state.api);
   renderSpaceSelect();
   checkRuntime();
 }
@@ -547,7 +550,7 @@ async function deleteItem(path, isFolder, stay = false) {
 async function startRun(path, parameters, readOnly, button) {
   if (button) button.disabled = true;
   try {
-    const run = await state.api.startRun(state.space, path, parameters, readOnly);
+    const run = await state.api.startRun(state.space, path, parameters, readOnly, state.connectionsOn ? chosenEnvironment(state.space) : "");
     await reload();
     go(state.user, state.space, "r", run.id);
   } catch (e) {
@@ -584,6 +587,10 @@ function showSpaces() {
         el("span", { class: "muted" }, `created ${timeAgo(s.created_at)}`))),
       el("button", { type: "button", class: "card space-card new", onclick: createSpace }, icon("plus"), "New space"),
     )),
+    state.connectionsOn ? el("div", { class: "section" }, el("button", { type: "button", class: "card space-card",
+      onclick: () => go(state.user, "~connections") },
+    el("span", { class: "title" }, icon("table"), "Connections"),
+    el("span", { class: "muted" }, "your databases and object storage, for notebooks to query"))) : null,
   );
 }
 
@@ -761,6 +768,7 @@ function showOverview() {
   }
   page.append(nbSection);
   page.append(packagesSection(state.space));
+  if (state.connectionsOn) page.append(spaceConnectionsSection(state.api, state.space, () => go(state.user, "~connections")));
 
   if (state.runs.length) {
     const recent = state.runs.slice(0, 6);
@@ -868,6 +876,7 @@ function runForm(path) {
   const last = lastRunOf(path);
   return el("div", { class: "run-form" }, button, params,
     el("label", { title: "The run can't change the space's files, and may run beside other runs" }, readOnly, "Read-only"),
+    state.connectionsOn ? environmentPicker(state.api, state.space) : null,
     last ? el("button", { type: "button", class: "ghost small", title: "Open the last run", onclick: () => go(state.user, state.space, "r", last.id) },
       "Last run", badge(last.status)) : null);
 }

@@ -8,6 +8,7 @@
 import { ApiError } from "./api.js";
 import { el, clear, toast, badge, timeAgo, formatBytes, icon } from "./dom.js";
 import { codeBlock } from "./viewers.js";
+import { chosenEnvironment, environmentPicker } from "./connections.js";
 
 const SIMPLE = new Set(["string", "number", "integer", "boolean"]);
 
@@ -175,7 +176,11 @@ export function showFunction(main, state, name, { openRun, deleted }) {
       }
       go.disabled = true;
       try {
-        const run = await api.invoke(space, name, Number(versionSel.value), params);
+        // The environment, for a version that reads connections.
+        const ver = Number(versionSel.value) || fn.latest_version;
+        const v = fn.versions.find((x) => x.version === ver);
+        const env = v && v.connections && Object.keys(v.connections).length ? chosenEnvironment(space) : "";
+        const run = await api.invoke(space, name, Number(versionSel.value), params, env);
         follow(run, result);
       } catch (e) {
         if (e instanceof ApiError && e.body && e.body.error && e.body.error.problems) {
@@ -187,7 +192,9 @@ export function showFunction(main, state, name, { openRun, deleted }) {
       }
     });
     return el("div", {}, grid, rawBox,
-      el("div", { class: "actions" }, go, versionSel, el("span", { class: "spacer" }), el("label", { class: "muted" }, useRaw, " Edit as JSON")));
+      el("div", { class: "actions" }, go, versionSel,
+        fn.versions.some((x) => x.connections && Object.keys(x.connections).length) ? environmentPicker(api, space) : null,
+        el("span", { class: "spacer" }), el("label", { class: "muted" }, useRaw, " Edit as JSON")));
   }
 
   // Watches a call through its status stream until the result.
