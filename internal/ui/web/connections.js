@@ -234,13 +234,20 @@ export function spaceConnectionsSection(api, space, onConnections) {
   let model; // {default, envs: [names], names: [names], cells: {env: {name: connId}}}
   let conns = [];
   const draw = () => {
-    const opts = (env, name) => el("select", { "aria-label": `${name} in ${env}`, onchange: (e) => { model.cells[env][name] = e.target.value; } },
+    const opts = (env, name) => el("select", { "aria-label": `${name} in ${env}`, onchange: (e) => { model.cells[env][name] = e.target.value; draw(); } },
       el("option", { value: "" }, "—"),
       conns.map((c) => el("option", { value: c.id, selected: model.cells[env][name] === c.id }, `${c.name} (${(TYPES[c.type] || { label: c.type }).label})`)));
+    // Rows are names, columns environments: say so, and show the
+    // environments as the lowercase names they are (the table's headings
+    // are uppercase), with which one is the default.
     const table = el("table", { class: "list bindings" },
-      el("thead", {}, el("tr", {}, el("th", {}, "Name"), model.envs.map((env) => el("th", {},
-        el("label", { title: "The default environment" }, el("input", { type: "radio", name: "default-env", checked: env === model.default,
-          onchange: () => { model.default = env; } }), env),
+      el("thead", {},
+        el("tr", {}, el("th", {}), el("th", { colspan: model.envs.length, class: "group" }, "Environments"), el("th", {})),
+        el("tr", {}, el("th", {}, "Name"), model.envs.map((env) => el("th", { class: "env" },
+        el("label", { title: "Runs, sessions and function calls use the default environment unless they choose another" },
+          el("input", { type: "radio", name: "default-env", checked: env === model.default,
+            onchange: () => { model.default = env; draw(); } }),
+          el("code", {}, env), env === model.default ? el("span", { class: "default-env" }, "default") : null),
         el("button", { type: "button", class: "ghost small", title: `Remove ${env}`, onclick: () => {
           model.envs = model.envs.filter((e) => e !== env);
           delete model.cells[env];
@@ -266,7 +273,12 @@ export function spaceConnectionsSection(api, space, onConnections) {
       }
       draw();
     };
-    const save = el("button", { type: "button" }, icon("save"), "Save");
+    // Every environment binds every name: Save once each cell has a
+    // connection (the server refuses less), saying what's missing. An empty
+    // table saves too: it unbinds everything.
+    const missing = model.envs.flatMap((env) => model.names.filter((n) => !model.cells[env][n]).map((n) => `${n} in ${env}`));
+    const why = !conns.length ? "" : missing.length ? `Choose a connection for ${missing.slice(0, 3).join(", ")}${missing.length > 3 ? ", …" : ""}.` : "";
+    const save = el("button", { type: "button", disabled: missing.length > 0 || (!conns.length && model.names.length > 0) }, icon("save"), "Save");
     save.addEventListener("click", async () => {
       const environments = {};
       for (const env of model.envs) environments[env] = { ...model.cells[env] };
@@ -285,13 +297,16 @@ export function spaceConnectionsSection(api, space, onConnections) {
       el("div", { class: "section-head" }, el("h2", {}, "Connections"),
         el("span", { class: "muted" }, "names notebooks query, per environment")),
       el("div", { class: "card" },
-        model.names.length && model.envs.length ? table : el("p", { class: "muted" },
-          "Add a name (crm, lake) and an environment (dev, prod), then choose which of your connections each name means there."),
+        conns.length ? null : el("div", { class: "notice" },
+          el("span", {}, "You have no connections yet. Add one (a database or a bucket), then choose it here."),
+          el("button", { type: "button", onclick: onConnections }, icon("plus"), "Add a connection")),
+        model.names.length && model.envs.length ? el("div", { class: "scroll-x" }, table) : el("p", { class: "muted" },
+          "Add a name notebooks query (crm, lake) and an environment (dev, prod), then choose which of your connections each name means there."),
         el("div", { class: "actions" },
           el("button", { type: "button", class: "ghost", onclick: () => add("name") }, icon("plus"), "Name"),
           el("button", { type: "button", class: "ghost", onclick: () => add("env") }, icon("plus"), "Environment"),
           save,
-          conns.length ? null : el("button", { type: "button", class: "ghost", onclick: onConnections }, "Add a connection first"))));
+          why ? el("span", { class: "muted small" }, why) : null)));
   };
   const load = async () => {
     try {

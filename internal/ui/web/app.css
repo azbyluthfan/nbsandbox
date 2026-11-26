@@ -656,6 +656,14 @@ dialog.connection-dialog input, dialog.connection-dialog select { width: 100%; }
 dialog.connection-dialog .actions { display: flex; gap: 8px; margin-top: 14px; }
 .env-picker { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
 table.bindings select { min-width: 160px; }
-table.bindings th label { display: inline-flex; gap: 4px; align-items: center; }
+table.bindings th label { display: inline-flex; gap: 6px; align-items: center; }
+.space-connections .scroll-x { overflow-x: auto; }
+table.bindings th.env { text-transform: none; letter-spacing: 0; }
+table.bindings tr:first-child th { border-bottom: 0; padding-bottom: 0; }
+table.bindings th.group { border-bottom: 1px solid var(--border); }
+table.bindings th.env code { font-size: 13px; color: var(--text); }
+.default-env { font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 1px 8px; }
+.space-connections .notice { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  background: var(--info-soft); color: var(--text); border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 12px; }
 .space-connections .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 table.connections td { vertical-align: middle; }
