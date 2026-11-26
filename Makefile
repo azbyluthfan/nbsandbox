@@ -318,6 +318,9 @@ endif
 	$(KUBECTL) apply --server-side --force-conflicts -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v$(METRICS_SERVER_VERSION)/components.yaml >/dev/null
 	@$(KUBECTL) -n kube-system get deploy metrics-server -o jsonpath='{.spec.template.spec.containers[0].args}' | grep -q kubelet-insecure-tls || \
 		$(KUBECTL) -n kube-system patch deployment metrics-server --type=json -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+	@# Free the space of images no Pod uses (earlier loads' copies; Docker Desktop's disk fills up),
+	@# before loading this build's: the runner's and fetcher's are only used once a run starts.
+	-@docker exec $(KIND_NODE) crictl rmi --prune >/dev/null 2>&1
 	$(KIND) load docker-image nbsandboxd:dev nbsandbox-runner:dev nbsandbox-fetcher:dev --name $(KIND_NAME)
 	$(KUBECTL) apply -f - < $(KIND_DIR)/deps.yaml
 	$(KUBECTL) -n nbsandbox delete secret nbsandbox-users --ignore-not-found
@@ -357,6 +360,14 @@ test-k8s-conformance: k8s-up ## The backend conformance suite against the local 
 test-k8s: k8s-up ## Integration tests through the local Kubernetes stack (K8S_CNI=cilium|calico)
 	$(K8S_TEST_ENV) $(GO) test -tags integration -count=1 -timeout 40m $(TESTFLAGS) ./tests/integration/; \
 		status=$$?; docker rm -fv $(TEST_SOURCES) >/dev/null 2>&1; exit $$status
+
+# The Helm upgrade test: the newest release's chart and published image on
+# kind, then this checkout's chart upgrading it in place (docs/releasing.md).
+.PHONY: test-helm-upgrade
+test-helm-upgrade: k8s-cluster ## Helm upgrade from UPGRADE_FROM's chart to this checkout's, on kind; checks the data survives (resets the kind stack's database)
+	KIND_NODE=$(KIND_NODE) KIND_CONFIG=$(KIND_CONFIG) KIND_DIR=$(CURDIR)/$(KIND_DIR) \
+		HELM="$(HELM)" GO=$(GO) FROM=$(UPGRADE_FROM) TESTFLAGS="$(TESTFLAGS)" \
+		RUN_MEMORY=512MiB RUN_CPUS=0.5 HELM_SET="--set runs.runtimeClass=$(K8S_RUNTIME_CLASS) --set runs.memory=512MiB --set runs.cpus=0.5" scripts/helm-upgrade-test.sh
 
 # Connections with their secrets in Vault: OpenBao (development mode) in the
 # kind cluster, configured as an operator would, and the connection tests

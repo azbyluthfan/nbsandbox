@@ -47,7 +47,13 @@ type upgradeRun struct {
 // schemaVersions lists the migrations the upgrade stack's database has applied.
 func schemaVersions(t *testing.T) []int {
 	t.Helper()
-	out := docker(t, "exec", "nbsandbox-upgrade-postgres-1", "psql", "-U", "nbsandbox", "-d", "nbsandbox", "-tAc", "SELECT version FROM schema_version ORDER BY version")
+	q := []string{"psql", "-U", "nbsandbox", "-d", "nbsandbox", "-tAc", "SELECT version FROM schema_version ORDER BY version"}
+	var out string
+	if onKubernetes { // make test-helm-upgrade: the kind stack's PostgreSQL
+		out = kubectl(t, append([]string{"-n", "nbsandbox", "exec", "deploy/postgres", "--"}, q...)...)
+	} else {
+		out = docker(t, append([]string{"exec", "nbsandbox-upgrade-postgres-1"}, q...)...)
+	}
 	var v []int
 	for _, f := range strings.Fields(out) {
 		n, err := strconv.Atoi(f)
@@ -184,7 +190,8 @@ func upgradeBefore(t *testing.T) upgradeState {
 	st.BobSpace = keptSpace(t, "bob", "upgrade-bob")
 
 	// Runs active when nbsandboxd stops: two long ones take the run slots
-	// (2 in the dev stack), a quick one waits behind them.
+	// (2 in the dev stack, 2 workers of one on kind), a quick one waits
+	// behind them.
 	for i, nb := range []string{"long", "long", "quick"} {
 		sp := keptSpace(t, "alice", fmt.Sprintf("upgrade-active-%d", i))
 		content := upgradeLong
@@ -306,7 +313,7 @@ func upgradeAfter(t *testing.T, st upgradeState) {
 	// What the new migrations added works on the old spaces: a connection,
 	// bound to one and unbound again.
 	r := jsonCall(t, "POST", "/v1/connections", "alice", map[string]any{"name": "upgrade-crm", "type": "postgresql",
-		"settings": map[string]any{"host": "db.example.com", "database": "crm", "user": "reader"}, "secret": map[string]any{"value": "x-upgrade"}}, nil)
+		"settings": map[string]any{"host": upgradeConnHost(), "database": "crm", "user": "reader"}, "secret": map[string]any{"value": "x-upgrade"}}, nil)
 	if r.Code != http.StatusCreated {
 		problems = append(problems, fmt.Sprintf("create a connection: %d %s", r.Code, r.Body))
 	} else {
@@ -332,4 +339,13 @@ func upgradeAfter(t *testing.T, st upgradeState) {
 		t.Error(got)
 	}
 	assertNoRunContainers(t)
+}
+
+// upgradeConnHost is a host connections may point to: what each stack's
+// connections.allowed lists.
+func upgradeConnHost() string {
+	if onKubernetes {
+		return "nbsandbox-src-pg"
+	}
+	return "db.example.com"
 }

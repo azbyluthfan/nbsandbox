@@ -18,6 +18,7 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 
 ### Fixed
 
+- **Interactive sessions on Kubernetes ended at every upgrade:** a session belongs to the worker that holds it, and a rolling upgrade (or a crashed Pod, a drained node) replaces worker Pods with new ones, which left it alone; it ended as interrupted two minutes later, though its Pod and kernel were still running. Now a worker that can reach a gone worker's sessions takes them over within seconds (on Kubernetes any worker, on Docker one on the same host), and clients reconnect. Found by the new Helm upgrade test.
 - **Signing in to the web UI with a user name and password failed in every browser** ("Sign in from the web UI's own page"): the UI's pages said `Referrer-Policy: no-referrer`, under which a browser sends `Origin: null` with its own form posts and requests, and the sign-in checks that the origin is the UI's. The pages now say `same-origin`: the UI's own origin goes with its requests, and still nothing goes to other sites. The tests had set the origin themselves; a browser now checks it.
 - **An interrupted session cell could leave its client waiting for good:** an interrupt that reached the kernel just as a cell started (after it said `execute_input`, before the cell's code) was caught by ipykernel itself, and the cell ended without an `execute_reply`. About 1 interrupt in 250 under load. The session bridge now sends that reply (`KeyboardInterrupt`) when the kernel doesn't within 2 seconds.
 

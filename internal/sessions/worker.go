@@ -243,6 +243,7 @@ func (m *Manager) housekeep(ctx context.Context) {
 		for _, c := range list {
 			running[c.SessionID] = c.Running
 		}
+		m.adoptOrphans(ctx, list)
 	} else {
 		running = nil
 	}
@@ -261,7 +262,13 @@ func (m *Manager) housekeep(ctx context.Context) {
 		case !q.IsZero() && now.Sub(q) >= m.cfg.Idle:
 			l.end(ctx, fmt.Sprintf("idle for %s (no cell running, nobody connected)", m.cfg.Idle), "")
 		default:
-			if s, err := m.d.DB.GetSession(ctx, l.s.ID); errors.Is(err, store.ErrNotFound) || (err == nil && !s.Open()) {
+			if s, err := m.d.DB.GetSession(ctx, l.s.ID); err == nil && s.Open() && m.cfg.Shared && s.Worker != m.cfg.WorkerID {
+				// Another worker took it over (this one missed its
+				// heartbeats for a while): let go without ending it.
+				m.d.Log.Warn("another worker took over a session held here; letting go", "session_id", l.s.ID, "worker", s.Worker)
+				l.detach()
+				m.forget(l.s.ID)
+			} else if errors.Is(err, store.ErrNotFound) || (err == nil && !s.Open()) {
 				reason, by := "the space was deleted", ""
 				if err == nil {
 					reason, by = s.EndReason, s.EndedBy
@@ -349,27 +356,16 @@ func (m *Manager) reconcile(ctx context.Context) error {
 			if others[s.Worker] {
 				continue // another worker on this Docker holds it
 			}
-			if s, err = m.d.DB.AdoptSession(ctx, s.ID, m.cfg.WorkerID); err != nil {
+			if s, err = m.d.DB.AdoptSession(ctx, s.ID, s.Worker, m.cfg.WorkerID); err != nil {
 				continue
 			}
 		}
 		if s.Status != store.SessionReady || !c.Running {
 			continue // ends below, as a session whose container is gone
 		}
-		conn, err := m.d.Backend.AttachSession(ctx, s.ID)
-		if err != nil {
-			log.Warn("re-attach a session", "error", err)
-			continue
+		if m.holdAgain(ctx, s) {
+			held[s.ID] = true
 		}
-		l := newLive(m, s, conn)
-		l.kernel = KernelIdle
-		m.mu.Lock()
-		m.live[s.ID] = l
-		m.mu.Unlock()
-		held[s.ID] = true
-		go m.hold(context.WithoutCancel(ctx), l, nil)
-		_ = l.control("kernel_info_request", nil)
-		log.Info("session re-attached")
 	}
 	// This worker's sessions; a single process's are every claimed one,
 	// whatever worker ID they were recorded under.
@@ -400,6 +396,74 @@ func (m *Manager) reconcile(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// holdAgain attaches to a ready session's running container and holds it:
+// one this worker held before it restarted, or one it took over.
+func (m *Manager) holdAgain(ctx context.Context, s store.Session) bool {
+	log := m.d.Log.With("session_id", s.ID)
+	conn, err := m.d.Backend.AttachSession(ctx, s.ID)
+	if err != nil {
+		log.Warn("re-attach a session", "error", err)
+		return false
+	}
+	l := newLive(m, s, conn)
+	l.kernel = KernelIdle
+	m.mu.Lock()
+	m.live[s.ID] = l
+	m.mu.Unlock()
+	go m.hold(context.WithoutCancel(ctx), l, nil)
+	_ = l.control("kernel_info_request", nil)
+	log.Info("session re-attached", "worker", s.Worker)
+	return true
+}
+
+// adoptOrphans takes over the sessions whose containers still run where
+// this worker can reach them but whose worker is gone: replaced in a
+// rolling upgrade (a new Pod, a new name), or crashed. Their kernels kept
+// running, so they carry on here, within sessions.per_worker. Workers
+// started while the old one was still alive leave its sessions alone at
+// start (reconcile), so this runs on every housekeeping pass, not only
+// then. Two workers can't both take one (AdoptSession checks the previous
+// owner).
+func (m *Manager) adoptOrphans(ctx context.Context, containers []isolation.SessionInfo) {
+	if !m.cfg.Shared || m.d.Draining() {
+		return
+	}
+	var others map[string]bool
+	for _, c := range containers {
+		if !c.Running {
+			continue
+		}
+		m.mu.Lock()
+		_, mine := m.live[c.SessionID]
+		full := m.cfg.PerWorker > 0 && len(m.live) >= m.cfg.PerWorker
+		m.mu.Unlock()
+		if mine {
+			continue
+		}
+		if full {
+			return
+		}
+		s, err := m.d.DB.GetSession(ctx, c.SessionID)
+		if err != nil || !s.Open() || s.Status != store.SessionReady || s.Worker == "" || s.Worker == m.cfg.WorkerID {
+			continue
+		}
+		if others == nil {
+			if others, err = m.liveWorkers(ctx); err != nil {
+				return
+			}
+		}
+		if others[s.Worker] {
+			continue // its worker is alive and holds it
+		}
+		from := s.Worker
+		if s, err = m.d.DB.AdoptSession(ctx, s.ID, from, m.cfg.WorkerID); err != nil {
+			continue // ended, or another worker took it first
+		}
+		m.d.Log.Info("took over a session whose worker is gone", "session_id", s.ID, "from", from)
+		m.holdAgain(ctx, s)
+	}
 }
 
 // liveWorkers are the other workers that may hold sessions on this Docker

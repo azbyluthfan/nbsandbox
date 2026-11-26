@@ -163,12 +163,13 @@ func (db *DB) ClaimSession(ctx context.Context, worker string, perWorker int) (S
 	return s, err == nil, err
 }
 
-// AdoptSession gives an open session to worker (its container is on that
-// worker's Docker: the worker restarted under another ID, or the one that
-// held it is gone). It returns the session, or ErrNotFound if it has ended.
-func (db *DB) AdoptSession(ctx context.Context, id, worker string) (Session, error) {
-	s, err := scanSession(db.w.QueryRowContext(ctx, "UPDATE sessions SET worker = ? WHERE id = ? AND status <> 'ended' RETURNING "+sessionCols,
-		worker, id))
+// AdoptSession gives an open session from worker `from` to `to` (its
+// container is where `to` can reach it: `to` restarted under another ID, or
+// `from` is gone). It returns the session, or ErrNotFound if it has ended or
+// is no longer from's (another worker took it first).
+func (db *DB) AdoptSession(ctx context.Context, id, from, to string) (Session, error) {
+	s, err := scanSession(db.w.QueryRowContext(ctx, "UPDATE sessions SET worker = ? WHERE id = ? AND worker = ? AND status <> 'ended' RETURNING "+sessionCols,
+		to, id, from))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Session{}, ErrNotFound
 	}

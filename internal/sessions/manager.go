@@ -65,7 +65,7 @@ type DB interface {
 	MarkSessionReady(ctx context.Context, id string) (bool, error)
 	EndSession(ctx context.Context, id, reason, by string, at time.Time) (bool, error)
 	GetSession(ctx context.Context, id string) (store.Session, error)
-	AdoptSession(ctx context.Context, id, worker string) (store.Session, error)
+	AdoptSession(ctx context.Context, id, from, to string) (store.Session, error)
 	OpenSessions(ctx context.Context, f store.SessionFilter) ([]store.Session, error)
 	DeleteEndedSessionsBefore(ctx context.Context, t time.Time) (int64, error)
 	Notify(ctx context.Context, channel, payload string) error
