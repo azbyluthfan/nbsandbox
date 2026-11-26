@@ -184,12 +184,20 @@ def compute(page):
     """Connections (when they're on) and the compute view: the workers, and
     a run's usage charts while the compute demo runs."""
     # 16. The user's connections; 17. the space's names for them.
+    conn_space = os.environ.get("TOUR_CONN_SPACE", "")
     page.goto(f"{BASE}/#/{USER}/~connections")
-    if page.get_by_text("crm-prod").first.is_visible(timeout=10_000):
+    listed = False
+    if conn_space:
+        try:
+            page.get_by_text("crm-prod").first.wait_for(timeout=15_000)
+            listed = True
+        except Exception:
+            pass
+    if listed:
         shot(page, "16-connections")
-        page.goto(f"{BASE}/#/{USER}/{SPACE}")
+        page.goto(f"{BASE}/#/{USER}/{conn_space}")
         section = page.locator(".space-connections")
-        expect(section.get_by_text("Environments")).to_be_visible(timeout=15_000)
+        expect(section.locator("th.group")).to_be_visible(timeout=15_000)
         section.scroll_into_view_if_needed()
         shot(page, "17-space-connections")
     else:
