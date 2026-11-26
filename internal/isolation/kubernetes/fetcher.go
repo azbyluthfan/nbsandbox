@@ -287,8 +287,20 @@ func (b *Backend) startFetcher(ctx context.Context, spec isolation.RunSpec, kind
 func (b *Backend) fetcherReady(ctx context.Context, name string, out isolation.LineSink) (string, error) {
 	wctx, cancel := context.WithTimeout(ctx, fetcherStartTimeout)
 	defer cancel()
+	var checked time.Time
 	if err := b.waitFor(wctx, name, func(p *corev1.Pod) (bool, error) {
-		return started(p, fetcherContainer) && p.Status.PodIP != "", podFailed(p)
+		if started(p, fetcherContainer) && p.Status.PodIP != "" {
+			return true, nil
+		}
+		if err := podFailed(p); err != nil {
+			return false, err
+		}
+		// Scheduled but not started: a Secret it mounts may be gone.
+		if p.Spec.NodeName != "" && time.Since(checked) >= mountCheckEvery {
+			checked = time.Now()
+			return false, b.mountFailed(wctx, name)
+		}
+		return false, nil
 	}); err != nil {
 		if wctx.Err() != nil && ctx.Err() == nil {
 			return "", errors.New("the fetcher didn't start in time")
@@ -324,6 +336,31 @@ func (b *Backend) fetcherReady(ctx context.Context, name string, out isolation.L
 		return "", errors.New("the fetcher stopped before it served")
 	}
 	return "", fmt.Errorf("the fetcher stopped before it served: %s", strings.Join(last, " | "))
+}
+
+// mountCheckEvery is how often a fetcher that doesn't start is checked
+// for a Secret it can't mount.
+const mountCheckEvery = 2 * time.Second
+
+// mountFailed reports a fetcher Pod whose Secrets can't be mounted: a
+// referenced Secret deleted or without its key after its connection was
+// made. The kubelet would retry until the start timeout; the Pod's events
+// say so within seconds, without reading the Secret.
+func (b *Backend) mountFailed(ctx context.Context, name string) error {
+	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	evs, err := b.client.CoreV1().Events(b.cfg.Namespace).List(cctx, metav1.ListOptions{
+		FieldSelector: "involvedObject.kind=Pod,involvedObject.name=" + name + ",reason=FailedMount"})
+	if err != nil {
+		return nil // only a faster failure; the start timeout still applies
+	}
+	for _, e := range evs.Items {
+		if e.InvolvedObject.Name == name && e.Reason == "FailedMount" &&
+			(strings.Contains(e.Message, "not found") || strings.Contains(e.Message, "couldn't find key")) {
+			return fmt.Errorf("a connection's secret can't be mounted (deleted, or without its key, since the connection was made): %s", e.Message)
+		}
+	}
+	return nil
 }
 
 // killFetcher removes a run's fetcher Pod, its configuration Secret and

@@ -82,6 +82,7 @@ func runIsolation(ctx context.Context, e *Env, c *Check) ([]report.Finding, erro
 	if targets == nil {
 		targets = []string{}
 	}
+	probeStart := time.Now()
 	run, err := e.Client.StartRun(ctx, e.A, spA, "isolation_probe.ipynb", map[string]any{
 		"space_a_id": spA, "space_b_id": spB, "space_b_host_path": hostPath, "data_dir": e.DataDir,
 		"canary_a": canaryA, "canary_b": canaryB, "mem_a": memA, "mem_b": memB, "shm_a": shmA, "shm_b": shmB,
@@ -103,7 +104,9 @@ func runIsolation(ctx context.Context, e *Env, c *Check) ([]report.Finding, erro
 		return nil, fmt.Errorf("the holder's status after the probe: %w", err)
 	}
 	if h.Status != "running" {
-		return nil, fmt.Errorf("the holder was not running during the probe: %s", h.Status)
+		log, _ := e.Client.Log(ctx, e.A, spA, run.ID)
+		return nil, fmt.Errorf("the holder was not running during the probe: %s (it holds for %s; the probe took %s)\n%s",
+			h.Status, holdFor, time.Since(probeStart).Round(time.Second), tail(log, 2000))
 	}
 
 	r, err := apiclient.Expect(e.Client.Do(ctx, e.A, "GET", "/v1/spaces/"+spA+"/runs/"+run.ID+"/artifacts/findings.json", nil, nil))(http.StatusOK, "the probe's findings")

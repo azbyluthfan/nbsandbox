@@ -81,7 +81,7 @@ var Sections = []Section{
 		"connections-tls_pg_system", "connections-tls_pg_otherca", "connections-tls_pg_name", "connections-tls_pg_off",
 		"connections-tls_my_name", "connections-tls_my_otherca", "connections-tls_lake_noca",
 		"connections-fetcher_dies", "connections-session_fetcher_dies", "connections-source_restarts", "connections-gateway_restarts",
-		"connections-nbsandboxd_restarts_session", "connections-run_interrupted"}},
+		"connections-nbsandboxd_restarts_session", "connections-run_interrupted", "connections-kubernetes_reference"}},
 	{"Network plugin (make test-k8s-cni-refuses)", []string{"cni-refuses"}},
 }
 

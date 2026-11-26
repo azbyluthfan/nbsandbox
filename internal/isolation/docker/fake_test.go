@@ -45,9 +45,10 @@ func (noContainers) ContainerAttach(context.Context, string) (Attached, error) {
 func (noContainers) NetworkCreate(context.Context, string, map[string]string) (string, error) {
 	return "", errors.New("not implemented")
 }
-func (noContainers) NetworkConnect(context.Context, string, string) error    { return nil }
-func (noContainers) NetworkDisconnect(context.Context, string, string) error { return nil }
-func (noContainers) NetworkRemove(context.Context, string) error             { return nil }
+func (noContainers) NetworkConnect(context.Context, string, string) error        { return nil }
+func (noContainers) ContainerIP(context.Context, string, string) (string, error) { return "", nil }
+func (noContainers) NetworkDisconnect(context.Context, string, string) error     { return nil }
+func (noContainers) NetworkRemove(context.Context, string) error                 { return nil }
 func (noContainers) NetworkList(context.Context, string) ([]NetworkSummary, error) {
 	return nil, nil
 }
@@ -205,6 +206,13 @@ func (f *fakeDocker) NetworkCreate(ctx context.Context, name string, _ map[strin
 func (f *fakeDocker) NetworkConnect(ctx context.Context, network, ctr string) error {
 	f.record(ctx, "network-connect "+network+" "+ctr)
 	return nil
+}
+func (f *fakeDocker) ContainerIP(ctx context.Context, ctr, network string) (string, error) {
+	f.record(ctx, "ip "+ctr)
+	if ctr == fetcherID {
+		return "10.5.0.3", nil
+	}
+	return "10.5.0.2", nil // the gateway
 }
 func (f *fakeDocker) NetworkDisconnect(ctx context.Context, network, ctr string) error {
 	f.record(ctx, "network-disconnect "+network+" "+ctr)
