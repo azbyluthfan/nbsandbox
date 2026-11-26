@@ -7,7 +7,8 @@ a Playwright container on the dev stack's network.
 Usage: tour.py <web UI base URL> <space id> <output folder>
 
 TOUR_USER picks the user (default alice; the space must be theirs).
-TOUR_ONLY=sessions takes only the interactive session's screenshots (13-15).
+TOUR_ONLY=sessions takes only the interactive session's screenshots (13-15),
+TOUR_ONLY=compute only connections and the compute view's (16-19).
 """
 
 import os
@@ -34,9 +35,13 @@ def main():
         page = browser.new_page(viewport={"width": 1400, "height": 860}, color_scheme="dark")
         try:
             page.on("dialog", lambda d: d.accept())  # "leave with unsaved changes?", "end the session?"
-            if os.environ.get("TOUR_ONLY") != "sessions":
+            only = os.environ.get("TOUR_ONLY")
+            if only not in ("sessions", "compute"):
                 steps(page)
-            sessions(page)
+            if only != "compute":
+                sessions(page)
+            if only != "sessions":
+                compute(page)
         except Exception:
             page.screenshot(path=f"{OUT}/failed.png")
             raise
@@ -172,6 +177,41 @@ def sessions(page):
 
     bar.get_by_role("button", name="End session").click()
     expect(bar.get_by_text("Session ended")).to_be_visible(timeout=60_000)
+
+
+
+def compute(page):
+    """Connections (when they're on) and the compute view: the workers, and
+    a run's usage charts while the compute demo runs."""
+    # 16. The user's connections; 17. the space's names for them.
+    page.goto(f"{BASE}/#/{USER}/~connections")
+    if page.get_by_text("crm-prod").first.is_visible(timeout=10_000):
+        shot(page, "16-connections")
+        page.goto(f"{BASE}/#/{USER}/{SPACE}")
+        section = page.locator(".space-connections")
+        expect(section.get_by_text("Environments")).to_be_visible(timeout=15_000)
+        section.scroll_into_view_if_needed()
+        shot(page, "17-space-connections")
+    else:
+        print("connections are off: skipping 16-17")
+
+    # 18. A run's usage: memory, CPU and disk over its life, live.
+    page.goto(f"{BASE}/#/{USER}/{SPACE}/f/compute_demo.ipynb")
+    page.locator(".cm-content:visible").first.wait_for()
+    page.get_by_role("button", name="Run", exact=True).click()
+    page.wait_for_url(re.compile(r".*/r/[0-9a-f-]+$"))
+    expect(page.locator(".usage .chart").first).to_be_visible(timeout=60_000)
+    time.sleep(45)  # memory grows, the CPU phase starts
+    shot(page, "18-run-usage")
+    run_url = page.url
+
+    # 19. The workers, while it runs.
+    page.goto(f"{BASE}/#/{USER}/~compute")
+    expect(page.locator("table.compute")).to_be_visible(timeout=15_000)
+    time.sleep(6)  # a refresh with the run's usage
+    shot(page, "19-compute")
+    page.goto(run_url)
+    page.get_by_role("button", name="Cancel").click()
 
 
 if __name__ == "__main__":

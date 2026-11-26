@@ -6,7 +6,7 @@
 # long as its longest job (about 1.5 h; each job is capped below 2 h):
 #   - Docker with runc and with gVisor: backend conformance, the isolation
 #     report and a 45-minute soak; reading external data under gVisor;
-#     an upgrade from the newest release (runc);
+#     an upgrade from the newest release (runc; Helm on Kubernetes 1.37);
 #   - Kubernetes (kind with Cilium) with the default runtime and with a
 #     gVisor RuntimeClass: the isolation report; the integration suite on
 #     kind with Calico;
@@ -127,6 +127,9 @@ jobs:
       - name: Connections with secrets in Vault (OpenBao)
         if: matrix.k8s == '1.37' && matrix.runtime_class == ''
         run: make test-k8s-vault TESTFLAGS=-v
+      - name: Helm upgrade from the newest release's chart (resets the cluster's database)
+        if: matrix.k8s == '1.37' && matrix.runtime_class == ''
+        run: make test-helm-upgrade TESTFLAGS=-v
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:

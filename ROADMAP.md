@@ -52,14 +52,17 @@ Interactive mode. The [CHANGELOG](CHANGELOG.md) has the details and upgrade note
 - **Through the API and for agents:** REST, a WebSocket of Jupyter messages, gRPC's `SessionService` ([api.md](docs/api.md)), and MCP tools to open a session, run cells and read their output ([mcp.md](docs/mcp.md)).
 - **Checked like runs:** sessions are in the isolation reports, `nbsandbox-report check`, the soak, and the weekly check of the published release.
 
-## Built, not yet released
+## Released in v0.4.0
 
-Data outside nbsandbox, the first phase of [plan-data-access.md](docs/plan-data-access.md). The [CHANGELOG](CHANGELOG.md) has the details and upgrade notes:
+Data outside nbsandbox, the first phase of [plan-data-access.md](docs/plan-data-access.md), and a view of the compute. The [CHANGELOG](CHANGELOG.md) has the details and upgrade notes:
 
 - **Notebooks read the user's data where it lives,** without copying it in and without secrets in notebook code: `nbsandbox.sql("SELECT … FROM crm.orders")` returns a DataFrame, `nbsandbox.stream(…)` Arrow batches. PostgreSQL, MySQL, SQL Server, and CSV and Parquet in S3-compatible storage, joined in one query if need be ([connections.md](docs/connections.md)).
 - **Connections** are defined once per user and named per space, with environments (dev, prod); runs, interactive sessions and published functions pick one. Through the API, gRPC, MCP and the web UI.
 - **Credentials** in Kubernetes Secrets (mounted into the fetcher), Vault or OpenBao (the fetcher logs in itself), or a built-in store for development; nbsandboxd never reads them when a run starts.
 - **Each reading run gets a fetcher** (DuckDB, Arrow Flight) on a network of the run's own, locked to one `SELECT` on the run's sources, reaching them only through nbsandbox's egress gateway with a token for exactly their endpoints. On Docker and Kubernetes; the isolation report has a Connections section.
+- **The compute view:** the workers and how busy each is (`GET /v1/workers`, the web UI's Compute page), and each run's memory, CPU and disk writes over its life, charted on its page (Docker's stats API; Kubernetes' metrics API, with metrics-server).
+- **Fixed:** interactive sessions now survive a Kubernetes rolling upgrade (another worker takes them over), and signing in to the web UI with a password works in browsers.
+- **Checked:** upgrades from 0.3.0 with Compose and with Helm, in the weekly run.
 
 ## Next
 - **Authentication against Entra ID, end to end.** Keycloak is tested end to end (tokens, scopes, audience, token exchange); Entra ID is unit-tested against a local issuer and documented, and needs the same end-to-end test with a real tenant.

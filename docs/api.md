@@ -298,9 +298,9 @@ Then open the WebSocket `GET …/sessions/{session_id}/channel` and exchange **J
 
 ## 8. Connections: your data sources
 
-Being built ([plan-data-access.md](plan-data-access.md)): connections can be created and bound to spaces now; notebooks read them in a later release. Off unless the operator turns them on (`connections.enabled`); while off, these routes answer `404`.
+Notebooks, sessions and functions read them with `nbsandbox.sql(...)` ([connections.md](connections.md)). Off unless the operator turns them on (`connections.enabled`); while off, these routes answer `404`.
 
-A **connection** is one of your data sources: PostgreSQL, MySQL, SQL Server, object storage (S3-compatible, Azure Blob) or an HTTP API. Its secret goes to the deployment's secret provider and **never comes back** in any response.
+A **connection** is one of your data sources: PostgreSQL, MySQL, SQL Server, object storage (S3-compatible, Azure Blob) or an HTTP API; Azure Blob and HTTP connections can be created and bound, but nothing reads them yet. Its secret goes to the deployment's secret provider and **never comes back** in any response.
 
 ```bash
 curl -su alice:… -X POST "$URL/v1/connections" -H 'Content-Type: application/json' -d '{
