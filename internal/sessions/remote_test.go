@@ -208,3 +208,50 @@ func TestUnclaimedSessionEnds(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+// A rolling upgrade: a new worker starts while the old one still holds a
+// session (so it leaves it alone at start), then the old one goes. The new
+// one takes the session over, its kernel answers through it, and the
+// session doesn't end.
+func TestNewWorkerTakesOverAGoneWorkersSession(t *testing.T) {
+	c := newCluster(t)
+	ctx := context.Background()
+	s, _, err := c.api.Open(ctx, "alice", c.space, "a.ipynb", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.m.Wake()
+	if _, err := c.m.waitLive(ctx, s.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := c.m.cfg
+	cfg.WorkerID = "w2"
+	w2 := New(cfg, c.m.d) // the same backend: a Kubernetes cluster, or one Docker host
+	c.setWorkers([]store.Worker{{ID: "w1", Up: true, SessionAddr: c.addr}, {ID: "w2", Up: true}})
+	if err := w2.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { w2.Shutdown(context.Background()) })
+	time.Sleep(100 * time.Millisecond)
+	if got := c.session(t, s.ID).Worker; got != "w1" {
+		t.Fatalf("taken from a live worker: %s", got)
+	}
+
+	c.m.Shutdown(ctx) // the old worker's Pod goes
+	c.setWorkers([]store.Worker{{ID: "w2", Up: true}})
+	waitFor(t, "w2 to take the session over", func() bool { return c.session(t, s.ID).Worker == "w2" })
+	conn, _, err := w2.Attach(ctx, "alice", c.space, s.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next(t, conn, "bridge", "")
+	_ = conn.Send(execute("still here"))
+	next(t, conn, "iopub", "stream")
+	if got := c.session(t, s.ID); !got.Open() {
+		t.Fatalf("ended: %+v", got)
+	}
+	if c.backend.wasStopped(s.ID) {
+		t.Fatal("its container was stopped")
+	}
+}

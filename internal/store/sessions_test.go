@@ -164,14 +164,18 @@ func TestAdoptSession(t *testing.T) {
 	if _, ok, err := db.ClaimSession(ctx, "old", 0); !ok || err != nil {
 		t.Fatal(ok, err)
 	}
-	s, err := db.AdoptSession(ctx, "x1", "new")
+	s, err := db.AdoptSession(ctx, "x1", "old", "new")
 	if err != nil || s.Worker != "new" {
 		t.Fatalf("%+v %v", s, err)
+	}
+	// Two workers taking over at once: only the first gets it.
+	if _, err := db.AdoptSession(ctx, "x1", "old", "third"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("a second take-over of the same session: %v", err)
 	}
 	if _, err := db.EndSession(ctx, "x1", "done", "", time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.AdoptSession(ctx, "x1", "other"); !errors.Is(err, ErrNotFound) {
+	if _, err := db.AdoptSession(ctx, "x1", "new", "other"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("adopting an ended session: %v", err)
 	}
 }
