@@ -58,6 +58,10 @@ func runnerPolicyName(runID string) string { return "nbsandbox-run-" + runID }
 // fetcherReady is the line the fetcher prints once it serves.
 const fetcherReady = "fetcher: serving"
 
+// fetcherStartFailed starts the one line the fetcher prints when it can't
+// start: which source, where, and why (fetcher.py's START_FAILED).
+const fetcherStartFailed = "fetcher: can't start: "
+
 // fetcherStartTimeout bounds the fetcher's start: pulling its image,
 // attaching every source.
 const fetcherStartTimeout = 3 * time.Minute
@@ -313,6 +317,7 @@ func (b *Backend) fetcherReady(ctx context.Context, name string, out isolation.L
 	}
 	defer func() { _ = stream.Close() }()
 	var last []string
+	var failed string
 	sc := bufio.NewScanner(stream)
 	sc.Buffer(make([]byte, 64<<10), 1<<20)
 	for sc.Scan() {
@@ -325,12 +330,18 @@ func (b *Backend) fetcherReady(ctx context.Context, name string, out isolation.L
 			}
 			return p.Status.PodIP, nil
 		}
+		if r, ok := strings.CutPrefix(line, fetcherStartFailed); ok {
+			failed = r
+		}
 		if last = append(last, line); len(last) > 3 {
 			last = last[1:]
 		}
 	}
 	if wctx.Err() != nil && ctx.Err() == nil {
 		return "", errors.New("the fetcher didn't start in time")
+	}
+	if failed != "" {
+		return "", fmt.Errorf("the fetcher couldn't start: %s", failed)
 	}
 	if len(last) == 0 {
 		return "", errors.New("the fetcher stopped before it served")

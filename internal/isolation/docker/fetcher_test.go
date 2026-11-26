@@ -117,6 +117,17 @@ func TestFetcherFailsToStart(t *testing.T) {
 	}
 }
 
+// The fetcher's own line for a source it can't attach is the error, alone.
+func TestFetcherStartFailedLine(t *testing.T) {
+	f := newFakeDocker()
+	f.fetcherLogs = multiplex("", "a warning\nfetcher: can't start: crm (postgresql, pg.internal:5432): FATAL: password authentication failed for user \"reader\"\n")
+	_, err := newTestBackend(f).Run(context.Background(), fetcherSpec(), &lines{})
+	want := `the fetcher couldn't start: crm (postgresql, pg.internal:5432): FATAL: password authentication failed for user "reader"`
+	if !errors.Is(err, isolation.ErrStart) || !strings.HasSuffix(err.Error(), want) || strings.Contains(err.Error(), "a warning") {
+		t.Fatalf("err %v", err)
+	}
+}
+
 func TestOrphanFetchersAndNetworks(t *testing.T) {
 	f := newFakeDocker()
 	f.containers = []ContainerSummary{{ID: "c1", Labels: map[string]string{LabelRun: "r1", LabelSpace: "s1"}, Running: true}}

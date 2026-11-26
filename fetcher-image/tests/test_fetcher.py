@@ -300,5 +300,21 @@ class FlightTest(unittest.TestCase):
                 list(c.do_action(fl.Action("connections", b""), o))
 
 
+class StartErrorTest(unittest.TestCase):
+    """A source that can't be attached: one line naming it and where it
+    points, without the forwarder's local address."""
+
+    def test_names_the_source(self):
+        cfg = dict(CFG, sources=[{"name": "crm", "type": "postgresql", "secret": "pw",
+                                  "settings": {"host": "pg.invalid", "port": 5432, "database": "crm", "user": "reader", "tls": "off"}}])
+        with self.assertRaises(Exception) as ctx:
+            fetcher.connect(cfg)
+        msg = fetcher.start_error(ctx.exception)
+        self.assertTrue(msg.startswith("crm (postgresql, pg.invalid:5432): "), msg)
+        self.assertNotIn("127.0.0.1", msg)
+        self.assertNotIn("hostaddr", msg)
+        self.assertNotIn("\n", msg)
+
+
 if __name__ == "__main__":
     unittest.main()
