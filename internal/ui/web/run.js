@@ -7,6 +7,7 @@
 import { el, clear, toast, badge, timeAgo, formatBytes } from "./dom.js";
 import { encodePath } from "./api.js";
 import { codeBlock } from "./viewers.js";
+import { renderUsage } from "./charts.js";
 
 const ACTIVE = new Set(["queued", "running"]);
 
@@ -18,6 +19,7 @@ export function showRun(main, api, space, runId, onChange) {
   let stopped = false;
   let source = null;
   let poll = 0;
+  let usagePoll = 0;
 
   const header = el("div", { class: "run-head" });
   const meta = el("div", { class: "run-meta" });
@@ -26,10 +28,12 @@ export function showRun(main, api, space, runId, onChange) {
   const lineCount = el("span", {}, "0 lines");
   const log = el("pre", { class: "log", "aria-live": "off", "aria-label": "Run log" });
   const result = el("div", { class: "result" });
+  const usage = el("div", { class: "usage" });
   clear(main).append(
     header,
     meta,
     message,
+    usage,
     el("div", { class: "log-tools" }, el("label", {}, follow, " Follow the end"), lineCount, el("span", { id: "stream-state" }, "")),
     log,
     result,
@@ -164,6 +168,8 @@ export function showRun(main, api, space, runId, onChange) {
       renderHeader(run);
       if (!ACTIVE.has(run.status)) {
         clearInterval(poll);
+        clearInterval(usagePoll);
+        loadUsage(false);
         await renderResult(run);
         onChange && onChange();
       }
@@ -202,15 +208,30 @@ export function showRun(main, api, space, runId, onChange) {
     });
   }
 
+  // Memory, CPU and disk over the run's life, every 5 s while it runs.
+  async function loadUsage(active) {
+    try {
+      const u = await api.request("GET", `/spaces/${encodeURIComponent(space)}/runs/${encodeURIComponent(runId)}/usage`);
+      if (!stopped) renderUsage(usage, u, active);
+    } catch {
+      /* no usage: leave the section empty */
+    }
+  }
+
   refresh().then((run) => {
     if (!run || stopped) return;
     connect();
-    if (ACTIVE.has(run.status)) poll = setInterval(refresh, 1500);
+    if (ACTIVE.has(run.status)) {
+      poll = setInterval(refresh, 1500);
+      loadUsage(true);
+      usagePoll = setInterval(() => loadUsage(true), 5000);
+    }
   });
 
   return () => {
     stopped = true;
     clearInterval(poll);
+    clearInterval(usagePoll);
     if (frame) cancelAnimationFrame(frame);
     if (source) source.close();
   };

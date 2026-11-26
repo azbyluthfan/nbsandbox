@@ -258,6 +258,15 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 		return err
 	}
 	go pkgs.Run(ctx) // builds only on a worker with package sets on
+	// The compute view's samples: what this worker's runs and sessions use
+	// (backends that can say; docs/plan-compute-view.md).
+	usage := func() compute.Totals { return compute.Totals{} }
+	if r, ok := backend.(isolation.UsageReader); ok && cfg.Executes() {
+		sampler := &compute.Sampler{Reader: r, Runs: mgr.Holding, Sessions: sess.HeldIDs, Store: db, Limits: limits, Log: logger,
+			Every: 5 * time.Second, Thin: time.Hour, Now: time.Now}
+		go sampler.Run(ctx)
+		usage = sampler.Totals
+	}
 	if err := sess.Start(ctx); err != nil {
 		return err
 	}
@@ -291,7 +300,7 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 			published = make(chan struct{})
 			go func() {
 				defer close(published)
-				publishWorker(supCtx, db, id, sessionAddr(cfg, sess, id), cfg, sup, comps, dockerChanged, logger)
+				publishWorker(supCtx, db, id, sessionAddr(cfg, sess, id), cfg, sup, comps, usage, dockerChanged, logger)
 			}()
 		}
 	}

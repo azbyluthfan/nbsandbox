@@ -356,6 +356,7 @@ Every environment binds the same names; connections by name or ID; an empty `env
 | Spaces | `POST/GET /v1/spaces`, `GET/PATCH/DELETE /v1/spaces/{id}` |
 | Files | `POST/GET /v1/spaces/{id}/files` (upload with `?folder=`, list), `GET/PUT/PATCH/DELETE /v1/spaces/{id}/files/{path}` (download, save with `If-Match`, move, delete), `POST …/folders` |
 | Runs | `POST/GET …/runs`, `GET/DELETE …/runs/{run_id}`, `POST …/cancel`, `GET …/result` (`?wait=`) |
+| Run usage | `GET …/runs/{run_id}/usage`: memory, CPU and disk written over the run's life, sampled by its worker every few seconds |
 | Run outputs | `…/output.ipynb`, `…/output.html`, `…/artifacts`, `…/artifacts/{path}`, `POST …/promote`, `…/log`, `…/log/stream` (SSE) |
 | Status streams (SSE) | `GET …/runs/{run_id}/events`, `GET /v1/spaces/{id}/events` |
 | Functions | `GET …/functions`, `GET/DELETE …/functions/{name}`, `POST …/functions/{name}/versions` (publish), `GET …/versions/{version}`, `GET …/contract`, `POST …/invoke`, `POST …/versions/{version}/invoke` |

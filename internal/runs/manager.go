@@ -670,6 +670,18 @@ func (m *Manager) Artifacts(ctx context.Context, owner, spaceID, runID string) (
 // Logs returns the live log hubs of executing runs.
 func (m *Manager) Logs() *logs.Registry { return m.ex.logs }
 
+// Holding lists the runs this process holds now (for the compute view's
+// samples).
+func (m *Manager) Holding() []string {
+	m.ex.mu.Lock()
+	defer m.ex.mu.Unlock()
+	out := make([]string, 0, len(m.ex.active))
+	for id := range m.ex.active {
+		out = append(out, id)
+	}
+	return out
+}
+
 // RunStatus returns a run's current status (for log streaming), after
 // checking the caller owns the space.
 func (m *Manager) RunStatus(ctx context.Context, owner, spaceID, runID string) (string, error) {

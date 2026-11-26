@@ -58,8 +58,9 @@ func TestNoExternalOrInlineCode(t *testing.T) {
 			return nil
 		}
 		b, _ := fs.ReadFile(webFS, p)
-		// The SVG namespace is an XML name, never fetched: icons need it.
-		s := strings.ReplaceAll(string(b), `xmlns="http://www.w3.org/2000/svg"`, "")
+		// The SVG namespace is an XML name, never fetched: icons and charts
+		// (createElementNS) need it.
+		s := strings.ReplaceAll(string(b), `"http://www.w3.org/2000/svg"`, "")
 		for _, bad := range []string{"http://", "https://", "innerHTML", "outerHTML", "insertAdjacentHTML", "eval(", "style=\"", "onclick=\""} {
 			if strings.Contains(s, bad) {
 				t.Errorf("%s contains %q", p, bad)

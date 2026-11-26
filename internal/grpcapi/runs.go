@@ -173,6 +173,21 @@ func (s *server) GetRun(ctx context.Context, req *connect.Request[pb.GetRunReque
 	return connect.NewResponse(out), nil
 }
 
+func (s *server) GetRunUsage(ctx context.Context, req *connect.Request[pb.GetRunRequest]) (*connect.Response[pb.RunSamples], error) {
+	if err := validIDs(req.Msg.SpaceId, req.Msg.RunId); err != nil {
+		return nil, err
+	}
+	v, err := s.d.Runs.Usage(ctx, owner(ctx), req.Msg.SpaceId, req.Msg.RunId)
+	if err != nil {
+		return nil, s.toErr(err)
+	}
+	out, err := conv(v, &pb.RunSamples{})
+	if err != nil {
+		return nil, s.toErr(err)
+	}
+	return connect.NewResponse(out), nil
+}
+
 func (s *server) CancelRun(ctx context.Context, req *connect.Request[pb.CancelRunRequest]) (*connect.Response[pb.Run], error) {
 	if err := validIDs(req.Msg.SpaceId, req.Msg.RunId); err != nil {
 		return nil, err

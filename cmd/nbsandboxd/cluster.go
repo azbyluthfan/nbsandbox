@@ -16,6 +16,7 @@ import (
 
 	"github.com/azbyluthfan/nbsandbox/internal/api"
 	"github.com/azbyluthfan/nbsandbox/internal/completions"
+	"github.com/azbyluthfan/nbsandbox/internal/compute"
 	"github.com/azbyluthfan/nbsandbox/internal/config"
 	"github.com/azbyluthfan/nbsandbox/internal/deps"
 	"github.com/azbyluthfan/nbsandbox/internal/grpcapi"
@@ -43,7 +44,8 @@ func workerID(cfg config.Settings) string {
 // runs and that it is alive, until ctx ends; then it forgets the worker.
 //
 // changed wakes it early (Docker came or went).
-func publishWorker(ctx context.Context, db *store.DB, id, sessionAddr string, cfg config.Settings, sup backendSupervisor, comps *completions.Publisher, changed <-chan struct{}, log *slog.Logger) {
+func publishWorker(ctx context.Context, db *store.DB, id, sessionAddr string, cfg config.Settings, sup backendSupervisor, comps *completions.Publisher,
+	usage func() compute.Totals, changed <-chan struct{}, log *slog.Logger) {
 	every := cfg.Runs.Lease / 3
 	publish := func(ctx context.Context) {
 		st := sup.Status()
@@ -51,6 +53,10 @@ func publishWorker(ctx context.Context, db *store.DB, id, sessionAddr string, cf
 			Role: cmp.Or(cfg.Role, config.RoleAll), Version: version, StartedAt: processStart, RunSlots: cfg.Runs.Concurrency}
 		if cfg.SessionsOn() {
 			w.SessionSlots = cfg.Sessions.PerWorker
+		}
+		if t := usage(); !t.SampledAt.IsZero() {
+			b, _ := json.Marshal(t)
+			w.Usage = string(b)
 		}
 		if info, err := runtimeInfo(cfg, st, comps); err == nil { //nolint:contextcheck // the index is stored under the publisher's own (process) context
 			b, _ := json.Marshal(info)

@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/moby/moby/api/types/container"
+
+	"github.com/azbyluthfan/nbsandbox/internal/isolation"
 )
 
 // noContainers gives a fake the container methods it doesn't care about.
@@ -47,8 +49,11 @@ func (noContainers) NetworkCreate(context.Context, string, map[string]string) (s
 }
 func (noContainers) NetworkConnect(context.Context, string, string) error        { return nil }
 func (noContainers) ContainerIP(context.Context, string, string) (string, error) { return "", nil }
-func (noContainers) NetworkDisconnect(context.Context, string, string) error     { return nil }
-func (noContainers) NetworkRemove(context.Context, string) error                 { return nil }
+func (noContainers) ContainerUsage(context.Context, string) (isolation.Usage, error) {
+	return isolation.Usage{}, nil
+}
+func (noContainers) NetworkDisconnect(context.Context, string, string) error { return nil }
+func (noContainers) NetworkRemove(context.Context, string) error             { return nil }
 func (noContainers) NetworkList(context.Context, string) ([]NetworkSummary, error) {
 	return nil, nil
 }
@@ -207,6 +212,11 @@ func (f *fakeDocker) NetworkConnect(ctx context.Context, network, ctr string) er
 	f.record(ctx, "network-connect "+network+" "+ctr)
 	return nil
 }
+func (f *fakeDocker) ContainerUsage(ctx context.Context, id string) (isolation.Usage, error) {
+	f.record(ctx, "usage "+id)
+	return isolation.Usage{MemoryBytes: 64 << 20, CPUNanos: 2e9, WrittenBytes: 4096}, nil
+}
+
 func (f *fakeDocker) ContainerIP(ctx context.Context, ctr, network string) (string, error) {
 	f.record(ctx, "ip "+ctr)
 	if ctr == fetcherID {

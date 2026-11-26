@@ -59,6 +59,7 @@ const (
 	OpGetArtifact     Op = "GetArtifact"
 	OpPromoteArtifact Op = "PromoteArtifact"
 	OpGetRunLog       Op = "GetRunLog"
+	OpGetRunUsage     Op = "GetRunUsage"
 	OpFollowRunLog    Op = "FollowRunLog"
 
 	OpFollowRunEvents   Op = "FollowRunEvents"
@@ -146,6 +147,7 @@ var opScopes = map[Op]string{
 	OpGetArtifact:     ScopeRead,
 	OpPromoteArtifact: ScopeFilesWrite,
 	OpGetRunLog:       ScopeRead,
+	OpGetRunUsage:     ScopeRead,
 	OpFollowRunLog:    ScopeRead,
 
 	OpFollowRunEvents:   ScopeRead,

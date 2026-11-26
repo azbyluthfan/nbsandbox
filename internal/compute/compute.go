@@ -35,6 +35,9 @@ type Worker struct {
 	RunLimits RunLimits `json:"run_limits"`
 	Runs      Slots     `json:"runs"`
 	Sessions  Slots     `json:"sessions"`
+	// Usage sums what its runs and sessions use now; absent when it's gone
+	// or its backend can't say (docs/plan-compute-view.md).
+	Usage *Totals `json:"usage,omitempty"`
 }
 
 // RunLimits are what each run there may use.
@@ -109,6 +112,11 @@ func Workers(ctx context.Context, src Source, gone time.Duration, now time.Time)
 				l.Sessions += loads[""].Sessions
 			}
 			v.Runs.Active, v.Sessions.Active = l.Runs, l.Sessions
+			var t Totals
+			if json.Unmarshal([]byte(w.Usage), &t) == nil && !t.SampledAt.IsZero() {
+				t.SampledAt = t.SampledAt.UTC()
+				v.Usage = &t
+			}
 		}
 		out = append(out, v)
 	}

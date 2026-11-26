@@ -1513,6 +1513,26 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /v1/spaces/{id}/runs/{run_id}/usage:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+      - $ref: "#/components/parameters/RunID"
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [runs]
+      summary: The run's memory, CPU and disk writes over its life
+      description: |
+        Sampled by the run's worker every few seconds while it runs (every
+        minute after its first hour), and kept as long as the run. Empty
+        when the backend can't sample (Kubernetes without metrics-server).
+      responses:
+        "200": { description: Samples, oldest first, content: { application/json: { schema: { $ref: "#/components/schemas/RunSamples" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /v1/spaces/{id}/runs/{run_id}/log/stream:
     parameters:
       - $ref: "#/components/parameters/SpaceID"
@@ -1998,6 +2018,39 @@ components:
             cpus: { type: number }
         runs: { $ref: "#/components/schemas/WorkerSlots" }
         sessions: { $ref: "#/components/schemas/WorkerSlots" }
+        usage: { $ref: "#/components/schemas/WorkerUsage" }
+    RunSamples:
+      type: object
+      required: [interval_seconds, limits, samples]
+      properties:
+        interval_seconds: { type: integer }
+        limits:
+          type: object
+          required: [memory_bytes, cpus]
+          properties:
+            memory_bytes: { type: integer, format: int64 }
+            cpus: { type: number }
+        samples:
+          type: array
+          items:
+            type: object
+            required: [at, memory_bytes, cpus]
+            properties:
+              at: { type: string, format: date-time }
+              memory_bytes: { type: integer, format: int64, description: The working set }
+              cpus: { type: number, description: Cores used since the previous sample }
+              written_bytes: { type: integer, format: int64, description: "Written to disk since the run started; absent when the backend can't say (gVisor, Kubernetes)" }
+    WorkerUsage:
+      type: object
+      required: [memory_bytes, memory_reserved_bytes, cpus, cpus_reserved, sampled_at]
+      description: What its runs and sessions use now, summed
+      properties:
+        memory_bytes: { type: integer, format: int64 }
+        memory_reserved_bytes: { type: integer, format: int64, description: Their memory limits }
+        cpus: { type: number }
+        cpus_reserved: { type: number, description: Their CPU limits }
+        write_bytes_per_second: { type: number, description: "Absent when the backend can't say" }
+        sampled_at: { type: string, format: date-time }
     WorkerSlots:
       type: object
       required: [active, capacity]

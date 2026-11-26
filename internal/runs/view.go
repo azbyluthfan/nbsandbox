@@ -300,3 +300,50 @@ func (m *Manager) Active(ctx context.Context, spaceID string) bool {
 	}
 	return false
 }
+
+// UsageView is a run's resource use over its life (GET …/usage): sampled by
+// its worker every few seconds while it runs (docs/plan-compute-view.md).
+type UsageView struct {
+	IntervalSeconds int           `json:"interval_seconds"`
+	Limits          UsageLimits   `json:"limits"`
+	Samples         []UsageSample `json:"samples"`
+}
+
+// UsageLimits are what the run may use.
+type UsageLimits struct {
+	MemoryBytes int64   `json:"memory_bytes"`
+	CPUs        float64 `json:"cpus"`
+}
+
+// UsageSample is the run at one moment.
+type UsageSample struct {
+	At          time.Time `json:"at"`
+	MemoryBytes int64     `json:"memory_bytes"`
+	CPUs        float64   `json:"cpus"` // used since the previous sample
+	// WrittenBytes is written to disk since the run started; absent when
+	// the backend can't say.
+	WrittenBytes *int64 `json:"written_bytes,omitempty"`
+}
+
+// Usage returns one of the owner's runs' samples.
+func (m *Manager) Usage(ctx context.Context, owner, spaceID, runID string) (UsageView, error) {
+	if err := m.d.Spaces.Owned(ctx, owner, spaceID); err != nil {
+		return UsageView{}, err
+	}
+	if _, err := m.d.DB.GetRun(ctx, spaceID, runID); errors.Is(err, store.ErrNotFound) {
+		return UsageView{}, spaces.ErrNotFound
+	} else if err != nil {
+		return UsageView{}, err
+	}
+	ss, err := m.d.DB.RunSamples(ctx, runID)
+	if err != nil {
+		return UsageView{}, err
+	}
+	v := UsageView{IntervalSeconds: 5, Samples: make([]UsageSample, 0, len(ss)),
+		Limits: UsageLimits{MemoryBytes: m.cfg.Limits.MemoryBytes, CPUs: float64(m.cfg.Limits.NanoCPUs) / 1e9}}
+	for _, s := range ss {
+		v.Samples = append(v.Samples, UsageSample{At: s.At.UTC(), MemoryBytes: s.MemoryBytes, CPUs: float64(s.CPUMillicores) / 1000,
+			WrittenBytes: s.WrittenBytes})
+	}
+	return v, nil
+}

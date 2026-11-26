@@ -164,6 +164,18 @@ func (m *Manager) Enabled() bool { return m != nil && m.cfg.Enabled }
 
 // Holds reports whether this process holds sessions (a worker with a
 // backend that runs them).
+// HeldIDs lists the sessions this process holds now (for the compute view's
+// samples).
+func (m *Manager) HeldIDs() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]string, 0, len(m.live))
+	for id := range m.live {
+		out = append(out, id)
+	}
+	return out
+}
+
 func (m *Manager) Holds() bool {
 	return m.Enabled() && !m.cfg.NoExecute && m.d.Backend != nil
 }

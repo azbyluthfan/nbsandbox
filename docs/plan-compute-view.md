@@ -1,6 +1,6 @@
 # Plan: the compute view
 
-**Status (2026-11-26):** milestone 1 (workers) built; 2 and 3 next.
+**Status (2026-11-26):** milestones 1 (workers) and 2 (samples on Docker) built; 3 (Kubernetes) next.
 
 ## Today
 
@@ -49,7 +49,7 @@ Not in this plan: charts for sessions (their usage counts in their worker's tota
 |---|---|---|
 | The workers | `GET /v1/workers` (scope `nbsandbox.read`) | `RunService.ListWorkers` |
 | A run's worker | `worker` on the run, for its owner and administrators | `Run.worker` |
-| A run's samples | `GET /v1/spaces/{id}/runs/{run_id}/usage`: the limits, the interval, and the samples | `RunService.GetRunUsage` |
+| A run's samples | `GET /v1/spaces/{id}/runs/{run_id}/usage`: the limits, the interval, and the samples | `RunService.GetRunUsage` (returns `RunSamples`) |
 | The runs on a worker (administrators) | `GET /v1/admin/runs?worker=` | `AdminListRunsRequest.worker` |
 | The sessions on a worker (administrators) | `GET /v1/admin/sessions?worker=` | `AdminListSessionsRequest.worker` |
 

@@ -383,6 +383,9 @@ service RunService {
   rpc GetRunNotebook(GetRunFileRequest) returns (stream FileChunk);
   rpc GetRunHTML(GetRunFileRequest) returns (stream FileChunk);
   rpc GetRunLog(GetRunFileRequest) returns (stream FileChunk);
+  // The run's memory, CPU and disk writes over its life, sampled by its
+  // worker (docs/plan-compute-view.md).
+  rpc GetRunUsage(GetRunRequest) returns (RunSamples);
   rpc ListArtifacts(ListArtifactsRequest) returns (ListArtifactsResponse);
   rpc GetArtifact(GetArtifactRequest) returns (stream FileChunk);
   rpc PromoteArtifact(PromoteArtifactRequest) returns (File);
@@ -588,10 +591,34 @@ message Worker {
   WorkerRunLimits run_limits = 10;
   WorkerSlots runs = 11;
   WorkerSlots sessions = 12;
+  WorkerUsage usage = 13; // absent when gone, or when its backend can't say
 }
 message WorkerRunLimits {
   int64 memory_bytes = 1;
   double cpus = 2;
+}
+message RunSamples {
+  int32 interval_seconds = 1;
+  RunUsageLimits limits = 2;
+  repeated RunUsageSample samples = 3;
+}
+message RunUsageLimits {
+  int64 memory_bytes = 1;
+  double cpus = 2;
+}
+message RunUsageSample {
+  google.protobuf.Timestamp at = 1;
+  int64 memory_bytes = 2;
+  double cpus = 3; // used since the previous sample
+  optional int64 written_bytes = 4; // since the run started; absent when the backend can't say
+}
+message WorkerUsage {
+  int64 memory_bytes = 1;
+  int64 memory_reserved_bytes = 2;
+  double cpus = 3;
+  double cpus_reserved = 4;
+  optional double write_bytes_per_second = 5;
+  google.protobuf.Timestamp sampled_at = 6;
 }
 message WorkerSlots {
   int32 active = 1;

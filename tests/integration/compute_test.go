@@ -16,6 +16,10 @@ import (
 type workerJSON struct {
 	ID, State, Role, Runtime string
 	Runs, Sessions           struct{ Active, Capacity int }
+	Usage                    *struct {
+		MemoryBytes         int64 `json:"memory_bytes"`
+		MemoryReservedBytes int64 `json:"memory_reserved_bytes"`
+	}
 }
 
 func workers(t *testing.T, user string) []workerJSON {
@@ -78,4 +82,77 @@ func ids(ws []workerJSON) string {
 		out = append(out, w.ID)
 	}
 	return strings.Join(out, ", ")
+}
+
+// A run's usage over its life (milestone 2): its worker samples it every few
+// seconds; the samples follow what the notebook does, its worker's totals
+// show it while it runs, and they stay once it ends. Docker only until the
+// Kubernetes backend samples (metrics-server).
+func TestComputeRunUsage(t *testing.T) {
+	if onKubernetes {
+		t.Skip("Kubernetes samples come with metrics-server (milestone 3)")
+	}
+	sp := space(t, "alice")
+	upload(t, "alice", sp, "", map[string]string{"grow.ipynb": codeNotebook(`import time
+blocks = []
+for i in range(45):
+    blocks.append(bytearray(8 << 20))
+    sum(j * j for j in range(200000))
+    time.sleep(0.5)
+print("grown", flush=True)
+time.sleep(5)`)})
+	run := startRun(t, "alice", sp, "grow.ipynb", nil)
+	waitLog(t, "alice", sp, run.ID, "Executing Cell", 3*time.Minute)
+	time.Sleep(12 * time.Second)
+	held := getRun(t, "alice", sp, run.ID).Worker
+	var sampled bool
+	for _, w := range workers(t, "bob") {
+		sampled = sampled || w.ID == held && w.Usage != nil && w.Usage.MemoryBytes > 0 && w.Usage.MemoryReservedBytes > 0
+	}
+	waitRun(t, "alice", sp, run.ID, 3*time.Minute)
+
+	type usage struct {
+		Limits struct {
+			MemoryBytes int64 `json:"memory_bytes"`
+		}
+		Samples []struct {
+			MemoryBytes int64   `json:"memory_bytes"`
+			CPUs        float64 `json:"cpus"`
+		}
+	}
+	r := call(t, "GET", "/v1/spaces/"+sp+"/runs/"+run.ID+"/usage", "alice", nil, nil)
+	var u usage
+	r.json(t, &u)
+	n := len(u.Samples)
+	grew := n >= 3 && u.Samples[n-1].MemoryBytes > u.Samples[0].MemoryBytes+100<<20 && u.Samples[n-1].MemoryBytes < u.Limits.MemoryBytes
+	busy := false
+	for _, s := range u.Samples {
+		busy = busy || s.CPUs > 0.01
+	}
+	other := call(t, "GET", "/v1/spaces/"+sp+"/runs/"+run.ID+"/usage", "bob", nil, nil).Code
+
+	got := fmt.Sprintf("%d samples, memory %d → %d MiB (limit %d MiB), CPU seen: %v; its worker's totals while it ran: %v; another user: %d",
+		n, first(u.Samples).MemoryBytes>>20, last(u.Samples).MemoryBytes>>20, u.Limits.MemoryBytes>>20, busy, sampled, other)
+	ok := grew && busy && sampled && other == http.StatusNotFound
+	finding(t, "compute-run-usage", "a notebook that grows by 8 MiB every half second and computes; read its usage during and after",
+		"samples every few seconds follow its memory up to below its limit and show its CPU; its worker's totals include it while it runs; another user gets 404", got, ok)
+	if !ok {
+		t.Error(got)
+	}
+}
+
+func first[T any](s []T) T {
+	var z T
+	if len(s) == 0 {
+		return z
+	}
+	return s[0]
+}
+
+func last[T any](s []T) T {
+	var z T
+	if len(s) == 0 {
+		return z
+	}
+	return s[len(s)-1]
 }

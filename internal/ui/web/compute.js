@@ -60,6 +60,7 @@ export function showCompute(api, page) {
         el("td", {}, el("span", { class: `badge worker-${w.state}` }, w.state)),
         el("td", {}, slots(w.runs)),
         el("td", {}, w.sessions.capacity ? slots(w.sessions) : el("span", { class: "muted" }, "off")),
+        el("td", {}, inUse(w)),
         el("td", { class: "muted" }, [w.runtime || "?", w.platform].filter(Boolean).join(" · "),
           el("div", { class: "small" }, `each run: ${formatBytes(w.run_limits.memory_bytes)}, ${w.run_limits.cpus} CPU`)),
         el("td", { class: "muted" }, w.version || "", el("div", { class: "small" },
@@ -68,7 +69,7 @@ export function showCompute(api, page) {
           onclick: () => { open.has(w.id) ? open.delete(w.id) : open.add(w.id); render(); } }, open.has(w.id) ? "Hide" : "Show")),
       ));
       if (open.has(w.id) && w.state !== "gone") {
-        const cell = el("td", { colspan: 7 }, el("p", { class: "muted" }, "Loading…"));
+        const cell = el("td", { colspan: 8 }, el("p", { class: "muted" }, "Loading…"));
         rows.push(el("tr", { class: "detail" }, cell));
         adminLists(w).then((l) => {
           if (!l) return clear(cell).append(el("p", { class: "muted" }, "Only administrators see whose runs and sessions these are."));
@@ -86,7 +87,7 @@ export function showCompute(api, page) {
       el("div", { class: "section-head" }, el("h2", {}, `${live.length} worker${live.length === 1 ? "" : "s"}`),
         el("span", { class: "muted" }, `runs ${total("runs", "active")} of ${total("runs", "capacity")} · sessions ${total("sessions", "active")} of ${total("sessions", "capacity")}`)),
       workers.length ? el("table", { class: "list compute" },
-        el("thead", {}, el("tr", {}, ["Worker", "State", "Runs", "Sessions", "Runs on", "Version", ""].map((h) => el("th", {}, h)))),
+        el("thead", {}, el("tr", {}, ["Worker", "State", "Runs", "Sessions", "In use", "Runs on", "Version", ""].map((h) => el("th", {}, h)))),
         el("tbody", {}, rows))
         : el("p", { class: "muted" }, "No worker has reported in yet."));
   };
@@ -97,6 +98,22 @@ export function showCompute(api, page) {
   };
   loop();
   return { stop: () => { stopped = true; clearTimeout(timer); }, dirty: () => false };
+}
+
+/** What a worker's runs and sessions use now, against what they reserve. */
+function inUse(w) {
+  const u = w.usage;
+  if (!u) return el("span", { class: "muted" }, w.state === "gone" ? "" : "not sampled");
+  const mem = meterOf(u.memory_bytes, u.memory_reserved_bytes, `${formatBytes(u.memory_bytes)} of ${formatBytes(u.memory_reserved_bytes)}`);
+  const cpu = meterOf(u.cpus, u.cpus_reserved, `${u.cpus.toFixed(2)} of ${u.cpus_reserved} CPU`);
+  const io = u.write_bytes_per_second != null ? el("div", { class: "muted small" }, `writing ${formatBytes(u.write_bytes_per_second)}/s`) : null;
+  return el("div", { class: "in-use" }, mem, cpu, io);
+}
+
+function meterOf(value, max, label) {
+  const bar = el("div");
+  bar.style.width = `${max ? Math.min(100, Math.round((100 * value) / max)) : 0}%`;
+  return el("div", { class: "slots" }, el("span", { class: "small" }, label), el("div", { class: "meter" }, bar));
 }
 
 function slots(s) {

@@ -4,6 +4,7 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"time"
 )
@@ -25,18 +26,21 @@ type Worker struct {
 	StartedAt    time.Time
 	RunSlots     int
 	SessionSlots int
+	// Usage sums what its runs and sessions use now (JSON; "{}" before the
+	// first sample).
+	Usage string
 }
 
 // PutWorker records a worker's state, seen now.
 func (db *DB) PutWorker(ctx context.Context, w Worker) error {
 	_, err := db.w.ExecContext(ctx, `
-		INSERT INTO workers(id, up, runtime, manifest, session_addr, role, version, started_at, run_slots, session_slots, seen_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, `+dbNowMS+`)
+		INSERT INTO workers(id, up, runtime, manifest, session_addr, role, version, started_at, run_slots, session_slots, usage, seen_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, `+dbNowMS+`)
 		ON CONFLICT (id) DO UPDATE SET up = EXCLUDED.up, runtime = EXCLUDED.runtime,
 			manifest = EXCLUDED.manifest, session_addr = EXCLUDED.session_addr, role = EXCLUDED.role,
 			version = EXCLUDED.version, started_at = EXCLUDED.started_at, run_slots = EXCLUDED.run_slots,
-			session_slots = EXCLUDED.session_slots, seen_at = EXCLUDED.seen_at`,
-		w.ID, w.Up, w.Runtime, w.Manifest, w.SessionAddr, w.Role, w.Version, w.StartedAt.UnixMilli(), w.RunSlots, w.SessionSlots)
+			session_slots = EXCLUDED.session_slots, usage = EXCLUDED.usage, seen_at = EXCLUDED.seen_at`,
+		w.ID, w.Up, w.Runtime, w.Manifest, w.SessionAddr, w.Role, w.Version, w.StartedAt.UnixMilli(), w.RunSlots, w.SessionSlots, cmp.Or(w.Usage, "{}"))
 	return err
 }
 
@@ -54,7 +58,7 @@ func (db *DB) AllWorkers(ctx context.Context) ([]Worker, error) {
 
 func (db *DB) workers(ctx context.Context, where string, args ...any) ([]Worker, error) {
 	rows, err := db.r.QueryContext(ctx, `
-		SELECT id, up, runtime, manifest, session_addr, seen_at, role, version, started_at, run_slots, session_slots
+		SELECT id, up, runtime, manifest, session_addr, seen_at, role, version, started_at, run_slots, session_slots, usage
 		FROM workers `+where, args...)
 	if err != nil {
 		return nil, err
@@ -65,7 +69,7 @@ func (db *DB) workers(ctx context.Context, where string, args ...any) ([]Worker,
 		var w Worker
 		var seen, started int64
 		if err := rows.Scan(&w.ID, &w.Up, &w.Runtime, &w.Manifest, &w.SessionAddr, &seen, &w.Role, &w.Version, &started,
-			&w.RunSlots, &w.SessionSlots); err != nil {
+			&w.RunSlots, &w.SessionSlots, &w.Usage); err != nil {
 			return nil, err
 		}
 		w.SeenAt = time.UnixMilli(seen)

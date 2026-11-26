@@ -5,6 +5,7 @@ package docker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
@@ -37,6 +38,8 @@ type Client interface {
 	ContainerLogs(ctx context.Context, id string) (io.ReadCloser, error)
 	ContainerStop(ctx context.Context, id string, timeout time.Duration) error
 	ContainerInspect(ctx context.Context, id string) (ContainerState, error)
+	// ContainerUsage reads a container's resource use now (one reading).
+	ContainerUsage(ctx context.Context, id string) (isolation.Usage, error)
 	ContainerRemove(ctx context.Context, id string) error
 	// ContainerList lists containers (running or not) carrying label.
 	ContainerList(ctx context.Context, label string) ([]ContainerSummary, error)
@@ -172,6 +175,46 @@ func (m *mobyClient) ContainerStop(ctx context.Context, id string, timeout time.
 	secs := int(timeout.Round(time.Second) / time.Second)
 	_, err := m.c.ContainerStop(ctx, id, client.ContainerStopOptions{Timeout: &secs})
 	return err
+}
+
+func (m *mobyClient) ContainerUsage(ctx context.Context, id string) (isolation.Usage, error) {
+	res, err := m.c.ContainerStats(ctx, id, client.ContainerStatsOptions{})
+	if err != nil {
+		return isolation.Usage{}, err
+	}
+	defer func() { _ = res.Body.Close() }()
+	var st container.StatsResponse
+	if err := json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&st); err != nil {
+		return isolation.Usage{}, err
+	}
+	return usageOf(st), nil
+}
+
+// usageOf reads Docker's stats as `docker stats` does: memory is the
+// working set (usage less inactive file pages: cgroup v2's inactive_file,
+// v1's total_inactive_file); writes are the block I/O written, when the
+// runtime reports it (gVisor doesn't).
+func usageOf(st container.StatsResponse) isolation.Usage {
+	u := isolation.Usage{CPUNanos: st.CPUStats.CPUUsage.TotalUsage, WrittenBytes: -1}
+	mem := st.MemoryStats.Usage
+	inactive := st.MemoryStats.Stats["inactive_file"]
+	if v, ok := st.MemoryStats.Stats["total_inactive_file"]; ok {
+		inactive = v
+	}
+	if inactive < mem {
+		mem -= inactive
+	}
+	u.MemoryBytes = int64(mem) //nolint:gosec // bounded by the container's memory limit
+	if es := st.BlkioStats.IoServiceBytesRecursive; es != nil {
+		var w uint64
+		for _, e := range es {
+			if strings.EqualFold(e.Op, "write") {
+				w += e.Value
+			}
+		}
+		u.WrittenBytes = int64(w) //nolint:gosec // bytes written by one container
+	}
+	return u
 }
 
 func (m *mobyClient) ContainerInspect(ctx context.Context, id string) (ContainerState, error) {
