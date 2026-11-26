@@ -16,6 +16,12 @@
 # uses sudo to give the data directory and users file to uid 1000, as the
 # provisioning script does. Needs Docker with Compose, git, curl, openssl,
 # and python3 with venv (the session check, for releases with sessions).
+#
+# For a release with connections, it also turns them on, starts the egress
+# gateway, and reads a PostgreSQL table beside the stack with the published
+# fetcher. CHECK_LOCAL_IMAGES=1 skips the pulls and uses images already on
+# this host under the release's names: to try this script before a release
+# (tag local builds as ghcr.io/azbyluthfan/<image>:<version>).
 
 set -euo pipefail
 
@@ -37,6 +43,7 @@ PROJECT=nbsandbox-published
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/nbsandbox-published.XXXXXX")
 WORK=$(cd "$WORK" && pwd -P) # the data directory's path must be the same on the host and in nbsandboxd
 SRC=$WORK/src
+SOURCE=nbsandbox-published-src # the PostgreSQL the reading check reads
 linux=false
 [ "$(uname -s)" = Linux ] && linux=true
 
@@ -51,6 +58,7 @@ cleanup() {
 		step "FAILED: nbsandboxd's readiness checks"
 		compose exec -T nbsandboxd /nbsandboxd health 2>&1 || true
 	fi
+	docker rm -fv "$SOURCE" >/dev/null 2>&1 || true
 	if [ -f "$SRC/deploy/.env" ]; then compose down -v --remove-orphans >/dev/null 2>&1 || true; fi
 	git -C "$REPO" worktree remove --force "$SRC" >/dev/null 2>&1 || true
 	if $linux; then sudo rm -rf "$WORK"; else rm -rf "$WORK"; fi
@@ -68,10 +76,19 @@ step "Published images (anonymous pulls: they must be public)"
 host=${DOCKER_HOST:-$(docker context inspect --format '{{.Endpoints.docker.Host}}')}
 images="nbsandboxd nbsandbox-runner nbsandbox-runner-builder"
 # The fetcher (connections) is published from the release that brought it.
-if [ -d "$SRC/fetcher-image" ]; then images="$images nbsandbox-fetcher"; fi
+connections=false
+if [ -d "$SRC/fetcher-image" ]; then images="$images nbsandbox-fetcher" connections=true; fi
 for image in $images; do
-	DOCKER_CONFIG=$WORK/no-login DOCKER_HOST=$host docker pull -q "$REG/$image:$VERSION"
+	if [ "${CHECK_LOCAL_IMAGES:-}" = 1 ]; then
+		docker image inspect "$REG/$image:$VERSION" >/dev/null
+	else
+		DOCKER_CONFIG=$WORK/no-login DOCKER_HOST=$host docker pull -q "$REG/$image:$VERSION"
+	fi
 done
+if $connections && [ -n "$(docker ps -aq --filter 'name=^nbsandbox-gateway$')" ]; then
+	echo "check-published: a container named nbsandbox-gateway exists (another stack's gateway); stop that stack first" >&2
+	exit 1
+fi
 
 step "A user, with the release's hash-password"
 password=$(openssl rand -hex 16)
@@ -103,6 +120,18 @@ NBSANDBOX_IMAGE=$REG/nbsandboxd:$VERSION
 NBSANDBOX_RUNNER_IMAGE=$REG/nbsandbox-runner:$VERSION
 NBSANDBOX_PACKAGES_ENABLED=true
 EOF
+if $connections; then
+	# Connections on, as docs/connections.md says: both keys, where they may
+	# point, the published fetcher, and the gateway's profile.
+	cat >> "$SRC/deploy/.env" <<EOF
+NBSANDBOX_CONNECTIONS_ENABLED=true
+NBSANDBOX_CONNECTIONS_MASTER_KEY=$(openssl rand -base64 32)
+NBSANDBOX_GATEWAY_KEY=$(openssl rand -base64 32)
+NBSANDBOX_CONNECTIONS_ALLOWED=$SOURCE
+NBSANDBOX_FETCHER_IMAGE=$REG/nbsandbox-fetcher:$VERSION
+EOF
+	export COMPOSE_PROFILES=connections
+fi
 
 step "Preflight"
 NBSANDBOX_DATA_DIR=$WORK/srv NBSANDBOX_USERS_FILE=$WORK/etc/users.yaml \
@@ -165,7 +194,35 @@ if [ -f "$SRC/docs/sessions.md" ]; then
 		{ echo "the session's container is left behind (or no session ID printed)" >&2; exit 1; }
 fi
 
+# Reading external data (releases with connections): a PostgreSQL table on
+# the gateway's network, read by a notebook through the published fetcher.
+if $connections; then
+	step "Reading a PostgreSQL table through the published fetcher and the gateway"
+	pgpass=$(openssl rand -hex 16)
+	docker run -d -q --name "$SOURCE" --network "${PROJECT}_egress" -e POSTGRES_USER=reader -e POSTGRES_PASSWORD="$pgpass" -e POSTGRES_DB=crm \
+		postgres:17-alpine@sha256:3540c0362c809df084ffac0ae69fe794515f9de92692f02178bcdce0ef0302ac >/dev/null
+	for _ in $(seq 60); do
+		docker exec "$SOURCE" psql -U reader -d crm -tAc 'SELECT 1' >/dev/null 2>&1 && break
+		sleep 1
+	done
+	docker exec "$SOURCE" psql -q -U reader -d crm -c 'CREATE TABLE orders AS SELECT g AS id, g % 7 AS amount FROM generate_series(1, 1000) g'
+	# api METHOD PATH [JSON]: prints the body; fails on HTTP >= 400.
+	api() { curl -sS --fail-with-body -u "alice:$password" -H 'Content-Type: application/json' -X "$1" "$NBSANDBOX_URL$2" ${3:+--data "$3"}; }
+	conn=$(api POST /v1/connections "{\"name\":\"crm\",\"type\":\"postgresql\",\"settings\":{\"host\":\"$SOURCE\",\"database\":\"crm\",\"user\":\"reader\"},\"secret\":{\"value\":\"$pgpass\"}}" | id_of)
+	api PUT "/v1/spaces/$space/connections" "{\"default_environment\":\"main\",\"environments\":{\"main\":{\"crm\":\"$conn\"}}}" >/dev/null
+	cat > "$WORK/read.ipynb" <<'NB'
+{"cells": [{"cell_type": "code", "execution_count": null, "metadata": {}, "outputs": [],
+  "source": "import nbsandbox\nn = int(nbsandbox.sql('SELECT count(*) FROM crm.orders').iloc[0, 0])\nassert n == 1000, n\nprint(n)"}],
+ "metadata": {"kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"}},
+ "nbformat": 4, "nbformat_minor": 5}
+NB
+	"$client" files upload "$space" "$WORK/read.ipynb" >/dev/null
+	run read.ipynb
+	case "$(api GET "/v1/connections/$conn")" in *"$pgpass"*) echo "the connection returned its secret" >&2; exit 1 ;; esac
+fi
+
 left=$(docker ps -aq --filter "name=nbsandbox-run-" | wc -l | tr -d ' ')
-[ "$left" = 0 ] || { echo "$left run containers left behind" >&2; exit 1; }
+left=$((left + $(docker ps -aq --filter "name=nbsandbox-fetch-" | wc -l | tr -d ' ')))
+[ "$left" = 0 ] || { echo "$left run or fetcher containers left behind" >&2; exit 1; }
 
 step "v$VERSION as published: ok"
