@@ -49,6 +49,9 @@ up_new down -v --remove-orphans >/dev/null 2>&1 || true
 mkdir -p "$data/spaces" && chmod 700 "$data"
 install -m 600 "$root/config/users.yaml" "$data/users.yaml"
 [ -z "${DATA_OWNER:-}" ] || sudo chown -R "$DATA_OWNER" "$data"
+# CI checks out one commit without tags: fetch the one this needs.
+git -C "$root" rev-parse -q --verify "refs/tags/${FROM}" >/dev/null ||
+	git -C "$root" fetch -q --depth=1 origin "refs/tags/${FROM}:refs/tags/${FROM}"
 git -C "$root" worktree add --detach "$old" "$FROM" >/dev/null
 cat >"$work/from-image.yml" <<EOF
 services:
