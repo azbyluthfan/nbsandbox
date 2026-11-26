@@ -64,6 +64,8 @@ Set at least the following:
 
 Per-run limits, concurrency, retention and the rest are in `/etc/nbsandbox/settings.yaml`, which documents each setting.
 
+**Reading external data** ([connections.md](connections.md)) is off by default. To let notebooks read your databases and object storage, set the connections lines at the end of `.env.example`: both keys, where connections may point (`NBSANDBOX_CONNECTIONS_ALLOWED`), and `COMPOSE_PROFILES=connections`, which starts the egress gateway beside nbsandboxd. Pull the fetcher image with the runner image (step 5). The gateway must be able to reach your sources; nothing else of nbsandbox's can.
+
 **Interactive sessions** ([sessions.md](sessions.md)) are on by default (`sessions:` in `settings.yaml`; 2 per user, 4 per process). Their channel is a WebSocket (`/v1/spaces/{id}/sessions/{session_id}/channel`): Caddy passes it as is. If you put another proxy or load balancer in front, it must allow WebSocket upgrades on that path and keep an idle connection open for at least a minute.
 
 ## 5. Runner image
@@ -72,6 +74,12 @@ Releases publish the runner image on GHCR, so pulling it is enough:
 
 ```bash
 sudo docker pull ghcr.io/azbyluthfan/nbsandbox-runner:0.3.0
+```
+
+With connections on, the fetcher image too:
+
+```bash
+sudo docker pull ghcr.io/azbyluthfan/nbsandbox-fetcher:0.3.0
 ```
 
 To build it yourself instead (for example, to change the packages), use `make runner-image RUNNER_IMAGE=nbsandbox-runner:custom`, set `NBSANDBOX_RUNNER_IMAGE=nbsandbox-runner:custom` in `deploy/.env`, and see [operations.md](operations.md#runner-image).
