@@ -150,7 +150,7 @@ func (b *Backend) startFetcher(ctx context.Context, spec isolation.RunSpec, kind
 		joined = true
 		ip, err := b.client.ContainerIP(cctx, f.Gateway, netName)
 		if err != nil || ip == "" {
-			return cleanup, "", fmt.Errorf("%w: the gateway's address on the run's network: %v", isolation.ErrStart, cmp.Or(err, errors.New("none")))
+			return cleanup, "", fmt.Errorf("%w: the gateway's address on the run's network: %w", isolation.ErrStart, cmp.Or(err, errors.New("none")))
 		}
 		host.ExtraHosts = append(host.ExtraHosts, f.Gateway+":"+ip)
 	}
@@ -167,7 +167,7 @@ func (b *Backend) startFetcher(ctx context.Context, spec isolation.RunSpec, kind
 	}
 	ip, err := b.client.ContainerIP(cctx, id, netName)
 	if err != nil || ip == "" {
-		return cleanup, "", fmt.Errorf("%w: the fetcher's address on the run's network: %v", isolation.ErrStart, cmp.Or(err, errors.New("none")))
+		return cleanup, "", fmt.Errorf("%w: the fetcher's address on the run's network: %w", isolation.ErrStart, cmp.Or(err, errors.New("none")))
 	}
 	return cleanup, ip, nil
 }
