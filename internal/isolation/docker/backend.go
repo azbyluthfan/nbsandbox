@@ -46,11 +46,12 @@ func (b *Backend) Name() string { return "docker" }
 func (b *Backend) Run(ctx context.Context, spec isolation.RunSpec, out isolation.LineSink) (isolation.RunResult, error) {
 	cfg, host := buildContainerConfig(spec)
 	if spec.Fetcher != nil {
-		cleanup, err := b.startFetcher(ctx, spec, runFetcher, out)
+		cleanup, ip, err := b.startFetcher(ctx, spec, runFetcher, out)
 		defer cleanup()
 		if err != nil {
 			return isolation.RunResult{}, err
 		}
+		host.ExtraHosts = append(host.ExtraHosts, hostsEntry(spec.RunID, ip))
 	}
 	return b.runContainer(ctx, ContainerName(spec.RunID), spec.RunID, cfg, host, spec.Limits.StopGrace, out)
 }

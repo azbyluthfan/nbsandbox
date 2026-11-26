@@ -89,6 +89,14 @@ func TestRunWithFetcher(t *testing.T) {
 	if got := out.all(); len(got) == 0 || !strings.HasPrefix(got[0], "[fetcher] fetcher: serving") {
 		t.Fatalf("lines %q", got)
 	}
+	// Names in /etc/hosts, not Docker's DNS (gVisor can't reach it): the
+	// gateway's address for the fetcher, the fetcher's for the runner.
+	if h := f.fetcherCreated.host.ExtraHosts; !slices.Contains(h, "nbsandbox-gateway:10.5.0.2") {
+		t.Fatalf("fetcher's hosts %v", h)
+	}
+	if h := f.created.host.ExtraHosts; !slices.Contains(h, FetcherName(spec.RunID)+":10.5.0.3") {
+		t.Fatalf("runner's hosts %v", h)
+	}
 }
 
 func TestFetcherFailsToStart(t *testing.T) {

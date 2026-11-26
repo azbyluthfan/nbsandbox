@@ -73,17 +73,21 @@ func sessionRunSpec(spec isolation.SessionSpec) isolation.RunSpec {
 // as long as the session.
 func (b *Backend) StartSession(ctx context.Context, spec isolation.SessionSpec) (isolation.SessionConn, error) {
 	dropFetcher := func() {}
+	var fetcherIP string
 	if spec.Fetcher != nil {
-		cleanup, err := b.startFetcher(ctx, sessionRunSpec(spec), sessionFetcher, isolation.LineFunc(func(line string) {
+		cleanup, ip, err := b.startFetcher(ctx, sessionRunSpec(spec), sessionFetcher, isolation.LineFunc(func(line string) {
 			b.log.Debug("session fetcher", "session_id", spec.SessionID, "line", line)
 		}))
 		if err != nil {
 			cleanup()
 			return nil, err
 		}
-		dropFetcher = cleanup
+		dropFetcher, fetcherIP = cleanup, ip
 	}
 	cfg, host := buildSessionConfig(spec)
+	if fetcherIP != "" {
+		host.ExtraHosts = append(host.ExtraHosts, hostsEntry(spec.SessionID, fetcherIP))
+	}
 	name := SessionContainerName(spec.SessionID)
 	id, err := b.client.ContainerCreate(ctx, name, cfg, host)
 	if err != nil {

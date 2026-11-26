@@ -48,6 +48,8 @@ type Client interface {
 	// own (internal: no way out but the gateway).
 	NetworkCreate(ctx context.Context, name string, labels map[string]string) (string, error)
 	NetworkConnect(ctx context.Context, network, container string) error
+	// ContainerIP is a container's address on a network ("" if it has none).
+	ContainerIP(ctx context.Context, container, network string) (string, error)
 	NetworkDisconnect(ctx context.Context, network, container string) error
 	NetworkRemove(ctx context.Context, network string) error
 	// NetworkList lists networks carrying label.
@@ -220,6 +222,19 @@ func (m *mobyClient) NetworkCreate(ctx context.Context, name string, labels map[
 		return "", err
 	}
 	return res.ID, nil
+}
+
+func (m *mobyClient) ContainerIP(ctx context.Context, container, network string) (string, error) {
+	res, err := m.c.ContainerInspect(ctx, container, client.ContainerInspectOptions{})
+	if err != nil {
+		return "", err
+	}
+	if ns := res.Container.NetworkSettings; ns != nil {
+		if ep := ns.Networks[network]; ep != nil && ep.IPAddress.IsValid() {
+			return ep.IPAddress.String(), nil
+		}
+	}
+	return "", nil
 }
 
 func (m *mobyClient) NetworkConnect(ctx context.Context, network, container string) error {

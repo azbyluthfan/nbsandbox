@@ -5,6 +5,7 @@ package docker
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -105,9 +106,15 @@ func buildFetcherConfig(spec isolation.RunSpec, kind fetcherKind) (*container.Co
 }
 
 // startFetcher gives a run its network, joins the gateway to it, and
-// starts the fetcher, returning once it serves. The cleanup it returns
-// removes all of it; call it whatever the error.
-func (b *Backend) startFetcher(ctx context.Context, spec isolation.RunSpec, kind fetcherKind, out isolation.LineSink) (func(), error) {
+// starts the fetcher, returning once it serves, with the fetcher's address
+// on that network. The cleanup it returns removes all of it; call it
+// whatever the error.
+//
+// Names are written into /etc/hosts (the gateway's in the fetcher's, the
+// fetcher's in the runner's: hostsEntry) rather than left to Docker's DNS:
+// under gVisor a container can't reach Docker's embedded resolver on a
+// user-defined network.
+func (b *Backend) startFetcher(ctx context.Context, spec isolation.RunSpec, kind fetcherKind, out isolation.LineSink) (func(), string, error) {
 	f := spec.Fetcher
 	netName := NetworkName(spec.RunID)
 	var fetcherID string
@@ -133,28 +140,40 @@ func (b *Backend) startFetcher(ctx context.Context, spec isolation.RunSpec, kind
 	defer cancel()
 	labels := map[string]string{kind.network: spec.RunID, LabelSpace: spec.SpaceID, LabelGateway: f.Gateway}
 	if _, err := b.client.NetworkCreate(cctx, netName, labels); err != nil {
-		return cleanup, fmt.Errorf("%w: create the run's network: %w", isolation.ErrStart, err)
-	}
-	if f.Gateway != "" {
-		if err := b.client.NetworkConnect(cctx, netName, f.Gateway); err != nil {
-			return cleanup, fmt.Errorf("%w: join the gateway (container %q) to the run's network: %w", isolation.ErrStart, f.Gateway, err)
-		}
-		joined = true
+		return cleanup, "", fmt.Errorf("%w: create the run's network: %w", isolation.ErrStart, err)
 	}
 	cfg, host := buildFetcherConfig(spec, kind)
+	if f.Gateway != "" {
+		if err := b.client.NetworkConnect(cctx, netName, f.Gateway); err != nil {
+			return cleanup, "", fmt.Errorf("%w: join the gateway (container %q) to the run's network: %w", isolation.ErrStart, f.Gateway, err)
+		}
+		joined = true
+		ip, err := b.client.ContainerIP(cctx, f.Gateway, netName)
+		if err != nil || ip == "" {
+			return cleanup, "", fmt.Errorf("%w: the gateway's address on the run's network: %v", isolation.ErrStart, cmp.Or(err, errors.New("none")))
+		}
+		host.ExtraHosts = append(host.ExtraHosts, f.Gateway+":"+ip)
+	}
 	id, err := b.client.ContainerCreate(cctx, FetcherName(spec.RunID), cfg, host)
 	if err != nil {
-		return cleanup, fmt.Errorf("%w: create the fetcher: %w", isolation.ErrStart, err)
+		return cleanup, "", fmt.Errorf("%w: create the fetcher: %w", isolation.ErrStart, err)
 	}
 	fetcherID = id
 	if err := b.client.ContainerStart(cctx, id); err != nil {
-		return cleanup, fmt.Errorf("%w: start the fetcher: %w", isolation.ErrStart, err)
+		return cleanup, "", fmt.Errorf("%w: start the fetcher: %w", isolation.ErrStart, err)
 	}
 	if err := b.fetcherReady(ctx, id, out); err != nil {
-		return cleanup, fmt.Errorf("%w: %w", isolation.ErrStart, err)
+		return cleanup, "", fmt.Errorf("%w: %w", isolation.ErrStart, err)
 	}
-	return cleanup, nil
+	ip, err := b.client.ContainerIP(cctx, id, netName)
+	if err != nil || ip == "" {
+		return cleanup, "", fmt.Errorf("%w: the fetcher's address on the run's network: %v", isolation.ErrStart, cmp.Or(err, errors.New("none")))
+	}
+	return cleanup, ip, nil
 }
+
+// hostsEntry is the /etc/hosts line that lets a runner find its fetcher.
+func hostsEntry(id, ip string) string { return FetcherName(id) + ":" + ip }
 
 // fetcherReady follows the fetcher's output into the run's log until it
 // says it serves. If it ends first, its last lines say why (a source it
