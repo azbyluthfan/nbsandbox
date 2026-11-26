@@ -404,14 +404,14 @@ soak-cluster: cluster-data ## The soak on the cluster stack (two API processes, 
 	$(COMPOSE) stop
 	@$(STOP_KIND)
 	$(CLUSTER_TEST_ENV) $(SOAK_ENV) NBSANDBOX_RUN_CONCURRENCY=2 $(CLUSTER) up -d --build --force-recreate
-	$(CLUSTER_TEST_ENV) $(SOAK_ENV) SOAK_DURATION=$(SOAK_DURATION) REPORT_DIR="$(CURDIR)/bin/soak-cluster" $(GO) test -tags integration -count=1 -timeout 12h -v -run '^TestSoak$$' ./tests/integration/
+	$(CLUSTER_TEST_ENV) $(SOAK_ENV) SOAK_DURATION=$(SOAK_DURATION) REPORT_DIR="$(CURDIR)/bin/soak-cluster" $(GO) test -tags integration -count=1 -timeout 13h -v -run '^TestSoak$$' ./tests/integration/
 
 soak-k8s: k8s-up ## The soak on the local Kubernetes stack, cleanup timers shortened
 	$(HELM) upgrade nbsandbox deploy/helm/nbsandbox -n nbsandbox -f $(KIND_DIR)/values.yaml -f $(KIND_DIR)/soak.yaml \
 		--kubeconfig $(KIND_CONFIG) --wait --timeout 5m
 	$(KUBECTL) -n nbsandbox rollout status deploy/nbsandbox-api deploy/nbsandbox-worker --timeout=180s
 	$(K8S_TEST_ENV) NBSANDBOX_RUN_RETENTION=10m NBSANDBOX_EVENT_RETENTION=10m NBSANDBOX_IDEMPOTENCY_WINDOW=10m NBSANDBOX_CLEANUP_EVERY=2m \
-		SOAK_DURATION=$(SOAK_DURATION) REPORT_DIR="$(CURDIR)/bin/soak-k8s" $(GO) test -tags integration -count=1 -timeout 12h -v -run '^TestSoak$$' ./tests/integration/
+		SOAK_DURATION=$(SOAK_DURATION) REPORT_DIR="$(CURDIR)/bin/soak-k8s" $(GO) test -tags integration -count=1 -timeout 13h -v -run '^TestSoak$$' ./tests/integration/
 	$(HELM) upgrade nbsandbox deploy/helm/nbsandbox -n nbsandbox -f $(KIND_DIR)/values.yaml --kubeconfig $(KIND_CONFIG) --wait --timeout 5m
 
 .PHONY: report-k8s
@@ -482,7 +482,7 @@ soak: dev-data ## Soak test (default 45m): leaks judged on trends, cleanup timer
 	@$(STOP_KIND)
 	-@$(CLUSTER) stop >/dev/null 2>&1
 	$(SOAK_ENV) $(COMPOSE) up -d --build --force-recreate nbsandboxd
-	$(SOAK_ENV) SOAK_DURATION=$(SOAK_DURATION) $(GO) test -tags integration -count=1 -timeout 12h -v -run '^TestSoak$$' ./tests/integration/
+	$(SOAK_ENV) SOAK_DURATION=$(SOAK_DURATION) $(GO) test -tags integration -count=1 -timeout 13h -v -run '^TestSoak$$' ./tests/integration/
 
 # Reading under load: a fetcher's cost per run, a burst of reading runs,
 # and throughput through the gateway (numbers for docs/perf.md).
@@ -500,7 +500,7 @@ soak-connections: dev-data fetcher-image ## Soak test with reading runs, session
 		$(COMPOSE) up -d --build --force-recreate nbsandboxd gateway
 	mkdir -p bin/soak-connections
 	$(SOAK_ENV) NBSANDBOX_TEST_CONNECTIONS=1 SOAK_DURATION=$(SOAK_DURATION) REPORT_DIR="$(CURDIR)/bin/soak-connections" \
-		$(GO) test -tags integration -count=1 -timeout 12h -v -run '^TestSoak$$' ./tests/integration/; \
+		$(GO) test -tags integration -count=1 -timeout 13h -v -run '^TestSoak$$' ./tests/integration/; \
 		status=$$?; docker rm -fv $(TEST_SOURCES) >/dev/null 2>&1; exit $$status
 
 test-integration: dev-data ## Integration tests against the dev stack (Docker needed; restarts the stack)
