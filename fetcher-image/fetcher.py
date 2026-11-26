@@ -38,8 +38,34 @@ REFUSED_PREFIXES = ("postgres_", "mysql_", "mssql_", "sqlite_", "odbc_", "duckdb
 DOTDOT = re.compile(r"(^|/)\.\.(/|$)")
 
 
+# The line nbsandboxd shows when the fetcher can't start (the Go backends
+# match it).
+START_FAILED = "fetcher: can't start: "
+
+
 class Refused(Exception):
     """A query the gate refuses; the message says why."""
+
+
+# For a start error's message: the source being attached, and each
+# forwarder's local port and the endpoint it stands for.
+_attaching = {}
+_forwarded = {}
+
+
+def start_error(e):
+    """One line for nbsandboxd to show: which name failed, where it points,
+    and the driver's reason, without the forwarders' local addresses (the
+    user never gave those)."""
+    msg = " ".join(str(e).split())
+    msg = re.sub(r'Unable to connect to Postgres at "[^"]*": ', "", msg)
+    for port, target in _forwarded.items():
+        msg = re.sub(rf'connection to server at "127\.0\.0\.1", port {port} failed: ', "", msg)
+        msg = msg.replace(f"127.0.0.1:{port}", target).replace(f"'127.0.0.1' ({port})", target)
+    if _attaching:
+        where = f"{_attaching['type']}, {_attaching['target']}" if _attaching.get("target") else _attaching["type"]
+        msg = f"{_attaching['name']} ({where}): {msg}"
+    return msg
 
 
 def _walk(node, fn):
@@ -208,6 +234,7 @@ class Forwarder:
         self.sock.bind(listen)
         self.sock.listen(64)
         self.port = self.sock.getsockname()[1]
+        _forwarded[self.port] = target
         threading.Thread(target=self._accept, daemon=True).start()
 
     def _accept(self):
@@ -302,6 +329,8 @@ def connect(cfg):
             vault.close()
     for i, src in enumerate(cfg.get("sources", [])):
         name, typ, s = src["name"], src["type"], src.get("settings", {})
+        _attaching.clear()
+        _attaching.update(name=name, type=typ, target=f"{s['host']}:{s.get('port')}" if s.get("host") else s.get("endpoint", ""))
         secret = src.get("secret") or from_vault.get(name, "")
         if src.get("secret_file"):  # a mounted Secret (Kubernetes): nbsandboxd never read it
             with open(src["secret_file"]) as f:
@@ -384,6 +413,7 @@ def connect(cfg):
         else:
             continue  # served elsewhere (injected mode), or not yet
         served.append({"name": name, "type": typ})
+    _attaching.clear()
     # Under the container's limit, with room for Arrow buffers and Python:
     # past it DuckDB spills to /tmp rather than being killed.
     mem = int(os.environ.get("NBSANDBOX_FETCHER_MEMORY", "0") or 0)
@@ -457,7 +487,11 @@ def main():
         with open(os.environ.get("NBSANDBOX_FETCHER_CONFIG", "/etc/nbsandbox-fetcher/config.json")) as f:
             cfg = json.load(f)
     listen = os.environ.get("NBSANDBOX_FETCHER_LISTEN", "grpc://0.0.0.0:8815")
-    server = Fetcher(listen, cfg)
+    try:
+        server = Fetcher(listen, cfg)
+    except Exception as e:  # a source that can't be attached, a secret that can't be read
+        print(f"{START_FAILED}{start_error(e)}", file=sys.stderr)
+        sys.exit(1)
     print(f"fetcher: serving {len(server.served)} source(s) on {listen}", file=sys.stderr)
     server.serve()
 
