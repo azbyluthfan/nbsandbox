@@ -106,6 +106,16 @@ Each release is tested as an upgrade from the one before it, with sessions open 
 6. If the new nbsandboxd reports `runner_image` as not ready, the runner image's status format isn't supported by this nbsandboxd. Use the runner image from the same release.
 7. **If you drained, resume:** `curl -su root -X PUT "https://$HOST/v1/admin/drain" -H 'Content-Type: application/json' -d '{"draining":false}'`. The queued runs start.
 
+## Connections
+
+With connections on ([connections.md](connections.md#for-operators)):
+- **Back up the master key** (`connections.secrets.master_key`, built-in store) with the backups above, but apart from them: the stored secrets are encrypted with it, so a backup without the key can't restore them, and anyone with both can read them. With the `kubernetes` or `vault` provider, the secrets live in Secrets or Vault: back those up as you do the rest of the cluster's.
+- **The keys can't be rotated in place yet.** A new gateway key must go to nbsandboxd and the gateway together; runs and sessions reading at the time lose their fetcher's access (drain first). A new master key makes the stored secrets unreadable: users enter their connections' secrets again (or move to the `kubernetes` or `vault` provider, which keeps no key here).
+- **The fetcher image** (`connections.fetcher_image`) is updated like the runner image: pin the release's, and new reading runs use it.
+- **The gateway** keeps no state: restarting it is safe (fetchers' queries work again once it's back). Its log records each tunnel and request it allows or refuses (run, endpoint, bytes, duration); a refusal says why. It has no metrics of its own yet.
+- **nbsandboxd warns** at startup when given the repository's development keys, which are public.
+- **On Kubernetes,** the usage charts need metrics-server ([kubernetes.md](kubernetes.md#usage-while-runs-run)).
+
 ## Runner image
 
 The runner image is the only environment notebooks run in. It is rebuilt monthly for security updates (Renovate opens the update):

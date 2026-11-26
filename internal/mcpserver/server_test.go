@@ -25,6 +25,7 @@ type fakeAPI struct {
 	paths     []string
 	upload    string // the last uploaded file: folder/name and content
 	resultHit int    // GET .../result calls
+	env       string // the last run's environment
 	doneAfter int    // the result is ready from this call on
 }
 
@@ -47,6 +48,7 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == "POST" && r.URL.Path == "/v1/spaces/s1/runs":
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
+		f.env, _ = body["environment"].(string)
 		if body["notebook"] != "nb.ipynb" || body["space"] != "read-only" {
 			http.Error(w, `{"error":{"code":"bad","message":"unexpected body"}}`, http.StatusBadRequest)
 			return
@@ -135,9 +137,12 @@ func TestRunNotebookWaitsForTheResult(t *testing.T) {
 	f := &fakeAPI{doneAfter: 2} // still running on the first wait
 	cs := connect(t, f, &apiclient.Identity{Token: "tok"})
 	_, text := callTool(t, cs, "run_notebook", map[string]any{"space_id": "s1", "notebook": "nb.ipynb", "read_only": true,
-		"parameters": map[string]any{"n": 3}})
+		"parameters": map[string]any{"n": 3}, "environment": "prod"})
 	if !strings.Contains(text, `"finished":true`) || !strings.Contains(text, `"total":42`) {
 		t.Fatalf("result %s", text)
+	}
+	if f.env != "prod" {
+		t.Errorf("environment %q, want prod", f.env)
 	}
 	if f.resultHit != 2 {
 		t.Errorf("result asked %d times, want 2", f.resultHit)
