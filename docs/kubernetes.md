@@ -93,7 +93,7 @@ kubectl create namespace nbsandbox
 kubectl -n nbsandbox create secret generic nbsandbox-db --from-literal=database-url='postgres://…?sslmode=require'
 # For interactive sessions (sessions.secretName: nbsandbox-sessions in my-values.yaml):
 kubectl -n nbsandbox create secret generic nbsandbox-sessions --from-literal=secret="$(openssl rand -hex 32)"
-helm upgrade --install nbsandbox oci://ghcr.io/azbyluthfan/charts/nbsandbox --version 0.3.0 -n nbsandbox -f my-values.yaml
+helm upgrade --install nbsandbox oci://ghcr.io/azbyluthfan/charts/nbsandbox --version 0.4.0 -n nbsandbox -f my-values.yaml
 ```
 
 Releases publish the chart signed, on GHCR ([releasing.md](releasing.md) shows how to verify it); from a checkout, use `deploy/helm/nbsandbox` instead of the `oci://` address.

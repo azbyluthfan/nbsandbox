@@ -13,7 +13,7 @@ image:
 imagePullSecrets: []
 
 # The image notebooks run in (pinned by digest in production).
-runnerImage: ghcr.io/azbyluthfan/nbsandbox-runner:0.3.0
+runnerImage: ghcr.io/azbyluthfan/nbsandbox-runner:0.4.0
 
 api:
   replicas: 2
@@ -162,7 +162,7 @@ connections:
     caConfigMap: ""         # a ConfigMap with key ca.crt, if Vault's certificate isn't publicly trusted
     tokenSecret: ""         # testing only: a Secret with key token, instead of Kubernetes auth
   masterKeySecret: ""       # builtin: a Secret with key master-key (openssl rand -base64 32)
-  fetcherImage: ghcr.io/azbyluthfan/nbsandbox-fetcher:0.3.0
+  fetcherImage: ghcr.io/azbyluthfan/nbsandbox-fetcher:0.4.0
   # Each reading run's fetcher Pod, beside its run Pod: reserved like a
   # run's (requests = limits). DuckDB spills past three quarters of it.
   fetcherMemory: 1GiB
