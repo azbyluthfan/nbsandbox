@@ -315,6 +315,17 @@ class StartErrorTest(unittest.TestCase):
         self.assertNotIn("hostaddr", msg)
         self.assertNotIn("\n", msg)
 
+    def test_the_gateways_reason_wins(self):
+        # The driver sees only its connection close; the gateway said why.
+        fetcher._attaching.update(name="crm", type="postgresql", target="pg.invalid:5432")
+        fetcher._refused["pg.invalid:5432"] = "the gateway refused pg.invalid:5432 (502 Bad Gateway): lookup pg.invalid: no such host"
+        try:
+            msg = fetcher.start_error(Exception("IO Error: server closed the connection unexpectedly"))
+        finally:
+            fetcher._attaching.clear()
+            fetcher._refused.clear()
+        self.assertEqual(msg, "crm (postgresql, pg.invalid:5432): the gateway refused pg.invalid:5432 (502 Bad Gateway): lookup pg.invalid: no such host")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -284,6 +284,14 @@ func GatewayKey(v string) ([]byte, error) {
 	return k, nil
 }
 
+// PublicDevKey reports whether a base64 key is one of the repository's
+// development keys (the dev and kind stacks' master and gateway keys, which
+// decode to "dev-only-…"): public, so never to be deployed.
+func PublicDevKey(v string) bool {
+	k, err := base64.StdEncoding.DecodeString(strings.TrimSpace(v))
+	return err == nil && strings.HasPrefix(string(k), "dev-only-")
+}
+
 // SessionsOn reports whether this process runs interactive sessions:
 // turned on, and, with API and worker processes, given the secret they
 // share.

@@ -435,3 +435,15 @@ func TestConnectionsSettings(t *testing.T) {
 		}
 	}
 }
+
+// The repository's development keys are recognised, so nbsandboxd warns.
+func TestPublicDevKey(t *testing.T) {
+	for _, k := range []string{"ZGV2LW9ubHktbWFzdGVyLWtleS0wMTIzNDU2Nzg5YWI=", "ZGV2LW9ubHktZ2F0ZXdheS1rZXktMDEyMzQ1Njc4OWE="} {
+		if !PublicDevKey(k) {
+			t.Errorf("%s not recognised", k)
+		}
+	}
+	if PublicDevKey("MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=") || PublicDevKey("not base64!") {
+		t.Error("another key taken for a development key")
+	}
+}
