@@ -23,7 +23,7 @@ Before v1.0, a minor version may change behaviour; changes are listed in the cha
    ```
 3. **Changelog:** move "Unreleased" in [CHANGELOG.md](../CHANGELOG.md) to the new version, with today's date.
 4. **Versions in files:** `deploy/.env.example`, the defaults in `deploy/docker-compose.yml`, `deploy/helm/nbsandbox/Chart.yaml` (`version`, `appVersion`) and `values.yaml` (`runnerImage`), and `api/openapi.yaml` `info.version`.
-5. **Scans** (the [security review](security/review.md) lists the commands): `govulncheck`, Trivy on the three images (nbsandboxd, the runner and its builder), `pip-audit` on the runner's packages, gitleaks on the tree. Fix what has a fix; note what doesn't.
+5. **Scans** (the [security review](security/review.md) lists the commands): `govulncheck`, Trivy on the four images (nbsandboxd, the runner, its builder and the fetcher), `pip-audit` on the runner's and the fetcher's packages (the weekly run repeats both), gitleaks on the tree. Fix what has a fix; note what doesn't.
 6. **Isolation reports on every platform** (the release workflow repeats the Docker one on Linux):
    - Linux with Docker Engine and Kubernetes 1.37 (kind), each with `runc` and gVisor: from the latest weekly run on `main` that passed (start one from the Actions tab if the code changed since). Download its `isolation-report-*` artifacts, unzip each into a folder of its own name, run `scripts/render-reports.sh <folder>`, review the diff, and commit the two reports in the release's pull request. CI never writes them itself;
    - or on your own machines: `make report-linux`, and `make report-k8s` then `make report-k8s K8S_RUNTIME_CLASS=gvisor`.
@@ -48,7 +48,7 @@ Before v1.0, a minor version may change behaviour; changes are listed in the cha
    ```bash
    scripts/check-published.sh X.Y.Z
    ```
-   It deploys that release from its tag with the images on GHCR, as [deployment.md](deployment.md) does (pulled without a login, so they must be public), and runs the smoke notebook and a package set build through Caddy; for a release with interactive sessions, also the release's own session example ([examples/python/interactive_session.py](../examples/python/interactive_session.py)) over a WebSocket through Caddy (needs `python3` with `venv`). The weekly workflow repeats it for the newest release.
+   It deploys that release from its tag with the images on GHCR, as [deployment.md](deployment.md) does (pulled without a login, so they must be public), and runs the smoke notebook and a package set build through Caddy; for a release with interactive sessions, also the release's own session example ([examples/python/interactive_session.py](../examples/python/interactive_session.py)) over a WebSocket through Caddy (needs `python3` with `venv`). For a release with connections, it turns them on as [connections.md](connections.md) says, starts the gateway, and reads a PostgreSQL table beside the stack through the published fetcher. `CHECK_LOCAL_IMAGES=1` tries it before a release with local builds tagged as the release's images. The weekly workflow repeats it for the newest release.
 
 ## Security fixes
 

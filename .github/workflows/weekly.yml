@@ -9,7 +9,8 @@
 #   - Kubernetes (kind with Cilium) with the default runtime and with a
 #     gVisor RuntimeClass: the isolation report;
 #   - every fuzz target for a few minutes;
-#   - a security scan (govulncheck, and Trivy on the three images), which reports
+#   - a security scan (govulncheck, Trivy on the four images, pip-audit on
+#     the runner's and the fetcher's packages), which reports
 #     newly published advisories even in weeks without commits;
 #   - the latest release as published: deployed from GHCR as
 #     docs/deployment.md does, with notebooks run through it (every other job
@@ -145,18 +146,24 @@ jobs:
           go-version-file: go.mod
       - name: govulncheck (vulnerabilities our code reaches)
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
-      - name: Build both images
+      - name: Build the images
         run: |
-          make runner-image
+          make runner-image fetcher-image
           docker build -q -f deploy/nbsandboxd.Dockerfile -t nbsandboxd:dev .
       - name: Trivy (HIGH and CRITICAL with a fix available)
         # Advisories without a published fix are accepted until there is one
         # (docs/security/review.md); a fixable one fails this job.
         run: |
-          for image in nbsandboxd:dev nbsandbox-runner:dev nbsandbox-runner-builder:dev; do
+          for image in nbsandboxd:dev nbsandbox-runner:dev nbsandbox-runner-builder:dev nbsandbox-fetcher:dev; do
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock:ro -v "$PWD/.trivyignore:/.trivyignore:ro" \
               aquasec/trivy:0.58.1@sha256:ab70a02200597efa04748f210f793936eb647cbcdb0ea69cc30b226d6f5a22c7 \
               image --quiet --severity HIGH,CRITICAL --ignore-unfixed --ignorefile /.trivyignore --exit-code 1 "$image"
+          done
+      - name: pip-audit (the runner's and the fetcher's Python packages)
+        run: |
+          for dir in runner-image fetcher-image; do
+            docker run --rm -v "$PWD/$dir:/w:ro" python:3.13-slim@sha256:7249d5587b78209a006dc4a3b5340678f84ea729239193aa559962cd8c1fce50 \
+              sh -c 'pip install -q --root-user-action=ignore pip-audit==2.10.1 && pip-audit -r /w/requirements.txt --disable-pip --no-deps --progress-spinner off'
           done
 
   published:

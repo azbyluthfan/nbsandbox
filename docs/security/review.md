@@ -129,10 +129,10 @@ Go's built-in fuzzer; each target runs in CI on its seed inputs, and for a longe
 
 ```bash
 go run golang.org/x/vuln/cmd/govulncheck@latest ./...
-make runner-image && docker build -q -f deploy/nbsandboxd.Dockerfile -t nbsandboxd:dev .
-docker save nbsandboxd:dev -o /tmp/nbsandboxd.tar && docker save nbsandbox-runner:dev -o /tmp/runner.tar && docker save nbsandbox-runner-builder:dev -o /tmp/builder.tar
-docker run --rm -v /tmp:/in:ro -v "$PWD/.trivyignore:/.trivyignore:ro" aquasec/trivy:0.58.1 image --input /in/runner.tar --severity HIGH,CRITICAL --ignorefile /.trivyignore   # and nbsandboxd.tar, builder.tar
-docker run --rm -v "$PWD/runner-image":/w:ro python:3.13-slim sh -c 'pip install -q pip-audit && pip-audit -r /w/requirements.txt --disable-pip --no-deps'
+make runner-image fetcher-image && docker build -q -f deploy/nbsandboxd.Dockerfile -t nbsandboxd:dev .
+docker save nbsandboxd:dev -o /tmp/nbsandboxd.tar && docker save nbsandbox-runner:dev -o /tmp/runner.tar && docker save nbsandbox-runner-builder:dev -o /tmp/builder.tar && docker save nbsandbox-fetcher:dev -o /tmp/fetcher.tar
+docker run --rm -v /tmp:/in:ro -v "$PWD/.trivyignore:/.trivyignore:ro" aquasec/trivy:0.58.1 image --input /in/runner.tar --severity HIGH,CRITICAL --ignorefile /.trivyignore   # and nbsandboxd.tar, builder.tar, fetcher.tar
+for d in runner-image fetcher-image; do docker run --rm -v "$PWD/$d":/w:ro python:3.13-slim sh -c 'pip install -q pip-audit && pip-audit -r /w/requirements.txt --disable-pip --no-deps'; done
 docker run --rm -v "$PWD":/repo:ro zricethezav/gitleaks:v8.21.2 dir /repo --redact
 go test ./internal/tarfs -run '^$' -fuzz '^FuzzReadTar$' -fuzztime 2m   # and each target above
 ```
