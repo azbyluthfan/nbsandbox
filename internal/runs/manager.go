@@ -51,6 +51,7 @@ type Config struct {
 	Image             string
 	Runtime           string
 	Limits            isolation.Limits
+	SampleEvery       time.Duration // how often workers sample runs' usage (GET …/usage says it; default 5 s)
 	Timeout           time.Duration
 	Concurrency       int
 	LogCap            int64

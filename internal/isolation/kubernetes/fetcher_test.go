@@ -270,3 +270,26 @@ func TestFetcherSecretGone(t *testing.T) {
 		t.Fatalf("left behind: %d pods", len(pods.Items))
 	}
 }
+
+// A PodMetrics object: the runner container's working set and CPU, without
+// disk writes.
+func TestPodUsage(t *testing.T) {
+	u, err := podUsage([]byte(`{"kind":"PodMetrics","containers":[{"name":"files","usage":{"cpu":"1m","memory":"5Mi"}},
+		{"name":"runner","usage":{"cpu":"250m","memory":"128Mi"}}]}`))
+	if err != nil || u.MemoryBytes != 128<<20 || u.CPUs != 0.25 || !u.Rate || u.WrittenBytes != -1 {
+		t.Fatalf("%+v %v", u, err)
+	}
+	if _, err := podUsage([]byte(`{"containers":[]}`)); err == nil {
+		t.Fatal("no runner container: want an error")
+	}
+	b := NewBackend(Config{Namespace: "runs"}, fake.NewClientset(), nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	b.podMetrics = func(_ context.Context, name string) ([]byte, error) {
+		if name != PodName("r1") {
+			t.Fatalf("pod %s", name)
+		}
+		return []byte(`{"containers":[{"name":"runner","usage":{"cpu":"1","memory":"1Gi"}}]}`), nil
+	}
+	if u, err := b.RunUsage(context.Background(), "r1"); err != nil || u.CPUs != 1 || u.MemoryBytes != 1<<30 {
+		t.Fatalf("%+v %v", u, err)
+	}
+}

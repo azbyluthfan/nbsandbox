@@ -104,6 +104,11 @@ func (s *Sampler) Sample(ctx context.Context) {
 		s.prev[key] = reading{at: now, u: u, first: p.first, written: p.written}
 		s.mu.Unlock()
 		tot.MemoryBytes += u.MemoryBytes
+		if u.Rate { // the backend's own rate (Kubernetes); no disk writes
+			tot.CPUs += u.CPUs
+			writesKnown = false
+			return u, p, u.CPUs, true
+		}
 		if !had || !now.After(p.at) || u.CPUNanos < p.u.CPUNanos {
 			return u, p, 0, false // a rate needs two readings of the same container
 		}

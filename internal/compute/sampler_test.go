@@ -82,3 +82,21 @@ func TestSampler(t *testing.T) {
 		t.Fatalf("after the run: %+v %+v", s.prev, s.Totals())
 	}
 }
+
+// A backend that reports CPU as a rate (Kubernetes): stored from the first
+// reading, without disk writes.
+func TestSamplerRates(t *testing.T) {
+	now := time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC)
+	r := &fakeReader{runs: map[string]isolation.Usage{"r1": {MemoryBytes: 100, CPUs: 0.75, Rate: true, WrittenBytes: -1}}}
+	got := fakeSamples{}
+	s := &Sampler{Reader: r, Runs: func() []string { return []string{"r1"} }, Sessions: func() []string { return nil }, Store: got,
+		Limits: isolation.Limits{MemoryBytes: 1000, NanoCPUs: 1e9}, Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Every: 15 * time.Second, Thin: time.Hour, Now: func() time.Time { return now }}
+	s.Sample(context.Background())
+	if n := got["r1"]; len(n) != 1 || n[0].CPUMillicores != 750 || n[0].WrittenBytes != nil {
+		t.Fatalf("%+v", got["r1"])
+	}
+	if tot := s.Totals(); tot.CPUs != 0.75 || tot.WriteBytesPerSecond != nil {
+		t.Fatalf("%+v", tot)
+	}
+}

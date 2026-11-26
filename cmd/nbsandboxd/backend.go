@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -85,3 +86,12 @@ func probeTargets(cfg config.Settings) []string {
 }
 
 func getenvPodIP() string { return os.Getenv("NBSANDBOX_POD_IP") }
+
+// sampleEvery is how often workers sample runs' and sessions' usage: 5 s on
+// Docker, metrics-server's resolution on Kubernetes.
+func sampleEvery(cfg config.Settings) time.Duration {
+	if cfg.Backend == "kubernetes" {
+		return kubernetes.SamplingInterval
+	}
+	return 5 * time.Second
+}
