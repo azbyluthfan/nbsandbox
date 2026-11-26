@@ -6,6 +6,7 @@
 # long as its longest job (about 1.5 h; each job is capped below 2 h):
 #   - Docker with runc and with gVisor: backend conformance, the isolation
 #     report and a 45-minute soak; reading external data under gVisor;
+#     an upgrade from the newest release (runc);
 #   - Kubernetes (kind with Cilium) with the default runtime and with a
 #     gVisor RuntimeClass: the isolation report; the integration suite on
 #     kind with Calico;
@@ -85,6 +86,11 @@ jobs:
       - name: Reading external data under gVisor (the fetcher and its forwarders in runsc)
         if: matrix.runtime == 'runsc'
         run: make fetcher-test test-connections TESTFLAGS=-v
+      - name: Upgrade from the newest release (its published image) on the same database and object store
+        if: matrix.runtime == 'runc'
+        env:
+          DATA_OWNER: "1000:1000"
+        run: make test-upgrade TESTFLAGS=-v
       - name: Soak (45 min, trends)
         run: make soak SOAK_DURATION=45m
       - name: Stack logs on failure

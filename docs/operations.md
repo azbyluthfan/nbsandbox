@@ -85,6 +85,8 @@ Runs that were active when the backup was taken end as `interrupted` when nbsand
 
 ## Upgrade
 
+Each release is tested as an upgrade from the one before it, with sessions open and runs active: data, results, published functions and open sessions survive, as described in step 5 (`make test-upgrade`, also in the weekly run).
+
 1. Read the release notes and [CHANGELOG.md](../CHANGELOG.md).
 2. **Back up first** (see above).
 3. **Optional: drain**, so no run is interrupted: no queued run starts, running ones finish, and new runs still queue. No interactive session starts either; open ones keep running through the upgrade and are re-attached ([sessions.md](sessions.md#for-operators)). Wait until `running_runs` is 0. The drain is stored in the database, so it holds across the restart; resume afterwards (step 7). A long drain may set off the queue-backlog alert.
