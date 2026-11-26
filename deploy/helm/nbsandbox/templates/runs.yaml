@@ -58,6 +58,9 @@ rules:
   - apiGroups: [networking.k8s.io]
     resources: [networkpolicies]
     verbs: [create, get, list, delete]
+  - apiGroups: [""]
+    resources: [events]     # a fetcher that can't mount a referenced Secret
+    verbs: [list]
   {{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1

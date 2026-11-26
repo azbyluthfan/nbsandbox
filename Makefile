@@ -302,9 +302,11 @@ ifeq ($(K8S_CNI),cilium)
 	$(HELM) upgrade --install cilium cilium --repo https://helm.cilium.io --version $(CILIUM_VERSION) -n kube-system \
 		--kubeconfig $(KIND_CONFIG) --set image.pullPolicy=IfNotPresent --set ipam.mode=kubernetes --wait --timeout 10m
 else ifeq ($(K8S_CNI),calico)
-	$(KUBECTL) apply --server-side -f https://raw.githubusercontent.com/projectcalico/calico/v$(CALICO_VERSION)/manifests/calico.yaml >/dev/null
+	$(KUBECTL) apply --server-side --force-conflicts -f https://raw.githubusercontent.com/projectcalico/calico/v$(CALICO_VERSION)/manifests/calico.yaml >/dev/null
 	@# kind's nodes are containers: Felix must not insist on strict reverse-path filtering.
 	$(KUBECTL) -n kube-system set env daemonset/calico-node FELIX_IGNORELOOSERPF=true
+	@# Its 250m CPU request would leave kind's 4-CPU node short of two runs (1.25 CPU each); Cilium's agent requests none.
+	$(KUBECTL) -n kube-system set resources daemonset/calico-node -c calico-node --requests=cpu=0
 	$(KUBECTL) -n kube-system rollout status daemonset/calico-node --timeout=10m
 else ifneq ($(K8S_CNI),kindnet)
 	$(error K8S_CNI must be cilium, calico or kindnet)

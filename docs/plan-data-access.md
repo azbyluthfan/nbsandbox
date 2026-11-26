@@ -237,7 +237,7 @@ Go's cost is `duckdb-go`'s Arrow export itself: 22 s for the 10 M rows with no n
 - the fetcher can't connect to the source directly, and can't resolve names (no DNS in runs);
 - a runner reaches its own fetcher, but not another run's runner or fetcher, nor the gateway (mediated mode), the Kubernetes API or nbsandbox's own Pods.
 
-Verified with Cilium; the policies use only standard NetworkPolicy, still to be checked with Calico and Azure's policy engine.
+Verified with Cilium and Calico (kind, 2026-11-26; the weekly run repeats both); the policies use only standard NetworkPolicy, still to be checked with Azure's policy engine.
 
 ## What others do (research, 2026-11-24)
 

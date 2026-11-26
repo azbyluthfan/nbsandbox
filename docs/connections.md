@@ -148,9 +148,10 @@ The integration tests check each row (`make test-connections`).
 | A source stops | Its queries raise `nbsandbox.QueryError` with the source's error; they work again once it is back. |
 | The gateway restarts | Queries work again once it is back: its tokens are signed, not stored. |
 | The fetcher stops (out of memory, its Pod deleted) | Every query raises `QueryError`: "the fetcher can't be reached". A run carries on without its data; a session needs starting again. A fetcher whose network vanishes without closing its connections (a lost node) fails a waiting query within about six and a half minutes. |
+| A Secret a connection references is deleted, or loses its key (Kubernetes) | The run or session fails at start within seconds, with the kubelet's message naming the Secret. A rotated value applies from the next run on. |
 | nbsandboxd restarts | A session reconnects and reads through the same fetcher; a run ends as interrupted. Either way, a fetcher and its network don't outlive their run or session. |
 
-The integration tests check each row (`TestConnectionsFetcherDies`, `TestConnectionsSessionFailures`, `TestConnectionsRunInterrupted`).
+The integration tests check each row (`TestConnectionsFetcherDies`, `TestConnectionsSessionFailures`, `TestConnectionsRunInterrupted`, `TestConnectionsKubernetesReference`).
 
 ## For operators
 
@@ -169,7 +170,7 @@ connections:
 
 - **Secrets:** a connection's secret is a Secret in the runs namespace: one nbsandbox writes (`nbsandbox-conn-<id>`, labelled), or one you manage and reference as `name#key` (GitOps, Sealed Secrets, External Secrets Operator). The fetcher Pod **mounts** it: nbsandboxd never reads it. With the `kubernetes` provider, the API processes get a token and a Role limited to Secrets in the runs namespace; otherwise they still have none.
 - **The gateway** is a Deployment and a Service in the release namespace, with a NetworkPolicy that lets only fetchers in. Allow its egress to your sources in whatever egress controls the cluster has (it needs DNS too).
-- **Each reading run** gets a fetcher Pod in the runs namespace (its own limits, reserved like a run's: `connections.fetcherMemory` and `fetcherCpus`; the run's runtime class; no API credentials, no DNS: the worker resolves the gateway's address), a Secret with its configuration and tokens, and two NetworkPolicies: its runner may reach its fetcher, and nothing else may. A chart policy lets fetchers reach the gateway's port. The workers' Role gains Secrets and NetworkPolicies in the runs namespace.
+- **Each reading run** gets a fetcher Pod in the runs namespace (its own limits, reserved like a run's: `connections.fetcherMemory` and `fetcherCpus`; the run's runtime class; no API credentials, no DNS: the worker resolves the gateway's address), a Secret with its configuration and tokens, and two NetworkPolicies: its runner may reach its fetcher, and nothing else may. A chart policy lets fetchers reach the gateway's port. The workers' Role gains Secrets, NetworkPolicies and listing events (a fetcher that can't mount a referenced Secret fails at once) in the runs namespace.
 - The namespace's deny-all and the workers' check that it's enforced are unchanged: the network plugin must enforce NetworkPolicy (Cilium, Calico, Azure's).
 
 ### Vault or OpenBao

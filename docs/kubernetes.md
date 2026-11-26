@@ -47,14 +47,14 @@ Plugins differ in how they treat traffic to host-network endpoints (the API serv
 | Plugin | Result |
 |---|---|
 | Cilium 1.20 (Kubernetes 1.37 and 1.34) | every week in CI: the full integration suite and its isolation report pass, with runc and under gVisor; nothing is reachable from a run Pod |
-| Calico 3.29 (Kubernetes 1.32, 2026-11-08) | the isolation suite, memory, cancel, disk-quota and runtime tests pass; nothing is reachable from a run Pod |
+| Calico 3.29 (Kubernetes 1.37) | every week in CI: the full integration suite, reading external data included (the fetchers' and gateway's policies); nothing is reachable from a run Pod or a fetcher |
 | kindnet (kind's own; 2026-11-08) | doesn't enforce the policy: the probe Pod reached the internet, the node's kubelet, the worker and the API server. Both workers said so, stayed not ready and took no runs; submitting a run got 503 and no run Pod was created |
 
 So a cluster whose plugin doesn't enforce NetworkPolicy fails closed: nbsandbox stops running notebooks instead of running them with network access.
 
 ## Supported versions
 
-**Kubernetes 1.34 to 1.37.** The weekly CI run checks both ends on kind (with Cilium): the isolation report on 1.37 with the default runtime and with gVisor, and on 1.34 with the default runtime. A version in between, or a newer one, very likely works too: nbsandbox uses only stable APIs (Pods, `pods/exec` and logs, NetworkPolicy, RuntimeClass); run [`nbsandbox-report check`](check-deployment.md) on it to be sure.
+**Kubernetes 1.34 to 1.37.** The weekly CI run checks both ends on kind (with Cilium), and 1.37 with Calico: the isolation report on 1.37 with the default runtime and with gVisor, and on 1.34 with the default runtime. A version in between, or a newer one, very likely works too: nbsandbox uses only stable APIs (Pods, `pods/exec` and logs, NetworkPolicy, RuntimeClass); run [`nbsandbox-report check`](check-deployment.md) on it to be sure.
 
 The range moves with upstream support: when a new Kubernetes minor is released, the newest tested version moves up, and the oldest follows within a release or two. `K8S_VERSION=1.34 make k8s-up` runs the local cluster at the oldest supported version.
 
@@ -96,7 +96,7 @@ Releases publish the chart signed, on GHCR ([releasing.md](releasing.md) shows h
 
 What it creates:
 - **API Deployment and Service:** no Kubernetes permissions.
-- **Worker Deployment:** a Role allowing only Pods, Pod logs, `pods/exec` and `pods/attach` (interactive sessions), only in the runs namespace. Workers serve their sessions to API Pods on port 8091, at their Pod IP, with the shared `sessions.secret`.
+- **Worker Deployment:** a Role allowing only Pods, Pod logs, `pods/exec` and `pods/attach` (interactive sessions), only in the runs namespace; with connections on, also Secrets and NetworkPolicies (each reading run's fetcher) and listing events ([connections.md](connections.md#on-kubernetes-helm)). Workers serve their sessions to API Pods on port 8091, at their Pod IP, with the shared `sessions.secret`.
 - **The runs namespace:** the `restricted` Pod Security Standard and the deny-all NetworkPolicy.
 - **PodDisruptionBudgets**, and an optional Ingress (only `/v1/` and the gRPC services; health and metrics stay internal).
 

@@ -228,3 +228,45 @@ func TestFetcherPodHostAliases(t *testing.T) {
 		t.Fatalf("host aliases: %+v", got)
 	}
 }
+
+// A referenced Secret deleted after its connection was made: the fetcher
+// Pod is scheduled but can't mount it. Its FailedMount event fails the run
+// at start, naming the Secret, instead of a wait until the start timeout.
+func TestFetcherSecretGone(t *testing.T) {
+	ctx := context.Background()
+	client := fake.NewClientset()
+	b := NewBackend(Config{Namespace: "runs"}, client, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	b.lookup = func(context.Context, string) ([]string, error) { return []string{"10.96.0.9"}, nil }
+	b.poll = time.Millisecond
+	name := FetcherName(fetcherSpec().RunID)
+	go func() {
+		for i := 0; i < 2000; i++ {
+			p, err := client.CoreV1().Pods("runs").Get(ctx, name, metav1.GetOptions{})
+			if err != nil {
+				time.Sleep(time.Millisecond)
+				continue
+			}
+			p.Spec.NodeName = "node-1"
+			_, _ = client.CoreV1().Pods("runs").Update(ctx, p, metav1.UpdateOptions{})
+			_, _ = client.CoreV1().Events("runs").Create(ctx, &corev1.Event{
+				ObjectMeta:     metav1.ObjectMeta{Name: name + ".1", Namespace: "runs"},
+				InvolvedObject: corev1.ObjectReference{Kind: "Pod", Name: name, Namespace: "runs"},
+				Reason:         "FailedMount",
+				Message:        `MountVolume.SetUp failed for volume "secrets" : secret "crm-team" not found`,
+			}, metav1.CreateOptions{})
+			return
+		}
+	}()
+	t0 := time.Now()
+	_, err := b.Run(ctx, fetcherSpec(), isolation.LineFunc(func(string) {}))
+	if !errors.Is(err, isolation.ErrStart) || !strings.Contains(err.Error(), `secret "crm-team" not found`) {
+		t.Fatalf("run: %v", err)
+	}
+	if d := time.Since(t0); d > 30*time.Second {
+		t.Fatalf("took %s", d)
+	}
+	pods, _ := client.CoreV1().Pods("runs").List(ctx, metav1.ListOptions{})
+	if len(pods.Items) != 0 {
+		t.Fatalf("left behind: %d pods", len(pods.Items))
+	}
+}

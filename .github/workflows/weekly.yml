@@ -5,9 +5,10 @@
 # push. Every scenario runs side by side, so the whole run takes about as
 # long as its longest job (about 1.5 h; each job is capped below 2 h):
 #   - Docker with runc and with gVisor: backend conformance, the isolation
-#     report and a 45-minute soak;
+#     report and a 45-minute soak; reading external data under gVisor;
 #   - Kubernetes (kind with Cilium) with the default runtime and with a
-#     gVisor RuntimeClass: the isolation report;
+#     gVisor RuntimeClass: the isolation report; the integration suite on
+#     kind with Calico;
 #   - every fuzz target for a few minutes;
 #   - a security scan (govulncheck, and Trivy on the three images), which reports
 #     newly published advisories even in weeks without commits;
@@ -80,6 +81,9 @@ jobs:
           NBSANDBOX_CHECK_A_PASSWORD: alice-dev-password
           NBSANDBOX_CHECK_B_PASSWORD: bob-dev-password
         run: go run ./cmd/nbsandbox-report check -url http://127.0.0.1:8080 -user-a alice -user-b bob -out bin/check-report.md
+      - name: Reading external data under gVisor (the fetcher and its forwarders in runsc)
+        if: matrix.runtime == 'runsc'
+        run: make fetcher-test test-connections TESTFLAGS=-v
       - name: Soak (45 min, trends)
         run: make soak SOAK_DURATION=45m
       - name: Stack logs on failure
@@ -123,6 +127,18 @@ jobs:
           path: |
             docs/isolation-report-kubernetes.md
             bin/findings-k8s/
+
+  calico:
+    name: Kubernetes 1.37 (Calico)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: The integration suite on kind with Calico (the connections' policies too)
+        run: make test-k8s K8S_CNI=calico TESTFLAGS=-v
 
   fuzz:
     runs-on: ubuntu-24.04
@@ -195,7 +211,7 @@ jobs:
         run: docker compose -f deploy/docker-compose.dev.yml -f deploy/docker-compose.keycloak.yml logs --no-color | tail -300
 
   report-failure:
-    needs: [docker, kubernetes, keycloak, fuzz, security, published]
+    needs: [docker, kubernetes, calico, keycloak, fuzz, security, published]
     if: failure()
     runs-on: ubuntu-24.04
     steps:
