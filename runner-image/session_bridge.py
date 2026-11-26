@@ -51,6 +51,9 @@ PUMP_POLL = 1.0
 # How long an interrupt that came before its cell's code started is held at
 # most (a silent cell, such as the variables panel's, announces no start).
 INTERRUPT_HOLD = 1.0
+# How long after an interrupted cell's "idle" its execute_reply may still
+# come; past it, the bridge answers for the kernel (Bridge.track).
+REPLY_GRACE = 2.0
 
 
 def _default(o):
@@ -74,6 +77,10 @@ class Bridge:
         self.running = None
         self.started = False
         self.held = None
+        # Cells interrupted (their execute_request's msg_id), until their
+        # execute_reply: one the kernel never sends is supplied.
+        self.interrupted = set()
+        self.supplied = set()
 
     async def emit(self, msg):
         line = json.dumps(msg, default=_default, separators=(",", ":"))
@@ -107,6 +114,7 @@ class Bridge:
         if self.held is not None:
             self.held.cancel()
         self.running, self.started, self.held = None, False, None
+        self.interrupted.clear()
         if self.kc is not None:
             self.kc.stop_channels()
         if self.km is not None:
@@ -152,6 +160,8 @@ class Bridge:
             mt = msg["header"]["msg_type"]
             if name == "iopub":
                 await self.track(msg)
+            if name == "shell" and mt == "execute_reply" and not self.replied(msg):
+                continue  # the bridge answered already: a second reply would confuse the client
             if mt not in ALLOWED_OUT[name]:
                 continue
             await self.emit({"channel": name, "header": msg["header"], "parent_header": msg["parent_header"],
@@ -182,12 +192,42 @@ class Bridge:
             if self.held is not None:
                 self.held.cancel()
                 self.held = None
+            if pid in self.interrupted:
+                asyncio.create_task(self._reply_for(parent))
+
+    def replied(self, msg):
+        """Notes a cell's execute_reply; False if the bridge already sent one."""
+        pid = (msg.get("parent_header") or {}).get("msg_id")
+        self.interrupted.discard(pid)
+        if pid in self.supplied:
+            self.supplied.discard(pid)
+            return False
+        return True
+
+    async def _reply_for(self, parent):
+        """An interrupt that lands as the kernel starts a cell, after it said
+        execute_input but before the cell's own code, is caught by ipykernel's
+        dispatcher ("KeyboardInterrupt caught in kernel"): the cell goes idle
+        and no execute_reply ever comes, so a client waiting for one would
+        wait for good (seen in the soak). If none has come REPLY_GRACE after
+        idle, the bridge sends the reply an interrupted cell gets."""
+        pid = parent.get("msg_id")
+        await asyncio.sleep(REPLY_GRACE)
+        if pid not in self.interrupted:
+            return  # the kernel's own reply came
+        self.interrupted.discard(pid)
+        self.supplied.add(pid)
+        await self.emit(_reply("shell", "execute_reply", parent, {
+            "status": "error", "ename": "KeyboardInterrupt", "evalue": "interrupted before the cell's code started",
+            "traceback": [], "execution_count": None}))
 
     async def interrupt(self):
         """Interrupts the running cell: now if its code has started (or no
         cell runs), else as soon as it starts (INTERRUPT_HOLD at most)."""
         if self.km is None:
             return
+        if self.running is not None:
+            self.interrupted.add(self.running)
         if self.running is None or self.started:
             await self.km.interrupt_kernel()
             return

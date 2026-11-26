@@ -14,6 +14,10 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 - **Connections in the web UI:** a Connections page (secrets write-only), a space's names per environment, and an environment picker for runs, sessions and function calls.
 - **Connections on Kubernetes** ([docs/kubernetes.md](docs/kubernetes.md#reading-external-data)): a reading run's fetcher is a Pod with its connections' Secrets mounted (nbsandboxd never reads them), its own NetworkPolicies, and the egress gateway as a Deployment of the chart (`connections.*` values).
 
+### Fixed
+
+- **An interrupted session cell could leave its client waiting for good:** an interrupt that reached the kernel just as a cell started (after it said `execute_input`, before the cell's code) was caught by ipykernel itself, and the cell ended without an `execute_reply`. About 1 interrupt in 250 under load. The session bridge now sends that reply (`KeyboardInterrupt`) when the kernel doesn't within 2 seconds.
+
 ### Upgrading
 
 - **Database migrations 13 to 16** run at startup: connections, their bindings, and the built-in secret store; the environment a run or session read in, and which connection each name meant; the names a function version reads.
