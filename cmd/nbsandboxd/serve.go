@@ -221,7 +221,7 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 			"builds_here", builder != nil, "builder_image", cfg.Packages.BuilderImage, "network", cfg.Packages.Network)
 	}
 	mgr := runs.New(runs.Config{
-		Image: cfg.Docker.Image, Runtime: runtimeLabel(cfg), Limits: limits, Timeout: cfg.Limits.Timeout,
+		Image: cfg.Docker.Image, Runtime: runtimeLabel(cfg), Limits: limits, Timeout: cfg.Limits.Timeout, SampleEvery: sampleEvery(cfg),
 		Concurrency: cfg.Runs.Concurrency, LogCap: int64(cfg.Limits.LogCap), Retention: cfg.Runs.Retention,
 		DependencyCheck: cfg.Runs.DependencyCheck, MaxParameters: int64(cfg.Runs.MaxParameters),
 		MaxOutput: int64(cfg.Runs.MaxOutput), EventRetention: cfg.Runs.EventRetention,
@@ -263,7 +263,7 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 	usage := func() compute.Totals { return compute.Totals{} }
 	if r, ok := backend.(isolation.UsageReader); ok && cfg.Executes() {
 		sampler := &compute.Sampler{Reader: r, Runs: mgr.Holding, Sessions: sess.HeldIDs, Store: db, Limits: limits, Log: logger,
-			Every: 5 * time.Second, Thin: time.Hour, Now: time.Now}
+			Every: sampleEvery(cfg), Thin: time.Hour, Now: time.Now}
 		go sampler.Run(ctx)
 		usage = sampler.Totals
 	}

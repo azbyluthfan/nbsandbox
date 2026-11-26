@@ -137,6 +137,10 @@ type Usage struct {
 	MemoryBytes  int64  // its working set: in use, less file pages it could give back
 	CPUNanos     uint64 // CPU time used since it started
 	WrittenBytes int64  // written to disk since it started; -1 when the backend can't say
+	// CPUs, with Rate, is CPU use as the backend reports it: cores over its
+	// own recent window (Kubernetes' metrics API), not a running total.
+	CPUs float64
+	Rate bool
 }
 
 // UsageReader is a backend that can read a run's or session's usage now.

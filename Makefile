@@ -274,6 +274,7 @@ KIND_CONFIG := $(CURDIR)/bin/kind-kubeconfig-$(K8S_CNI)
 KUBECTL     := docker exec -i $(KIND_NODE) kubectl --kubeconfig=/etc/kubernetes/admin.conf
 CILIUM_VERSION := 1.20.4
 CALICO_VERSION := 3.29.3
+METRICS_SERVER_VERSION := 0.8.0
 # Every local kind cluster publishes 127.0.0.1:8080 like the Compose stacks:
 # those stop them (they keep their state; make k8s-up starts one again).
 STOP_KIND := scripts/stop-kind.sh
@@ -312,6 +313,11 @@ else ifneq ($(K8S_CNI),kindnet)
 	$(error K8S_CNI must be cilium, calico or kindnet)
 endif
 	$(KUBECTL) wait --for=condition=Ready nodes --all --timeout=300s
+	@# metrics-server, for the compute view's samples (docs/plan-compute-view.md). kind's
+	@# kubelets have self-signed certificates.
+	$(KUBECTL) apply --server-side --force-conflicts -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v$(METRICS_SERVER_VERSION)/components.yaml >/dev/null
+	@$(KUBECTL) -n kube-system get deploy metrics-server -o jsonpath='{.spec.template.spec.containers[0].args}' | grep -q kubelet-insecure-tls || \
+		$(KUBECTL) -n kube-system patch deployment metrics-server --type=json -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
 	$(KIND) load docker-image nbsandboxd:dev nbsandbox-runner:dev nbsandbox-fetcher:dev --name $(KIND_NAME)
 	$(KUBECTL) apply -f - < $(KIND_DIR)/deps.yaml
 	$(KUBECTL) -n nbsandbox delete secret nbsandbox-users --ignore-not-found

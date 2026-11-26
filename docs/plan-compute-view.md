@@ -1,6 +1,6 @@
 # Plan: the compute view
 
-**Status (2026-11-26):** milestones 1 (workers) and 2 (samples on Docker) built; 3 (Kubernetes) next.
+**Status (2026-11-26):** built as below: workers, samples on Docker, and samples on Kubernetes from metrics-server.
 
 ## Today
 
@@ -39,7 +39,7 @@ Not in this plan: charts for sessions (their usage counts in their worker's tota
 
 - **Who samples:** each worker, for the runs and sessions it holds, every 5 seconds on Docker and every 15 seconds on Kubernetes (metrics-server's own resolution).
 - **Docker** (`runc` and gVisor): the stats API, one reading at a time (`stream=false`), which the socket proxy already allows. Memory is the working set, as `docker stats` shows it (usage less inactive file pages). CPU is cores used over the interval. Disk writes are the cgroup's written bytes.
-- **Kubernetes:** the metrics API (`metrics.k8s.io`, `PodMetrics` in the runs namespace), when the cluster has metrics-server. It gives memory (working set) and CPU, no disk writes. The workers' Role gains `get` and `list` on `pods` in `metrics.k8s.io`. Without metrics-server, a run's page says live usage isn't available on this cluster, and the end-of-run usage stays. The kind stack installs metrics-server, so the tests cover it.
+- **Kubernetes:** the metrics API (`metrics.k8s.io`, `PodMetrics` in the runs namespace), when the cluster has metrics-server. It gives memory (working set) and CPU, no disk writes. The workers' Role gains `get` on `pods` in `metrics.k8s.io`. Without metrics-server, a run's page says no usage was sampled, and the end-of-run usage stays. The kind stack installs metrics-server, so the tests cover it.
 - **What is stored:** a run's samples in a new table (`run_samples`: run, time, memory bytes, CPU millicores, written bytes), removed with the run. A run is sampled every 5 seconds (Docker) for its first hour, then every minute: a 10-hour run keeps about 1,300 samples. Session samples aren't stored; they only feed their worker's totals.
 - **Cost:** one stats call per active container per interval. A sample that fails is skipped, never retried, and never affects the run.
 

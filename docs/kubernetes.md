@@ -80,6 +80,10 @@ A session ([sessions.md](sessions.md)) is a Pod like a run's, in the runs namesp
 
 A run whose space binds connections ([connections.md](connections.md)) gets a **fetcher Pod** beside its run Pod, labelled `nbsandbox.fetcher` and `nbsandbox.role: fetcher`: the run Pod's hardening, the connections' Secrets mounted, no DNS. Two NetworkPolicies of the run's own let its runner reach its fetcher's port 8815 and nothing else in; a chart policy lets fetchers reach the egress gateway (a Deployment in the release namespace), the only way out. The worker creates the fetcher first, then the run Pod with the fetcher's address. Turn it on with `connections.enabled` and `connections.gateway.keySecret`.
 
+## Usage while runs run
+
+The web UI's run page charts a run's memory and CPU as it runs, and its **Compute** page sums them by worker ([scaling.md](scaling.md)). On Kubernetes the workers read them from the metrics API, every 15 seconds: the cluster needs **metrics-server** (GKE and AKS have it; on EKS, add it). Without it, runs keep their usage at the end (peak memory, CPU seconds) and the charts stay empty. Disk writes aren't in the metrics API, so they're charted on Docker only.
+
 ## Install with Helm
 
 The chart is in [deploy/helm/nbsandbox](../deploy/helm/nbsandbox). It doesn't install PostgreSQL or object storage: bring a managed database and storage account, or your own.
@@ -96,7 +100,7 @@ Releases publish the chart signed, on GHCR ([releasing.md](releasing.md) shows h
 
 What it creates:
 - **API Deployment and Service:** no Kubernetes permissions.
-- **Worker Deployment:** a Role allowing only Pods, Pod logs, `pods/exec` and `pods/attach` (interactive sessions), only in the runs namespace; with connections on, also Secrets and NetworkPolicies (each reading run's fetcher) and listing events ([connections.md](connections.md#on-kubernetes-helm)). Workers serve their sessions to API Pods on port 8091, at their Pod IP, with the shared `sessions.secret`.
+- **Worker Deployment:** a Role allowing only Pods, Pod logs, `pods/exec` and `pods/attach` (interactive sessions), and reading the Pods' metrics (`metrics.k8s.io`), only in the runs namespace; with connections on, also Secrets and NetworkPolicies (each reading run's fetcher) and listing events ([connections.md](connections.md#on-kubernetes-helm)). Workers serve their sessions to API Pods on port 8091, at their Pod IP, with the shared `sessions.secret`.
 - **The runs namespace:** the `restricted` Pod Security Standard and the deny-all NetworkPolicy.
 - **PodDisruptionBudgets**, and an optional Ingress (only `/v1/` and the gRPC services; health and metrics stay internal).
 

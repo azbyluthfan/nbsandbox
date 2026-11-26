@@ -46,6 +46,9 @@ type Backend struct {
 	poll time.Duration
 	// lookup resolves the gateway's name (default: the worker's DNS).
 	lookup func(ctx context.Context, host string) ([]string, error)
+	// podMetrics reads a Pod's PodMetrics from the metrics API (default: the
+	// API server, which forwards to metrics-server).
+	podMetrics func(ctx context.Context, name string) ([]byte, error)
 }
 
 // NewBackend creates the backend. restCfg is used for exec (copying files).
@@ -53,7 +56,11 @@ func NewBackend(cfg Config, client kubernetes.Interface, restCfg *rest.Config, l
 	if cfg.SpaceBytes == 0 {
 		cfg.SpaceBytes = 1 << 30
 	}
-	return &Backend{cfg: cfg, client: client, rest: restCfg, log: log, MaxCopyOut: 2 * cfg.SpaceBytes, poll: 500 * time.Millisecond}
+	b := &Backend{cfg: cfg, client: client, rest: restCfg, log: log, MaxCopyOut: 2 * cfg.SpaceBytes, poll: 500 * time.Millisecond}
+	b.podMetrics = func(ctx context.Context, name string) ([]byte, error) {
+		return client.Discovery().RESTClient().Get().AbsPath("/apis/metrics.k8s.io/v1beta1/namespaces", cfg.Namespace, "pods", name).DoRaw(ctx)
+	}
+	return b
 }
 
 // Name implements isolation.Backend.

@@ -4,6 +4,7 @@
 package runs
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -339,7 +340,7 @@ func (m *Manager) Usage(ctx context.Context, owner, spaceID, runID string) (Usag
 	if err != nil {
 		return UsageView{}, err
 	}
-	v := UsageView{IntervalSeconds: 5, Samples: make([]UsageSample, 0, len(ss)),
+	v := UsageView{IntervalSeconds: int(cmp.Or(m.cfg.SampleEvery, 5*time.Second) / time.Second), Samples: make([]UsageSample, 0, len(ss)),
 		Limits: UsageLimits{MemoryBytes: m.cfg.Limits.MemoryBytes, CPUs: float64(m.cfg.Limits.NanoCPUs) / 1e9}}
 	for _, s := range ss {
 		v.Samples = append(v.Samples, UsageSample{At: s.At.UTC(), MemoryBytes: s.MemoryBytes, CPUs: float64(s.CPUMillicores) / 1000,

@@ -49,6 +49,11 @@ rules:
   - apiGroups: [""]
     resources: [namespaces]
     verbs: [get]
+  # The compute view's samples: what runs and sessions use, read from the
+  # metrics API (metrics-server; nothing if the cluster has none).
+  - apiGroups: [metrics.k8s.io]
+    resources: [pods]
+    verbs: [get]
   {{- if .Values.connections.enabled }}
   # A reading run's fetcher: its configuration Secret and its network
   # policies (its runner may reach it, and nothing else may).
