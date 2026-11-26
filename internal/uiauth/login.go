@@ -289,7 +289,11 @@ func (s *Service) page(w http.ResponseWriter, status int, d pageData) {
 	h.Set("Content-Security-Policy", pageCSP)
 	h.Set("Cache-Control", "no-store")
 	h.Set("X-Content-Type-Options", "nosniff")
-	h.Set("Referrer-Policy", "no-referrer")
+	// same-origin, not no-referrer: under no-referrer a browser sends
+	// "Origin: null" on its own POSTs (the Fetch standard), and the
+	// sign-in form and the UI's writes are refused for not coming from
+	// the UI. same-origin still sends nothing to other sites.
+	h.Set("Referrer-Policy", "same-origin")
 	w.WriteHeader(status)
 	if err := pageTmpl.Execute(w, d); err != nil && !errors.Is(err, http.ErrHandlerTimeout) {
 		s.d.Log.Debug("web UI page", "err", err)

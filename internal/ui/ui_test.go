@@ -29,7 +29,7 @@ func TestStaticServesEmbeddedApp(t *testing.T) {
 		csp := rec.Header().Get("Content-Security-Policy")
 		_, after, ok := strings.Cut(csp, "'nonce-")
 		nonce, _, _ := strings.Cut(after, "'")
-		if rec.Code != http.StatusOK || !ok || len(nonce) < 20 || rec.Header().Get("Referrer-Policy") != "no-referrer" ||
+		if rec.Code != http.StatusOK || !ok || len(nonce) < 20 || rec.Header().Get("Referrer-Policy") != "same-origin" ||
 			!strings.Contains(rec.Body.String(), `<meta name="csp-nonce" content="`+nonce+`">`) ||
 			strings.Contains(csp, "unsafe") || csp != pageCSP(nonce) {
 			t.Fatalf("index: %d %v", rec.Code, rec.Header())

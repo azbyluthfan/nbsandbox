@@ -564,6 +564,11 @@ func TestBasicSignIn(t *testing.T) {
 		!strings.Contains(body, `value="/spaces/x"`) {
 		t.Fatalf("form: %d %s", code, body)
 	}
+	// The browser must send the UI's origin with the form: under
+	// no-referrer it sends "Origin: null", and the sign-in is refused.
+	if p := u.do("GET", "/ui/login", nil, nil).Header.Get("Referrer-Policy"); p != "same-origin" {
+		t.Fatalf("the sign-in page's referrer policy: %q", p)
+	}
 	post := func(user, pass, origin string) reply {
 		form := url.Values{"username": {user}, "password": {pass}, "return": {"/spaces/x"}}
 		return u.do("POST", "/ui/login", strings.NewReader(form.Encode()),
