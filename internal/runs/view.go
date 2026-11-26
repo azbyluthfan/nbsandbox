@@ -176,7 +176,9 @@ type View struct {
 	ReadOnlySpace  bool   `json:"read_only_space"`
 	Client         string `json:"client,omitempty"` // the application that started it on its user's behalf
 	// Environment is the space environment the run read its names in.
-	Environment   string          `json:"environment,omitempty"`
+	Environment string `json:"environment,omitempty"`
+	// Worker is the worker that holds or held it ("" before one took it).
+	Worker        string          `json:"worker,omitempty"`
 	Parameters    json.RawMessage `json:"parameters"`
 	Status        string          `json:"status"`
 	ErrorKind     string          `json:"error_kind,omitempty"`
@@ -201,6 +203,7 @@ func (m *Manager) view(ctx context.Context, r store.Run, withResult bool) View {
 	v := View{
 		ID: r.ID, SpaceID: r.SpaceID, Notebook: r.Notebook, NotebookSHA256: r.NotebookSHA256,
 		Function: r.Function, Version: r.Version, ReadOnlySpace: !r.WritesSpace, Client: r.ClientApp, Environment: r.Environment,
+		Worker:     r.Worker,
 		Parameters: json.RawMessage(r.ParametersJSON),
 		Status:     r.Status, ErrorKind: r.ErrorKind, Fault: r.Fault, Retryable: Retryable(r.Status), Message: r.Message,
 		CancelledBy: r.CancelledBy, CancelReason: r.CancelReason, OutputBytes: r.OutputBytes,
@@ -296,4 +299,51 @@ func (m *Manager) Active(ctx context.Context, spaceID string) bool {
 		}
 	}
 	return false
+}
+
+// UsageView is a run's resource use over its life (GET …/usage): sampled by
+// its worker every few seconds while it runs (docs/plan-compute-view.md).
+type UsageView struct {
+	IntervalSeconds int           `json:"interval_seconds"`
+	Limits          UsageLimits   `json:"limits"`
+	Samples         []UsageSample `json:"samples"`
+}
+
+// UsageLimits are what the run may use.
+type UsageLimits struct {
+	MemoryBytes int64   `json:"memory_bytes"`
+	CPUs        float64 `json:"cpus"`
+}
+
+// UsageSample is the run at one moment.
+type UsageSample struct {
+	At          time.Time `json:"at"`
+	MemoryBytes int64     `json:"memory_bytes"`
+	CPUs        float64   `json:"cpus"` // used since the previous sample
+	// WrittenBytes is written to disk since the run started; absent when
+	// the backend can't say.
+	WrittenBytes *int64 `json:"written_bytes,omitempty"`
+}
+
+// Usage returns one of the owner's runs' samples.
+func (m *Manager) Usage(ctx context.Context, owner, spaceID, runID string) (UsageView, error) {
+	if err := m.d.Spaces.Owned(ctx, owner, spaceID); err != nil {
+		return UsageView{}, err
+	}
+	if _, err := m.d.DB.GetRun(ctx, spaceID, runID); errors.Is(err, store.ErrNotFound) {
+		return UsageView{}, spaces.ErrNotFound
+	} else if err != nil {
+		return UsageView{}, err
+	}
+	ss, err := m.d.DB.RunSamples(ctx, runID)
+	if err != nil {
+		return UsageView{}, err
+	}
+	v := UsageView{IntervalSeconds: 5, Samples: make([]UsageSample, 0, len(ss)),
+		Limits: UsageLimits{MemoryBytes: m.cfg.Limits.MemoryBytes, CPUs: float64(m.cfg.Limits.NanoCPUs) / 1e9}}
+	for _, s := range ss {
+		v.Samples = append(v.Samples, UsageSample{At: s.At.UTC(), MemoryBytes: s.MemoryBytes, CPUs: float64(s.CPUMillicores) / 1000,
+			WrittenBytes: s.WrittenBytes})
+	}
+	return v, nil
 }

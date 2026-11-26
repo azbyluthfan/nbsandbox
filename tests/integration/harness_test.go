@@ -308,6 +308,7 @@ type Run struct {
 	QueuePosition int             `json:"queue_position"`
 	Parameters    json.RawMessage `json:"parameters"`
 	StartedAt     *time.Time      `json:"started_at"`
+	Worker        string          `json:"worker"`
 	Result        *struct {
 		Status   string `json:"status"`
 		Rendered bool   `json:"rendered"`

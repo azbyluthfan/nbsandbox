@@ -17,6 +17,7 @@ import (
 	"github.com/azbyluthfan/nbsandbox/internal/api"
 	"github.com/azbyluthfan/nbsandbox/internal/audit"
 	"github.com/azbyluthfan/nbsandbox/internal/completions"
+	"github.com/azbyluthfan/nbsandbox/internal/compute"
 	"github.com/azbyluthfan/nbsandbox/internal/isolation"
 	"github.com/azbyluthfan/nbsandbox/internal/runs"
 	"github.com/azbyluthfan/nbsandbox/internal/spaces"
@@ -73,6 +74,22 @@ func (s *server) GetRuntime(_ context.Context, _ *connect.Request[pb.GetRuntimeR
 		return nil, s.toErr(err)
 	}
 	out, err := conv(info, &pb.Runtime{})
+	if err != nil {
+		return nil, s.toErr(err)
+	}
+	return connect.NewResponse(out), nil
+}
+
+func (s *server) ListWorkers(ctx context.Context, _ *connect.Request[pb.ListWorkersRequest]) (*connect.Response[pb.ListWorkersResponse], error) {
+	list := []compute.Worker{}
+	if s.d.Workers != nil {
+		ws, err := s.d.Workers(ctx)
+		if err != nil {
+			return nil, s.toErr(err)
+		}
+		list = append(list, ws...)
+	}
+	out, err := conv(map[string]any{"items": list}, &pb.ListWorkersResponse{})
 	if err != nil {
 		return nil, s.toErr(err)
 	}
@@ -150,6 +167,21 @@ func (s *server) GetRun(ctx context.Context, req *connect.Request[pb.GetRunReque
 		return nil, s.toErr(err)
 	}
 	out, err := s.run(v)
+	if err != nil {
+		return nil, s.toErr(err)
+	}
+	return connect.NewResponse(out), nil
+}
+
+func (s *server) GetRunUsage(ctx context.Context, req *connect.Request[pb.GetRunRequest]) (*connect.Response[pb.RunSamples], error) {
+	if err := validIDs(req.Msg.SpaceId, req.Msg.RunId); err != nil {
+		return nil, err
+	}
+	v, err := s.d.Runs.Usage(ctx, owner(ctx), req.Msg.SpaceId, req.Msg.RunId)
+	if err != nil {
+		return nil, s.toErr(err)
+	}
+	out, err := conv(v, &pb.RunSamples{})
 	if err != nil {
 		return nil, s.toErr(err)
 	}

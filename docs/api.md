@@ -352,16 +352,18 @@ Every environment binds the same names; connections by name or ID; an empty `env
 |---|---|
 | Operations (no auth) | `GET /healthz`, `GET /readyz`, `GET /metrics` (internal; not forwarded by Caddy) |
 | Runtime | `GET /v1/runtime`: runner image, Python, packages, limits |
+| Workers | `GET /v1/workers`: each worker's state, runtime, and runs and sessions held of its capacity (counts only; the run's `worker` names the one that holds it) |
 | Spaces | `POST/GET /v1/spaces`, `GET/PATCH/DELETE /v1/spaces/{id}` |
 | Files | `POST/GET /v1/spaces/{id}/files` (upload with `?folder=`, list), `GET/PUT/PATCH/DELETE /v1/spaces/{id}/files/{path}` (download, save with `If-Match`, move, delete), `POST …/folders` |
 | Runs | `POST/GET …/runs`, `GET/DELETE …/runs/{run_id}`, `POST …/cancel`, `GET …/result` (`?wait=`) |
+| Run usage | `GET …/runs/{run_id}/usage`: memory, CPU and disk written over the run's life, sampled by its worker every few seconds |
 | Run outputs | `…/output.ipynb`, `…/output.html`, `…/artifacts`, `…/artifacts/{path}`, `POST …/promote`, `…/log`, `…/log/stream` (SSE) |
 | Status streams (SSE) | `GET …/runs/{run_id}/events`, `GET /v1/spaces/{id}/events` |
 | Functions | `GET …/functions`, `GET/DELETE …/functions/{name}`, `POST …/functions/{name}/versions` (publish), `GET …/versions/{version}`, `GET …/contract`, `POST …/invoke`, `POST …/versions/{version}/invoke` |
 | Packages | `GET/POST /v1/spaces/{id}/packages`: the space's package set, and building it now ([packages.md](packages.md)) |
 | Connections | `POST/GET /v1/connections`, `GET/PATCH/DELETE /v1/connections/{connection_id}`, `GET/PUT /v1/spaces/{id}/connections` |
 | Sessions | `POST/GET …/sessions`, `GET/DELETE …/sessions/{session_id}`, `POST …/interrupt`, `…/restart`, `…/sync`, `GET …/channel` (WebSocket) ([sessions.md](sessions.md)) |
-| Administration (`nbsandbox.admin`) | `GET /v1/admin/spaces`, `PATCH/DELETE /v1/admin/spaces/{id}`, `GET /v1/admin/runs`, `POST /v1/admin/runs/{run_id}/cancel`, `GET/PUT /v1/admin/drain`, `GET /v1/admin/audit`, `GET /v1/admin/sessions`, `POST /v1/admin/sessions/{session_id}/end` ([auth.md](auth.md#administration)) |
+| Administration (`nbsandbox.admin`) | `GET /v1/admin/spaces`, `PATCH/DELETE /v1/admin/spaces/{id}`, `GET /v1/admin/runs` (`?worker=` among others), `POST /v1/admin/runs/{run_id}/cancel`, `GET/PUT /v1/admin/drain`, `GET /v1/admin/audit`, `GET /v1/admin/sessions` (`?worker=`), `POST /v1/admin/sessions/{session_id}/end` ([auth.md](auth.md#administration)) |
 
 ## gRPC
 

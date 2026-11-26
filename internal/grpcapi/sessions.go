@@ -219,11 +219,11 @@ func refusalJSON(err error) string {
 }
 
 // AdminListSessions implements AdminService.
-func (s *server) AdminListSessions(ctx context.Context, _ *connect.Request[pb.AdminListSessionsRequest]) (*connect.Response[pb.ListSessionsResponse], error) {
+func (s *server) AdminListSessions(ctx context.Context, req *connect.Request[pb.AdminListSessionsRequest]) (*connect.Response[pb.ListSessionsResponse], error) {
 	if !s.d.Sessions.Enabled() {
 		return nil, connect.NewError(connect.CodeNotFound, sessions.ErrDisabled)
 	}
-	list, err := s.d.Sessions.All(ctx)
+	list, err := s.d.Sessions.All(ctx, req.Msg.Worker)
 	if err != nil {
 		return nil, s.sessionErr(err)
 	}

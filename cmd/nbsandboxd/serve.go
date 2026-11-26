@@ -28,6 +28,7 @@ import (
 	"github.com/azbyluthfan/nbsandbox/internal/blob/azstore"
 	"github.com/azbyluthfan/nbsandbox/internal/blob/s3store"
 	"github.com/azbyluthfan/nbsandbox/internal/completions"
+	"github.com/azbyluthfan/nbsandbox/internal/compute"
 	"github.com/azbyluthfan/nbsandbox/internal/config"
 	"github.com/azbyluthfan/nbsandbox/internal/deps"
 	"github.com/azbyluthfan/nbsandbox/internal/grpcapi"
@@ -257,6 +258,15 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 		return err
 	}
 	go pkgs.Run(ctx) // builds only on a worker with package sets on
+	// The compute view's samples: what this worker's runs and sessions use
+	// (backends that can say; docs/plan-compute-view.md).
+	usage := func() compute.Totals { return compute.Totals{} }
+	if r, ok := backend.(isolation.UsageReader); ok && cfg.Executes() {
+		sampler := &compute.Sampler{Reader: r, Runs: mgr.Holding, Sessions: sess.HeldIDs, Store: db, Limits: limits, Log: logger,
+			Every: 5 * time.Second, Thin: time.Hour, Now: time.Now}
+		go sampler.Run(ctx)
+		usage = sampler.Totals
+	}
 	if err := sess.Start(ctx); err != nil {
 		return err
 	}
@@ -286,11 +296,11 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 			obs.CheckFunc{CheckName: "docker", Fn: sup.DockerCheck},
 			obs.CheckFunc{CheckName: "runner_image", Fn: sup.ImageCheck},
 			obs.CheckFunc{CheckName: "runtime", Fn: sup.RuntimeCheck})
-		if cfg.Role == config.RoleWorker {
+		if cfg.Executes() { // a single process too: the compute view lists it
 			published = make(chan struct{})
 			go func() {
 				defer close(published)
-				publishWorker(supCtx, db, id, sessionAddr(cfg, sess, id), cfg, sup, comps, dockerChanged, logger)
+				publishWorker(supCtx, db, id, sessionAddr(cfg, sess, id), cfg, sup, comps, usage, dockerChanged, logger)
 			}()
 		}
 	}
@@ -311,6 +321,9 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 		Sessions:   sess,
 		Shutdown:   shuttingDown,
 		Runtime:    runtime,
+		Workers: func(ctx context.Context) ([]compute.Worker, error) {
+			return compute.Workers(ctx, db, 3*cfg.Runs.Lease, time.Now())
+		},
 		Completions: func(ctx context.Context, ref completions.Ref) (io.ReadCloser, error) {
 			return completions.Open(ctx, blobs, ref)
 		},
@@ -352,7 +365,7 @@ func run(ctx context.Context, args []string, opt serveOptions) error {
 	}
 	handler := withGRPC(api.NewHandler(deps), grpcapi.Handler(grpcapi.Deps{
 		Auth: authn, Spaces: spaceSvc, Runs: mgr, Runtime: runtime, Logger: logger, Shutdown: shuttingDown,
-		Completions: deps.Completions, Audit: recorder, Sessions: sess, Connections: conns,
+		Completions: deps.Completions, Audit: recorder, Sessions: sess, Connections: conns, Workers: deps.Workers,
 	}))
 	if !cfg.Serves() {
 		handler = workerHandler(health, metrics)

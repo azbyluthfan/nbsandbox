@@ -251,6 +251,16 @@ func (b *Backend) Orphans(ctx context.Context) ([]isolation.Orphan, error) {
 }
 
 // Kill implements isolation.Backend: stop (1 s grace) and remove.
+// RunUsage implements isolation.UsageReader.
+func (b *Backend) RunUsage(ctx context.Context, runID string) (isolation.Usage, error) {
+	return b.client.ContainerUsage(ctx, ContainerName(runID))
+}
+
+// SessionUsage implements isolation.UsageReader.
+func (b *Backend) SessionUsage(ctx context.Context, sessionID string) (isolation.Usage, error) {
+	return b.client.ContainerUsage(ctx, SessionContainerName(sessionID))
+}
+
 func (b *Backend) Kill(ctx context.Context, runID string) error {
 	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
 	defer cancel()

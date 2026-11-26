@@ -17,6 +17,7 @@ import (
 	"github.com/azbyluthfan/nbsandbox/internal/audit"
 	"github.com/azbyluthfan/nbsandbox/internal/auth"
 	"github.com/azbyluthfan/nbsandbox/internal/completions"
+	"github.com/azbyluthfan/nbsandbox/internal/compute"
 	"github.com/azbyluthfan/nbsandbox/internal/connections"
 	"github.com/azbyluthfan/nbsandbox/internal/obs"
 	"github.com/azbyluthfan/nbsandbox/internal/runs"
@@ -51,6 +52,8 @@ type Deps struct {
 	Connections *connections.Service
 	// Runtime describes the runner image and limits (GET /v1/runtime).
 	Runtime func() (RuntimeInfo, error)
+	// Workers lists the workers (GET /v1/workers; nil: none).
+	Workers func(ctx context.Context) ([]compute.Worker, error)
 	// Completions opens a stored completion index (gzipped JSON); nil:
 	// none is served.
 	Completions func(ctx context.Context, ref completions.Ref) (io.ReadCloser, error)

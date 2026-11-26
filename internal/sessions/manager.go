@@ -164,6 +164,18 @@ func (m *Manager) Enabled() bool { return m != nil && m.cfg.Enabled }
 
 // Holds reports whether this process holds sessions (a worker with a
 // backend that runs them).
+// HeldIDs lists the sessions this process holds now (for the compute view's
+// samples).
+func (m *Manager) HeldIDs() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]string, 0, len(m.live))
+	for id := range m.live {
+		out = append(out, id)
+	}
+	return out
+}
+
 func (m *Manager) Holds() bool {
 	return m.Enabled() && !m.cfg.NoExecute && m.d.Backend != nil
 }
@@ -256,9 +268,10 @@ func (m *Manager) List(ctx context.Context, owner, spaceID string) ([]store.Sess
 	return m.d.DB.OpenSessions(ctx, store.SessionFilter{SpaceID: spaceID, Owner: owner})
 }
 
-// All returns every open session (administrators).
-func (m *Manager) All(ctx context.Context) ([]store.Session, error) {
-	return m.d.DB.OpenSessions(ctx, store.SessionFilter{})
+// All returns every open session, or those one worker holds ("": all;
+// administrators).
+func (m *Manager) All(ctx context.Context, worker string) ([]store.Session, error) {
+	return m.d.DB.OpenSessions(ctx, store.SessionFilter{Worker: worker})
 }
 
 // End ends one of the owner's sessions. by is who ended it (recorded).

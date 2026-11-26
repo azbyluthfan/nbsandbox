@@ -166,6 +166,17 @@ func (a *API) getRun(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, v)
 }
 
+// getRunUsage is GET …/runs/{run_id}/usage: the run's memory, CPU and disk
+// writes over its life (docs/plan-compute-view.md).
+func (a *API) getRunUsage(w http.ResponseWriter, r *http.Request) {
+	v, err := a.d.Runs.Usage(r.Context(), user(r), r.PathValue("id"), r.PathValue("run_id"))
+	if err != nil {
+		writeRunError(w, r, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, v)
+}
+
 func (a *API) cancelRun(w http.ResponseWriter, r *http.Request) {
 	// Ownership first: another user's run is 404, whatever the body.
 	if err := a.d.Runs.RunExists(r.Context(), user(r), r.PathValue("id"), r.PathValue("run_id")); err != nil {

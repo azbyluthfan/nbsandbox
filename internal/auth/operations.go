@@ -45,6 +45,7 @@ const (
 
 	OpGetRuntime     Op = "GetRuntime"
 	OpGetCompletions Op = "GetCompletions"
+	OpListWorkers    Op = "ListWorkers"
 
 	OpCreateRun       Op = "CreateRun"
 	OpListRuns        Op = "ListRuns"
@@ -58,6 +59,7 @@ const (
 	OpGetArtifact     Op = "GetArtifact"
 	OpPromoteArtifact Op = "PromoteArtifact"
 	OpGetRunLog       Op = "GetRunLog"
+	OpGetRunUsage     Op = "GetRunUsage"
 	OpFollowRunLog    Op = "FollowRunLog"
 
 	OpFollowRunEvents   Op = "FollowRunEvents"
@@ -131,6 +133,7 @@ var opScopes = map[Op]string{
 
 	OpGetRuntime:     ScopeRead,
 	OpGetCompletions: ScopeRead,
+	OpListWorkers:    ScopeRead,
 
 	OpCreateRun:       ScopeRuns,
 	OpListRuns:        ScopeRead,
@@ -144,6 +147,7 @@ var opScopes = map[Op]string{
 	OpGetArtifact:     ScopeRead,
 	OpPromoteArtifact: ScopeFilesWrite,
 	OpGetRunLog:       ScopeRead,
+	OpGetRunUsage:     ScopeRead,
 	OpFollowRunLog:    ScopeRead,
 
 	OpFollowRunEvents:   ScopeRead,

@@ -95,6 +95,7 @@ func (a *API) routes() []Route {
 
 		// Runtime.
 		{Method: "GET", Pattern: "/v1/runtime", Handler: a.getRuntime, Auth: true, Op: auth.OpGetRuntime},
+		{Method: "GET", Pattern: "/v1/workers", Handler: a.listWorkers, Auth: true, Op: auth.OpListWorkers},
 		{Method: "GET", Pattern: "/v1/runtime/completions", Handler: a.getCompletions, Auth: true, Op: auth.OpGetCompletions},
 
 		// Runs, with the live log stream.
@@ -109,6 +110,7 @@ func (a *API) routes() []Route {
 		{Method: "GET", Pattern: "/v1/spaces/{id}/runs/{run_id}/artifacts", Handler: a.listArtifacts, Auth: true, Op: auth.OpListArtifacts, SpaceScoped: true, RunScoped: true},
 		{Method: "GET", Pattern: "/v1/spaces/{id}/runs/{run_id}/artifacts/{path...}", Handler: a.getArtifact, Auth: true, Op: auth.OpGetArtifact, SpaceScoped: true, RunScoped: true},
 		{Method: "POST", Pattern: "/v1/spaces/{id}/runs/{run_id}/promote", Handler: a.promoteArtifact, Auth: true, Op: auth.OpPromoteArtifact, SpaceScoped: true, RunScoped: true},
+		{Method: "GET", Pattern: "/v1/spaces/{id}/runs/{run_id}/usage", Handler: a.getRunUsage, Auth: true, Op: auth.OpGetRunUsage, SpaceScoped: true, RunScoped: true},
 		{Method: "GET", Pattern: "/v1/spaces/{id}/runs/{run_id}/log", Handler: a.getRunLog, Auth: true, Op: auth.OpGetRunLog, SpaceScoped: true, RunScoped: true},
 		{Method: "GET", Pattern: "/v1/spaces/{id}/runs/{run_id}/log/stream", Handler: a.streamRunLog, Auth: true, Op: auth.OpFollowRunLog, SpaceScoped: true, RunScoped: true},
 

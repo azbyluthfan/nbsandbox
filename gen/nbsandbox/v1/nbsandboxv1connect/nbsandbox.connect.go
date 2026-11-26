@@ -146,6 +146,8 @@ const (
 	// RunServiceGetCompletionsProcedure is the fully-qualified name of the RunService's GetCompletions
 	// RPC.
 	RunServiceGetCompletionsProcedure = "/nbsandbox.v1.RunService/GetCompletions"
+	// RunServiceListWorkersProcedure is the fully-qualified name of the RunService's ListWorkers RPC.
+	RunServiceListWorkersProcedure = "/nbsandbox.v1.RunService/ListWorkers"
 	// RunServiceCreateRunProcedure is the fully-qualified name of the RunService's CreateRun RPC.
 	RunServiceCreateRunProcedure = "/nbsandbox.v1.RunService/CreateRun"
 	// RunServiceListRunsProcedure is the fully-qualified name of the RunService's ListRuns RPC.
@@ -165,6 +167,8 @@ const (
 	RunServiceGetRunHTMLProcedure = "/nbsandbox.v1.RunService/GetRunHTML"
 	// RunServiceGetRunLogProcedure is the fully-qualified name of the RunService's GetRunLog RPC.
 	RunServiceGetRunLogProcedure = "/nbsandbox.v1.RunService/GetRunLog"
+	// RunServiceGetRunUsageProcedure is the fully-qualified name of the RunService's GetRunUsage RPC.
+	RunServiceGetRunUsageProcedure = "/nbsandbox.v1.RunService/GetRunUsage"
 	// RunServiceListArtifactsProcedure is the fully-qualified name of the RunService's ListArtifacts
 	// RPC.
 	RunServiceListArtifactsProcedure = "/nbsandbox.v1.RunService/ListArtifacts"
@@ -1233,6 +1237,9 @@ type RunServiceClient interface {
 	// The runner image's completion index for editors: gzipped JSON
 	// ({"modules": {"pandas": [[name, kind, signature, doc], ...]}}).
 	GetCompletions(context.Context, *connect.Request[v1.GetCompletionsRequest]) (*connect.Response[v1.Completions], error)
+	// The workers: what each runs on, and how many runs and sessions it
+	// holds (counts only; docs/plan-compute-view.md).
+	ListWorkers(context.Context, *connect.Request[v1.ListWorkersRequest]) (*connect.Response[v1.ListWorkersResponse], error)
 	CreateRun(context.Context, *connect.Request[v1.CreateRunRequest]) (*connect.Response[v1.Run], error)
 	ListRuns(context.Context, *connect.Request[v1.ListRunsRequest]) (*connect.Response[v1.ListRunsResponse], error)
 	GetRun(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.Run], error)
@@ -1244,6 +1251,9 @@ type RunServiceClient interface {
 	GetRunNotebook(context.Context, *connect.Request[v1.GetRunFileRequest]) (*connect.ServerStreamForClient[v1.FileChunk], error)
 	GetRunHTML(context.Context, *connect.Request[v1.GetRunFileRequest]) (*connect.ServerStreamForClient[v1.FileChunk], error)
 	GetRunLog(context.Context, *connect.Request[v1.GetRunFileRequest]) (*connect.ServerStreamForClient[v1.FileChunk], error)
+	// The run's memory, CPU and disk writes over its life, sampled by its
+	// worker (docs/plan-compute-view.md).
+	GetRunUsage(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.RunSamples], error)
 	ListArtifacts(context.Context, *connect.Request[v1.ListArtifactsRequest]) (*connect.Response[v1.ListArtifactsResponse], error)
 	GetArtifact(context.Context, *connect.Request[v1.GetArtifactRequest]) (*connect.ServerStreamForClient[v1.FileChunk], error)
 	PromoteArtifact(context.Context, *connect.Request[v1.PromoteArtifactRequest]) (*connect.Response[v1.File], error)
@@ -1281,6 +1291,12 @@ func NewRunServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			httpClient,
 			baseURL+RunServiceGetCompletionsProcedure,
 			connect.WithSchema(runServiceMethods.ByName("GetCompletions")),
+			connect.WithClientOptions(opts...),
+		),
+		listWorkers: connect.NewClient[v1.ListWorkersRequest, v1.ListWorkersResponse](
+			httpClient,
+			baseURL+RunServiceListWorkersProcedure,
+			connect.WithSchema(runServiceMethods.ByName("ListWorkers")),
 			connect.WithClientOptions(opts...),
 		),
 		createRun: connect.NewClient[v1.CreateRunRequest, v1.Run](
@@ -1337,6 +1353,12 @@ func NewRunServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(runServiceMethods.ByName("GetRunLog")),
 			connect.WithClientOptions(opts...),
 		),
+		getRunUsage: connect.NewClient[v1.GetRunRequest, v1.RunSamples](
+			httpClient,
+			baseURL+RunServiceGetRunUsageProcedure,
+			connect.WithSchema(runServiceMethods.ByName("GetRunUsage")),
+			connect.WithClientOptions(opts...),
+		),
 		listArtifacts: connect.NewClient[v1.ListArtifactsRequest, v1.ListArtifactsResponse](
 			httpClient,
 			baseURL+RunServiceListArtifactsProcedure,
@@ -1386,6 +1408,7 @@ func NewRunServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 type runServiceClient struct {
 	getRuntime        *connect.Client[v1.GetRuntimeRequest, v1.Runtime]
 	getCompletions    *connect.Client[v1.GetCompletionsRequest, v1.Completions]
+	listWorkers       *connect.Client[v1.ListWorkersRequest, v1.ListWorkersResponse]
 	createRun         *connect.Client[v1.CreateRunRequest, v1.Run]
 	listRuns          *connect.Client[v1.ListRunsRequest, v1.ListRunsResponse]
 	getRun            *connect.Client[v1.GetRunRequest, v1.Run]
@@ -1395,6 +1418,7 @@ type runServiceClient struct {
 	getRunNotebook    *connect.Client[v1.GetRunFileRequest, v1.FileChunk]
 	getRunHTML        *connect.Client[v1.GetRunFileRequest, v1.FileChunk]
 	getRunLog         *connect.Client[v1.GetRunFileRequest, v1.FileChunk]
+	getRunUsage       *connect.Client[v1.GetRunRequest, v1.RunSamples]
 	listArtifacts     *connect.Client[v1.ListArtifactsRequest, v1.ListArtifactsResponse]
 	getArtifact       *connect.Client[v1.GetArtifactRequest, v1.FileChunk]
 	promoteArtifact   *connect.Client[v1.PromoteArtifactRequest, v1.File]
@@ -1412,6 +1436,11 @@ func (c *runServiceClient) GetRuntime(ctx context.Context, req *connect.Request[
 // GetCompletions calls nbsandbox.v1.RunService.GetCompletions.
 func (c *runServiceClient) GetCompletions(ctx context.Context, req *connect.Request[v1.GetCompletionsRequest]) (*connect.Response[v1.Completions], error) {
 	return c.getCompletions.CallUnary(ctx, req)
+}
+
+// ListWorkers calls nbsandbox.v1.RunService.ListWorkers.
+func (c *runServiceClient) ListWorkers(ctx context.Context, req *connect.Request[v1.ListWorkersRequest]) (*connect.Response[v1.ListWorkersResponse], error) {
+	return c.listWorkers.CallUnary(ctx, req)
 }
 
 // CreateRun calls nbsandbox.v1.RunService.CreateRun.
@@ -1459,6 +1488,11 @@ func (c *runServiceClient) GetRunLog(ctx context.Context, req *connect.Request[v
 	return c.getRunLog.CallServerStream(ctx, req)
 }
 
+// GetRunUsage calls nbsandbox.v1.RunService.GetRunUsage.
+func (c *runServiceClient) GetRunUsage(ctx context.Context, req *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.RunSamples], error) {
+	return c.getRunUsage.CallUnary(ctx, req)
+}
+
 // ListArtifacts calls nbsandbox.v1.RunService.ListArtifacts.
 func (c *runServiceClient) ListArtifacts(ctx context.Context, req *connect.Request[v1.ListArtifactsRequest]) (*connect.Response[v1.ListArtifactsResponse], error) {
 	return c.listArtifacts.CallUnary(ctx, req)
@@ -1500,6 +1534,9 @@ type RunServiceHandler interface {
 	// The runner image's completion index for editors: gzipped JSON
 	// ({"modules": {"pandas": [[name, kind, signature, doc], ...]}}).
 	GetCompletions(context.Context, *connect.Request[v1.GetCompletionsRequest]) (*connect.Response[v1.Completions], error)
+	// The workers: what each runs on, and how many runs and sessions it
+	// holds (counts only; docs/plan-compute-view.md).
+	ListWorkers(context.Context, *connect.Request[v1.ListWorkersRequest]) (*connect.Response[v1.ListWorkersResponse], error)
 	CreateRun(context.Context, *connect.Request[v1.CreateRunRequest]) (*connect.Response[v1.Run], error)
 	ListRuns(context.Context, *connect.Request[v1.ListRunsRequest]) (*connect.Response[v1.ListRunsResponse], error)
 	GetRun(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.Run], error)
@@ -1511,6 +1548,9 @@ type RunServiceHandler interface {
 	GetRunNotebook(context.Context, *connect.Request[v1.GetRunFileRequest], *connect.ServerStream[v1.FileChunk]) error
 	GetRunHTML(context.Context, *connect.Request[v1.GetRunFileRequest], *connect.ServerStream[v1.FileChunk]) error
 	GetRunLog(context.Context, *connect.Request[v1.GetRunFileRequest], *connect.ServerStream[v1.FileChunk]) error
+	// The run's memory, CPU and disk writes over its life, sampled by its
+	// worker (docs/plan-compute-view.md).
+	GetRunUsage(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.RunSamples], error)
 	ListArtifacts(context.Context, *connect.Request[v1.ListArtifactsRequest]) (*connect.Response[v1.ListArtifactsResponse], error)
 	GetArtifact(context.Context, *connect.Request[v1.GetArtifactRequest], *connect.ServerStream[v1.FileChunk]) error
 	PromoteArtifact(context.Context, *connect.Request[v1.PromoteArtifactRequest]) (*connect.Response[v1.File], error)
@@ -1544,6 +1584,12 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 		RunServiceGetCompletionsProcedure,
 		svc.GetCompletions,
 		connect.WithSchema(runServiceMethods.ByName("GetCompletions")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runServiceListWorkersHandler := connect.NewUnaryHandler(
+		RunServiceListWorkersProcedure,
+		svc.ListWorkers,
+		connect.WithSchema(runServiceMethods.ByName("ListWorkers")),
 		connect.WithHandlerOptions(opts...),
 	)
 	runServiceCreateRunHandler := connect.NewUnaryHandler(
@@ -1600,6 +1646,12 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(runServiceMethods.ByName("GetRunLog")),
 		connect.WithHandlerOptions(opts...),
 	)
+	runServiceGetRunUsageHandler := connect.NewUnaryHandler(
+		RunServiceGetRunUsageProcedure,
+		svc.GetRunUsage,
+		connect.WithSchema(runServiceMethods.ByName("GetRunUsage")),
+		connect.WithHandlerOptions(opts...),
+	)
 	runServiceListArtifactsHandler := connect.NewUnaryHandler(
 		RunServiceListArtifactsProcedure,
 		svc.ListArtifacts,
@@ -1648,6 +1700,8 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 			runServiceGetRuntimeHandler.ServeHTTP(w, r)
 		case RunServiceGetCompletionsProcedure:
 			runServiceGetCompletionsHandler.ServeHTTP(w, r)
+		case RunServiceListWorkersProcedure:
+			runServiceListWorkersHandler.ServeHTTP(w, r)
 		case RunServiceCreateRunProcedure:
 			runServiceCreateRunHandler.ServeHTTP(w, r)
 		case RunServiceListRunsProcedure:
@@ -1666,6 +1720,8 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 			runServiceGetRunHTMLHandler.ServeHTTP(w, r)
 		case RunServiceGetRunLogProcedure:
 			runServiceGetRunLogHandler.ServeHTTP(w, r)
+		case RunServiceGetRunUsageProcedure:
+			runServiceGetRunUsageHandler.ServeHTTP(w, r)
 		case RunServiceListArtifactsProcedure:
 			runServiceListArtifactsHandler.ServeHTTP(w, r)
 		case RunServiceGetArtifactProcedure:
@@ -1695,6 +1751,10 @@ func (UnimplementedRunServiceHandler) GetRuntime(context.Context, *connect.Reque
 
 func (UnimplementedRunServiceHandler) GetCompletions(context.Context, *connect.Request[v1.GetCompletionsRequest]) (*connect.Response[v1.Completions], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.RunService.GetCompletions is not implemented"))
+}
+
+func (UnimplementedRunServiceHandler) ListWorkers(context.Context, *connect.Request[v1.ListWorkersRequest]) (*connect.Response[v1.ListWorkersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.RunService.ListWorkers is not implemented"))
 }
 
 func (UnimplementedRunServiceHandler) CreateRun(context.Context, *connect.Request[v1.CreateRunRequest]) (*connect.Response[v1.Run], error) {
@@ -1731,6 +1791,10 @@ func (UnimplementedRunServiceHandler) GetRunHTML(context.Context, *connect.Reque
 
 func (UnimplementedRunServiceHandler) GetRunLog(context.Context, *connect.Request[v1.GetRunFileRequest], *connect.ServerStream[v1.FileChunk]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.RunService.GetRunLog is not implemented"))
+}
+
+func (UnimplementedRunServiceHandler) GetRunUsage(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.RunSamples], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.RunService.GetRunUsage is not implemented"))
 }
 
 func (UnimplementedRunServiceHandler) ListArtifacts(context.Context, *connect.Request[v1.ListArtifactsRequest]) (*connect.Response[v1.ListArtifactsResponse], error) {

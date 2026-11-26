@@ -131,6 +131,20 @@ type BuildSpec struct {
 	Limits  Limits
 }
 
+// Usage is a run's or session's container at one moment
+// (docs/plan-compute-view.md).
+type Usage struct {
+	MemoryBytes  int64  // its working set: in use, less file pages it could give back
+	CPUNanos     uint64 // CPU time used since it started
+	WrittenBytes int64  // written to disk since it started; -1 when the backend can't say
+}
+
+// UsageReader is a backend that can read a run's or session's usage now.
+type UsageReader interface {
+	RunUsage(ctx context.Context, runID string) (Usage, error)
+	SessionUsage(ctx context.Context, sessionID string) (Usage, error)
+}
+
 // PackageBuilder is a backend that can build package sets (Docker).
 type PackageBuilder interface {
 	BuildPackages(ctx context.Context, spec BuildSpec, out LineSink) (RunResult, error)

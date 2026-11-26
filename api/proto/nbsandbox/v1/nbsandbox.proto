@@ -215,6 +215,7 @@ message AdminListRunsRequest {
   string space_id = 3; // "" = every space
   string cursor = 4;
   int32 limit = 5;
+  string worker = 6; // "" = any worker's
 }
 message AdminListRunsResponse {
   repeated AdminRun items = 1;
@@ -366,6 +367,9 @@ service RunService {
   // The runner image's completion index for editors: gzipped JSON
   // ({"modules": {"pandas": [[name, kind, signature, doc], ...]}}).
   rpc GetCompletions(GetCompletionsRequest) returns (Completions);
+  // The workers: what each runs on, and how many runs and sessions it
+  // holds (counts only; docs/plan-compute-view.md).
+  rpc ListWorkers(ListWorkersRequest) returns (ListWorkersResponse);
 
   rpc CreateRun(CreateRunRequest) returns (Run);
   rpc ListRuns(ListRunsRequest) returns (ListRunsResponse);
@@ -379,6 +383,9 @@ service RunService {
   rpc GetRunNotebook(GetRunFileRequest) returns (stream FileChunk);
   rpc GetRunHTML(GetRunFileRequest) returns (stream FileChunk);
   rpc GetRunLog(GetRunFileRequest) returns (stream FileChunk);
+  // The run's memory, CPU and disk writes over its life, sampled by its
+  // worker (docs/plan-compute-view.md).
+  rpc GetRunUsage(GetRunRequest) returns (RunSamples);
   rpc ListArtifacts(ListArtifactsRequest) returns (ListArtifactsResponse);
   rpc GetArtifact(GetArtifactRequest) returns (stream FileChunk);
   rpc PromoteArtifact(PromoteArtifactRequest) returns (File);
@@ -424,6 +431,7 @@ message Run {
   // set is being built), if anything.
   string waiting_for = 24;
   string environment = 25; // the space environment the run read its names in
+  string worker = 26; // the worker that holds or held it ("" before one took it)
 }
 
 message DependencyWarning {
@@ -566,6 +574,56 @@ message RuntimeDocker {
 }
 
 message GetRuntimeRequest {}
+message ListWorkersRequest {}
+message ListWorkersResponse {
+  repeated Worker items = 1;
+}
+message Worker {
+  string id = 1;
+  string state = 2; // up, down (alive, can't run notebooks) or gone (not seen for a while)
+  string role = 3; // worker, or all (a single process)
+  string version = 4;
+  google.protobuf.Timestamp started_at = 5;
+  google.protobuf.Timestamp seen_at = 6;
+  string runtime = 7;
+  string platform = 8;
+  string image = 9;
+  WorkerRunLimits run_limits = 10;
+  WorkerSlots runs = 11;
+  WorkerSlots sessions = 12;
+  WorkerUsage usage = 13; // absent when gone, or when its backend can't say
+}
+message WorkerRunLimits {
+  int64 memory_bytes = 1;
+  double cpus = 2;
+}
+message RunSamples {
+  int32 interval_seconds = 1;
+  RunUsageLimits limits = 2;
+  repeated RunUsageSample samples = 3;
+}
+message RunUsageLimits {
+  int64 memory_bytes = 1;
+  double cpus = 2;
+}
+message RunUsageSample {
+  google.protobuf.Timestamp at = 1;
+  int64 memory_bytes = 2;
+  double cpus = 3; // used since the previous sample
+  optional int64 written_bytes = 4; // since the run started; absent when the backend can't say
+}
+message WorkerUsage {
+  int64 memory_bytes = 1;
+  int64 memory_reserved_bytes = 2;
+  double cpus = 3;
+  double cpus_reserved = 4;
+  optional double write_bytes_per_second = 5;
+  google.protobuf.Timestamp sampled_at = 6;
+}
+message WorkerSlots {
+  int32 active = 1;
+  int32 capacity = 2;
+}
 message GetCompletionsRequest {}
 message Completions {
   string sha256 = 1;
@@ -796,7 +854,9 @@ message SessionMessage {
   string json = 1; // a Jupyter message, or the "bridge" channel's own, as JSON
 }
 
-message AdminListSessionsRequest {}
+message AdminListSessionsRequest {
+  string worker = 1; // "" = any worker's
+}
 message AdminEndSessionRequest {
   string session_id = 1;
   string reason = 2;
