@@ -146,6 +146,8 @@ const (
 	// RunServiceGetCompletionsProcedure is the fully-qualified name of the RunService's GetCompletions
 	// RPC.
 	RunServiceGetCompletionsProcedure = "/nbsandbox.v1.RunService/GetCompletions"
+	// RunServiceListWorkersProcedure is the fully-qualified name of the RunService's ListWorkers RPC.
+	RunServiceListWorkersProcedure = "/nbsandbox.v1.RunService/ListWorkers"
 	// RunServiceCreateRunProcedure is the fully-qualified name of the RunService's CreateRun RPC.
 	RunServiceCreateRunProcedure = "/nbsandbox.v1.RunService/CreateRun"
 	// RunServiceListRunsProcedure is the fully-qualified name of the RunService's ListRuns RPC.
@@ -1233,6 +1235,9 @@ type RunServiceClient interface {
 	// The runner image's completion index for editors: gzipped JSON
 	// ({"modules": {"pandas": [[name, kind, signature, doc], ...]}}).
 	GetCompletions(context.Context, *connect.Request[v1.GetCompletionsRequest]) (*connect.Response[v1.Completions], error)
+	// The workers: what each runs on, and how many runs and sessions it
+	// holds (counts only; docs/plan-compute-view.md).
+	ListWorkers(context.Context, *connect.Request[v1.ListWorkersRequest]) (*connect.Response[v1.ListWorkersResponse], error)
 	CreateRun(context.Context, *connect.Request[v1.CreateRunRequest]) (*connect.Response[v1.Run], error)
 	ListRuns(context.Context, *connect.Request[v1.ListRunsRequest]) (*connect.Response[v1.ListRunsResponse], error)
 	GetRun(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.Run], error)
@@ -1281,6 +1286,12 @@ func NewRunServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			httpClient,
 			baseURL+RunServiceGetCompletionsProcedure,
 			connect.WithSchema(runServiceMethods.ByName("GetCompletions")),
+			connect.WithClientOptions(opts...),
+		),
+		listWorkers: connect.NewClient[v1.ListWorkersRequest, v1.ListWorkersResponse](
+			httpClient,
+			baseURL+RunServiceListWorkersProcedure,
+			connect.WithSchema(runServiceMethods.ByName("ListWorkers")),
 			connect.WithClientOptions(opts...),
 		),
 		createRun: connect.NewClient[v1.CreateRunRequest, v1.Run](
@@ -1386,6 +1397,7 @@ func NewRunServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 type runServiceClient struct {
 	getRuntime        *connect.Client[v1.GetRuntimeRequest, v1.Runtime]
 	getCompletions    *connect.Client[v1.GetCompletionsRequest, v1.Completions]
+	listWorkers       *connect.Client[v1.ListWorkersRequest, v1.ListWorkersResponse]
 	createRun         *connect.Client[v1.CreateRunRequest, v1.Run]
 	listRuns          *connect.Client[v1.ListRunsRequest, v1.ListRunsResponse]
 	getRun            *connect.Client[v1.GetRunRequest, v1.Run]
@@ -1412,6 +1424,11 @@ func (c *runServiceClient) GetRuntime(ctx context.Context, req *connect.Request[
 // GetCompletions calls nbsandbox.v1.RunService.GetCompletions.
 func (c *runServiceClient) GetCompletions(ctx context.Context, req *connect.Request[v1.GetCompletionsRequest]) (*connect.Response[v1.Completions], error) {
 	return c.getCompletions.CallUnary(ctx, req)
+}
+
+// ListWorkers calls nbsandbox.v1.RunService.ListWorkers.
+func (c *runServiceClient) ListWorkers(ctx context.Context, req *connect.Request[v1.ListWorkersRequest]) (*connect.Response[v1.ListWorkersResponse], error) {
+	return c.listWorkers.CallUnary(ctx, req)
 }
 
 // CreateRun calls nbsandbox.v1.RunService.CreateRun.
@@ -1500,6 +1517,9 @@ type RunServiceHandler interface {
 	// The runner image's completion index for editors: gzipped JSON
 	// ({"modules": {"pandas": [[name, kind, signature, doc], ...]}}).
 	GetCompletions(context.Context, *connect.Request[v1.GetCompletionsRequest]) (*connect.Response[v1.Completions], error)
+	// The workers: what each runs on, and how many runs and sessions it
+	// holds (counts only; docs/plan-compute-view.md).
+	ListWorkers(context.Context, *connect.Request[v1.ListWorkersRequest]) (*connect.Response[v1.ListWorkersResponse], error)
 	CreateRun(context.Context, *connect.Request[v1.CreateRunRequest]) (*connect.Response[v1.Run], error)
 	ListRuns(context.Context, *connect.Request[v1.ListRunsRequest]) (*connect.Response[v1.ListRunsResponse], error)
 	GetRun(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.Run], error)
@@ -1544,6 +1564,12 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 		RunServiceGetCompletionsProcedure,
 		svc.GetCompletions,
 		connect.WithSchema(runServiceMethods.ByName("GetCompletions")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runServiceListWorkersHandler := connect.NewUnaryHandler(
+		RunServiceListWorkersProcedure,
+		svc.ListWorkers,
+		connect.WithSchema(runServiceMethods.ByName("ListWorkers")),
 		connect.WithHandlerOptions(opts...),
 	)
 	runServiceCreateRunHandler := connect.NewUnaryHandler(
@@ -1648,6 +1674,8 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 			runServiceGetRuntimeHandler.ServeHTTP(w, r)
 		case RunServiceGetCompletionsProcedure:
 			runServiceGetCompletionsHandler.ServeHTTP(w, r)
+		case RunServiceListWorkersProcedure:
+			runServiceListWorkersHandler.ServeHTTP(w, r)
 		case RunServiceCreateRunProcedure:
 			runServiceCreateRunHandler.ServeHTTP(w, r)
 		case RunServiceListRunsProcedure:
@@ -1695,6 +1723,10 @@ func (UnimplementedRunServiceHandler) GetRuntime(context.Context, *connect.Reque
 
 func (UnimplementedRunServiceHandler) GetCompletions(context.Context, *connect.Request[v1.GetCompletionsRequest]) (*connect.Response[v1.Completions], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.RunService.GetCompletions is not implemented"))
+}
+
+func (UnimplementedRunServiceHandler) ListWorkers(context.Context, *connect.Request[v1.ListWorkersRequest]) (*connect.Response[v1.ListWorkersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.RunService.ListWorkers is not implemented"))
 }
 
 func (UnimplementedRunServiceHandler) CreateRun(context.Context, *connect.Request[v1.CreateRunRequest]) (*connect.Response[v1.Run], error) {

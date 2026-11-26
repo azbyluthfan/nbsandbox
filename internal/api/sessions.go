@@ -210,12 +210,13 @@ func (a *API) syncSession(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, map[string]any{"conflicts": out})
 }
 
-// adminListSessions is GET /v1/admin/sessions: every open session.
+// adminListSessions is GET /v1/admin/sessions?worker=: every open session,
+// or those one worker holds.
 func (a *API) adminListSessions(w http.ResponseWriter, r *http.Request) {
 	if !a.sessionsOn(w) {
 		return
 	}
-	list, err := a.d.Sessions.All(r.Context())
+	list, err := a.d.Sessions.All(r.Context(), r.URL.Query().Get("worker"))
 	if err != nil {
 		writeSessionError(w, r, err)
 		return

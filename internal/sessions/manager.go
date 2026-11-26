@@ -256,9 +256,10 @@ func (m *Manager) List(ctx context.Context, owner, spaceID string) ([]store.Sess
 	return m.d.DB.OpenSessions(ctx, store.SessionFilter{SpaceID: spaceID, Owner: owner})
 }
 
-// All returns every open session (administrators).
-func (m *Manager) All(ctx context.Context) ([]store.Session, error) {
-	return m.d.DB.OpenSessions(ctx, store.SessionFilter{})
+// All returns every open session, or those one worker holds ("": all;
+// administrators).
+func (m *Manager) All(ctx context.Context, worker string) ([]store.Session, error) {
+	return m.d.DB.OpenSessions(ctx, store.SessionFilter{Worker: worker})
 }
 
 // End ends one of the owner's sessions. by is who ended it (recorded).

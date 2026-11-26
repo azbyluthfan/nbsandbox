@@ -95,6 +95,7 @@ func (db *DB) RunByID(ctx context.Context, runID string) (Run, error) {
 type RunFilter struct {
 	Status        string
 	Owner         string // only this owner's runs (administrators, across spaces)
+	Worker        string // only the runs this worker holds or held (administrators)
 	Function      string // only invocations of this function
 	CreatedAfter  *time.Time
 	CreatedBefore *time.Time
@@ -118,6 +119,10 @@ func (db *DB) ListRuns(ctx context.Context, spaceID string, f RunFilter, cursor 
 	if f.Owner != "" {
 		q += " AND owner = ?"
 		args = append(args, f.Owner)
+	}
+	if f.Worker != "" {
+		q += " AND worker = ?"
+		args = append(args, f.Worker)
 	}
 	if f.Status != "" {
 		q += " AND status = ?"

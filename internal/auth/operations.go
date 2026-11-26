@@ -45,6 +45,7 @@ const (
 
 	OpGetRuntime     Op = "GetRuntime"
 	OpGetCompletions Op = "GetCompletions"
+	OpListWorkers    Op = "ListWorkers"
 
 	OpCreateRun       Op = "CreateRun"
 	OpListRuns        Op = "ListRuns"
@@ -131,6 +132,7 @@ var opScopes = map[Op]string{
 
 	OpGetRuntime:     ScopeRead,
 	OpGetCompletions: ScopeRead,
+	OpListWorkers:    ScopeRead,
 
 	OpCreateRun:       ScopeRuns,
 	OpListRuns:        ScopeRead,

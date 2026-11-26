@@ -74,7 +74,8 @@ export function showRun(main, api, space, runId, onChange) {
     }
     clear(header).append(...parts);
     const params = run.parameters && Object.keys(run.parameters).length ? ` · parameters ${JSON.stringify(run.parameters)}` : "";
-    meta.textContent = `run ${run.id} · started ${timeAgo(run.started_at || run.created_at)}${params}`;
+    const where = [run.environment ? `environment ${run.environment}` : "", run.worker ? `on ${run.worker}` : ""].filter(Boolean).map((x) => ` · ${x}`).join("");
+    meta.textContent = `run ${run.id} · started ${timeAgo(run.started_at || run.created_at)}${where}${params}`;
     message.textContent = run.message || "";
     message.className = "message" + (run.fault && run.fault !== "caller" ? " bad" : "");
     if (run.dependency_warnings && run.dependency_warnings.length && !run.message) {

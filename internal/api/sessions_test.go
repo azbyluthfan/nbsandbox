@@ -141,7 +141,7 @@ func TestDeletingASpaceEndsItsSessions(t *testing.T) {
 	if rec := e.req("DELETE", "/v1/spaces/"+sp.ID, "alice", nil, ""); rec.Code != http.StatusNoContent {
 		t.Fatalf("delete: %d %s", rec.Code, rec.Body)
 	}
-	if s, err := e.deps.Sessions.All(context.Background()); err != nil || len(s) != 0 {
+	if s, err := e.deps.Sessions.All(context.Background(), ""); err != nil || len(s) != 0 {
 		t.Fatalf("open sessions after the space went: %v %v (session %s)", s, err, id)
 	}
 }

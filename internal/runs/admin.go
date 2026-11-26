@@ -24,6 +24,7 @@ type AdminFilter struct {
 	Status  string
 	Owner   string
 	SpaceID string
+	Worker  string
 }
 
 func (m *Manager) adminView(ctx context.Context, r store.Run) AdminView {
@@ -40,7 +41,7 @@ func (m *Manager) AdminList(ctx context.Context, f AdminFilter, cursor string, l
 	if f.SpaceID != "" && !spaces.ValidID(f.SpaceID) {
 		return nil, "", &spaces.InvalidError{Msg: "space must be a lowercase UUID"}
 	}
-	page, err := m.d.DB.ListRuns(ctx, f.SpaceID, store.RunFilter{Status: f.Status, Owner: f.Owner}, cursor, limit)
+	page, err := m.d.DB.ListRuns(ctx, f.SpaceID, store.RunFilter{Status: f.Status, Owner: f.Owner, Worker: f.Worker}, cursor, limit)
 	if errors.Is(err, store.ErrBadCursor) {
 		return nil, "", &spaces.InvalidError{Msg: "invalid cursor"}
 	}

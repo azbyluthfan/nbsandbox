@@ -24,6 +24,7 @@ import (
 	"github.com/azbyluthfan/nbsandbox/internal/auth"
 	"github.com/azbyluthfan/nbsandbox/internal/auth/authtest"
 	"github.com/azbyluthfan/nbsandbox/internal/blob"
+	"github.com/azbyluthfan/nbsandbox/internal/compute"
 	"github.com/azbyluthfan/nbsandbox/internal/connections"
 	"github.com/azbyluthfan/nbsandbox/internal/isolation"
 	"github.com/azbyluthfan/nbsandbox/internal/obs"
@@ -47,6 +48,7 @@ type testEnv struct {
 	runs     *runs.Manager
 	backend  *fakeBackend
 	shutdown chan struct{}
+	db       *store.DB
 }
 
 // Small limits so the upload-limit tests stay fast: 1 KiB per file, 4 KiB per space.
@@ -134,8 +136,13 @@ func newEnvFull(t *testing.T, idp *authtest.IDP, pkgs func(db *store.DB, dataDir
 			var ri RuntimeInfo
 			ri.Image.Ref, ri.PythonVersion, ri.Packages, ri.Runtime = "nbsandbox-runner:test", "3.13.18", map[string]string{"pandas": "3.1.1"}, "runc"
 			return ri, nil
-		}}
-	return testEnv{handler: checkSpec(t, NewHandler(deps), nil), logs: &logs, metrics: m, ready: &ready, spaces: svc, deps: deps, runs: mgr, backend: backend, shutdown: shutdown}
+		},
+		Workers: func(ctx context.Context) ([]compute.Worker, error) {
+			return compute.Workers(ctx, db, time.Minute, time.Now())
+		},
+	}
+	return testEnv{handler: checkSpec(t, NewHandler(deps), nil), logs: &logs, metrics: m, ready: &ready, spaces: svc, deps: deps, runs: mgr, backend: backend,
+		shutdown: shutdown, db: db}
 }
 
 func (e testEnv) do(method, path string, body io.Reader, user, pass string) *httptest.ResponseRecorder {

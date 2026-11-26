@@ -95,6 +95,7 @@ func (a *API) routes() []Route {
 
 		// Runtime.
 		{Method: "GET", Pattern: "/v1/runtime", Handler: a.getRuntime, Auth: true, Op: auth.OpGetRuntime},
+		{Method: "GET", Pattern: "/v1/workers", Handler: a.listWorkers, Auth: true, Op: auth.OpListWorkers},
 		{Method: "GET", Pattern: "/v1/runtime/completions", Handler: a.getCompletions, Auth: true, Op: auth.OpGetCompletions},
 
 		// Runs, with the live log stream.

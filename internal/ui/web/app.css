@@ -280,6 +280,19 @@ body.explorer-closed .explorer { display: none; }
 .badge.failed, .badge.oom, .badge.kernel_died, .badge.platform_error { color: var(--bad); background: var(--bad-soft); }
 @keyframes pulse { 50% { opacity: .3; } }
 @media (prefers-reduced-motion: reduce) { .badge.running::before { animation: none; } }
+.badge.worker-up { color: var(--ok); background: var(--ok-soft); }
+.badge.worker-down { color: var(--bad); background: var(--bad-soft); }
+.badge.worker-gone { color: var(--muted); background: var(--border); }
+
+/* The compute view */
+table.compute tr.gone td { opacity: .55; }
+table.compute tr.detail td { background: var(--code-bg); padding: 4px 14px 12px; }
+table.list.inner { font-size: 13px; }
+.small { font-size: 12px; }
+.mono { font-family: var(--mono, ui-monospace, monospace); }
+.slots { display: flex; flex-direction: column; gap: 4px; min-width: 70px; }
+.meter { height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
+.meter > div { height: 100%; background: var(--info); }
 
 /* ---------- page building blocks ---------- */
 

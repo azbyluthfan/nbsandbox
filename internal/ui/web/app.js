@@ -17,6 +17,8 @@
 //   #/<user>/<space>/d/<path>    a folder
 //   #/<user>/<space>/r/<run>     a run
 //   #/<user>/<space>/fn/<name>   a function
+//   #/<user>/~connections        the user's connections
+//   #/<user>/~compute            the workers
 
 import { Api, listUsers, ApiError, session, signOut } from "./api.js";
 import { el, clear, toast, formatBytes, timeAgo, badge, icon, fileIcon, menuButton } from "./dom.js";
@@ -26,6 +28,7 @@ import { openFilePage } from "./filepage.js";
 import { showFunction, publishDialog } from "./functions.js";
 import { loadCompletions } from "./complete.js";
 import { sessionBar } from "./sessionbar.js";
+import { showCompute } from "./compute.js";
 import { connectionsOn, showConnections, spaceConnectionsSection, environmentPicker, chosenEnvironment } from "./connections.js";
 
 const $ = (id) => document.getElementById(id);
@@ -121,6 +124,10 @@ async function route() {
   } else renderChrome();
 
   if (h.space === "~connections" && state.connectionsOn) return showConnections(state.api, newPage());
+  if (h.space === "~compute") {
+    state.page = showCompute(state.api, newPage());
+    return;
+  }
   if (!space) return showSpaces();
   if (h.kind === "f" && h.target) return openFile(h.target);
   if (h.kind === "d" && h.target) return openFolder(h.target);
@@ -591,6 +598,9 @@ function showSpaces() {
       onclick: () => go(state.user, "~connections") },
     el("span", { class: "title" }, icon("table"), "Connections"),
     el("span", { class: "muted" }, "your databases and object storage, for notebooks to query"))) : null,
+    el("div", { class: "section" }, el("button", { type: "button", class: "card space-card", onclick: () => go(state.user, "~compute") },
+      el("span", { class: "title" }, icon("activity"), "Compute"),
+      el("span", { class: "muted" }, "the workers that run notebooks, and how busy each is"))),
   );
 }
 

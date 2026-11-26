@@ -234,11 +234,13 @@ paths:
       summary: Every owner's runs, newest first (administrators)
       description: |
         Metadata only, with the owner: never results or outputs. Narrow with
-        `status`, `owner` (a caller ID) and `space`.
+        `status`, `owner` (a caller ID), `space` and `worker` (the worker that
+        holds or held the run, as `GET /v1/workers` names it).
       parameters:
         - { name: status, in: query, required: false, schema: { type: string } }
         - { name: owner, in: query, required: false, schema: { type: string } }
         - { name: space, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: worker, in: query, required: false, schema: { type: string } }
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Cursor"
       responses:
@@ -253,6 +255,11 @@ paths:
       security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.admin] }]
       tags: [admin]
       summary: Every open interactive session, with its owner and worker (administrators)
+      description: |
+        Narrow with `worker`: the sessions one worker holds. A single process
+        (role `all`) holds its sessions without naming itself.
+      parameters:
+        - { name: worker, in: query, required: false, schema: { type: string } }
       responses:
         "200": { description: Open sessions, content: { application/json: { schema: { $ref: "#/components/schemas/SessionList" } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -1006,6 +1013,23 @@ paths:
         "429": { $ref: "#/components/responses/TooManyRequests" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "503": { $ref: "#/components/responses/DockerUnavailable" }
+
+  /v1/workers:
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [runs]
+      summary: The workers, what each runs on, and how many runs and sessions it holds
+      description: |
+        Every worker on record, by name: live ones, and those gone within the
+        last day (`state: gone`). Counts only: no one's runs or names
+        (administrators filter `GET /v1/admin/runs` and
+        `GET /v1/admin/sessions` by `worker`). A single process lists itself,
+        with role `all`.
+      responses:
+        "200": { description: The workers, content: { application/json: { schema: { $ref: "#/components/schemas/WorkerList" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
   /v1/runtime/completions:
     get:
@@ -1948,6 +1972,38 @@ components:
         module: { type: string }
         cell: { type: integer, description: 0-based position among the notebook's code cells }
         source: { type: string, enum: [notebook, requirements.txt] }
+    WorkerList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Worker" } }
+    Worker:
+      type: object
+      required: [id, state, role, version, seen_at, runtime, platform, image, run_limits, runs, sessions]
+      properties:
+        id: { type: string, description: "Its name: the host name (a container's or pod's), or worker_id" }
+        state: { type: string, enum: [up, down, gone], description: "up: it can run notebooks; down: alive, but Docker or the runner image isn't usable; gone: not seen within three leases" }
+        role: { type: string, enum: [worker, all], description: "worker, or all (a single process)" }
+        version: { type: string }
+        started_at: { type: string, format: date-time }
+        seen_at: { type: string, format: date-time }
+        runtime: { type: string, description: "What runs notebooks there: runc, runsc, or a Kubernetes runtime class" }
+        platform: { type: string, description: "The Docker version and operating system, where there is one" }
+        image: { type: string, description: The runner image }
+        run_limits:
+          type: object
+          required: [memory_bytes, cpus]
+          properties:
+            memory_bytes: { type: integer, format: int64 }
+            cpus: { type: number }
+        runs: { $ref: "#/components/schemas/WorkerSlots" }
+        sessions: { $ref: "#/components/schemas/WorkerSlots" }
+    WorkerSlots:
+      type: object
+      required: [active, capacity]
+      properties:
+        active: { type: integer, description: "Held now: runs starting or running, open sessions (0 when gone)" }
+        capacity: { type: integer, description: "How many it takes at once (runs.concurrency, sessions.per_worker; 0: sessions off)" }
     Run:
       type: object
       required: [id, space_id, notebook, parameters, status, created_at]
@@ -1961,6 +2017,7 @@ components:
         version: { type: integer, description: The function version, for an invocation }
         read_only_space: { type: boolean, description: The run sees the space (or the function's bundle) read-only }
         environment: { type: string, description: "The space environment the run read its connections' names in; absent if the space binds none" }
+        worker: { type: string, description: "The worker that holds or held the run (GET /v1/workers); absent before one took it" }
         parameters: { $ref: "#/components/schemas/Parameters" }
         status: { $ref: "#/components/schemas/RunStatus" }
         error_kind: { type: string, description: "e.g. execution_error, resource_pids, resource_tmp, missing_package, packages, output_invalid, output_too_large, oom, timeout, docker_lost" }

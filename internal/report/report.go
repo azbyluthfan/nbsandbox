@@ -69,6 +69,7 @@ var Sections = []Section{
 	{"Log and event streaming", []string{"live-lines", "resume", "join-mid-run", "replay-after-finish", "slow-viewer", "through-proxy", "streamed-output"}},
 	{"Interactive sessions", []string{"session-network", "session-isolation", "session-memory-limit", "session-read-only", "session-reattach"}},
 	{"Web UI", []string{"web-ui"}},
+	{"Compute view", []string{"compute-workers"}},
 	{"Notebook functions", []string{"function-invoke", "function-immutable", "function-errors", "read-only-invocation",
 		"parallel-invocations", "status-stream", "start-latency"}},
 	{"Cluster (make test-cluster)", []string{"cluster-worker-crash", "cluster-worker-stop", "cluster-api-crash", "cluster-postgres-blip"}},

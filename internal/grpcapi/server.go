@@ -29,6 +29,7 @@ import (
 	"github.com/azbyluthfan/nbsandbox/internal/audit"
 	"github.com/azbyluthfan/nbsandbox/internal/auth"
 	"github.com/azbyluthfan/nbsandbox/internal/completions"
+	"github.com/azbyluthfan/nbsandbox/internal/compute"
 	"github.com/azbyluthfan/nbsandbox/internal/connections"
 	"github.com/azbyluthfan/nbsandbox/internal/runs"
 	"github.com/azbyluthfan/nbsandbox/internal/sessions"
@@ -38,10 +39,12 @@ import (
 
 // Deps are the handlers' collaborators: the same services the REST API uses.
 type Deps struct {
-	Auth        *auth.Authenticator
-	Spaces      *spaces.Service
-	Runs        *runs.Manager
-	Runtime     func() (api.RuntimeInfo, error)
+	Auth    *auth.Authenticator
+	Spaces  *spaces.Service
+	Runs    *runs.Manager
+	Runtime func() (api.RuntimeInfo, error)
+	// Workers lists the workers (ListWorkers; nil: none).
+	Workers     func(ctx context.Context) ([]compute.Worker, error)
 	Completions func(ctx context.Context, ref completions.Ref) (io.ReadCloser, error)
 	Logger      *slog.Logger
 	// Shutdown is closed when the server starts shutting down: open streams

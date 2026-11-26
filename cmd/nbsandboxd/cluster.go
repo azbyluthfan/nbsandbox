@@ -4,6 +4,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -22,6 +23,9 @@ import (
 	"github.com/azbyluthfan/nbsandbox/internal/runs"
 	"github.com/azbyluthfan/nbsandbox/internal/store"
 )
+
+// processStart is when this process started (the compute view shows it).
+var processStart = time.Now()
 
 // workerID names this process in run leases: the setting, or the host name
 // (unique per container and per Kubernetes pod).
@@ -43,7 +47,11 @@ func publishWorker(ctx context.Context, db *store.DB, id, sessionAddr string, cf
 	every := cfg.Runs.Lease / 3
 	publish := func(ctx context.Context) {
 		st := sup.Status()
-		w := store.Worker{ID: id, Up: st.Up && st.Manifest != nil, Runtime: "{}", SessionAddr: sessionAddr}
+		w := store.Worker{ID: id, Up: st.Up && st.Manifest != nil, Runtime: "{}", SessionAddr: sessionAddr,
+			Role: cmp.Or(cfg.Role, config.RoleAll), Version: version, StartedAt: processStart, RunSlots: cfg.Runs.Concurrency}
+		if cfg.SessionsOn() {
+			w.SessionSlots = cfg.Sessions.PerWorker
+		}
 		if info, err := runtimeInfo(cfg, st, comps); err == nil { //nolint:contextcheck // the index is stored under the publisher's own (process) context
 			b, _ := json.Marshal(info)
 			w.Runtime = string(b)

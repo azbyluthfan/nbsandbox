@@ -77,7 +77,7 @@ func (s *server) AdminListRuns(ctx context.Context, req *connect.Request[pb.Admi
 	if err != nil {
 		return nil, err
 	}
-	list, next, err := s.d.Runs.AdminList(ctx, runs.AdminFilter{Status: req.Msg.Status, Owner: req.Msg.Owner, SpaceID: req.Msg.SpaceId}, cursor, limit)
+	list, next, err := s.d.Runs.AdminList(ctx, runs.AdminFilter{Status: req.Msg.Status, Owner: req.Msg.Owner, SpaceID: req.Msg.SpaceId, Worker: req.Msg.Worker}, cursor, limit)
 	if err != nil {
 		return nil, s.toErr(err)
 	}

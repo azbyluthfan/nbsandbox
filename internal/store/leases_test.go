@@ -238,3 +238,49 @@ func TestWorkers(t *testing.T) {
 		t.Fatalf("none seen in the future %+v", ws)
 	}
 }
+
+// The compute view: what each worker says about itself, and what it holds.
+func TestWorkerDetailsAndLoads(t *testing.T) {
+	ctx := context.Background()
+	db := openTest(t)
+	started := time.Now().Add(-time.Hour).Truncate(time.Millisecond)
+	if err := db.PutWorker(ctx, Worker{ID: "w1", Up: true, Runtime: "{}", Role: "worker", Version: "0.4.0",
+		StartedAt: started, RunSlots: 2, SessionSlots: 4}); err != nil {
+		t.Fatal(err)
+	}
+	ws, err := db.AllWorkers(ctx)
+	if err != nil || len(ws) != 1 || ws[0].Role != "worker" || ws[0].Version != "0.4.0" || !ws[0].StartedAt.Equal(started) ||
+		ws[0].RunSlots != 2 || ws[0].SessionSlots != 4 {
+		t.Fatalf("workers %+v %v", ws, err)
+	}
+
+	seedSpace(t, db, "s1")
+	seedSpace(t, db, "s2")
+	for _, id := range []string{"r1", "r2", "r3"} {
+		if _, _, _, err := db.SubmitRunWithEvent(ctx, NewRun{ID: id, SpaceID: "s1", Owner: "alice", Notebook: "nb.ipynb",
+			CreatedAt: time.Now(), ReadOnlySpace: true}, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, w := range []string{"w1", "w2"} { // r3 stays queued, held by no one
+		if _, err := db.ClaimRun(ctx, w, time.Minute); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, err := db.OpenSession(ctx, newSession("x1", "s2", "a.ipynb", SessionReadWrite), 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := db.ClaimSession(ctx, "w1", 4); err != nil || !ok {
+		t.Fatalf("claim session %v %v", ok, err)
+	}
+	loads, err := db.WorkerLoads(ctx)
+	if err != nil || loads["w1"] != (WorkerLoad{Runs: 1, Sessions: 1}) || loads["w2"] != (WorkerLoad{Runs: 1}) {
+		t.Fatalf("loads %+v %v", loads, err)
+	}
+
+	// The admin filter: the runs one worker holds or held.
+	runs, _ := db.ListRuns(ctx, "", RunFilter{Worker: "w2"}, "", 10)
+	if len(runs.Items) != 1 || runs.Items[0].Worker != "w2" {
+		t.Fatalf("w2's runs %+v", runs.Items)
+	}
+}

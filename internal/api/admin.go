@@ -80,7 +80,7 @@ func (a *API) adminDeleteSpace(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// adminListRuns is GET /v1/admin/runs?status=&owner=&space=: every owner's
+// adminListRuns is GET /v1/admin/runs?status=&owner=&space=&worker=: every owner's
 // runs, newest first, with the owner. Metadata only: no results.
 func (a *API) adminListRuns(w http.ResponseWriter, r *http.Request) {
 	cursor, limit, err := pageParams(r)
@@ -89,7 +89,7 @@ func (a *API) adminListRuns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	list, next, err := a.d.Runs.AdminList(r.Context(), runs.AdminFilter{Status: q.Get("status"), Owner: q.Get("owner"), SpaceID: q.Get("space")}, cursor, limit)
+	list, next, err := a.d.Runs.AdminList(r.Context(), runs.AdminFilter{Status: q.Get("status"), Owner: q.Get("owner"), SpaceID: q.Get("space"), Worker: q.Get("worker")}, cursor, limit)
 	if err != nil {
 		writeRunError(w, r, err)
 		return
