@@ -278,5 +278,68 @@ class InterruptTimingTest(unittest.TestCase):
         self.assertEqual(self.run_case(["interrupt"]), [1])
 
 
+class LostReplyTest(unittest.TestCase):
+    """An interrupt caught by ipykernel's dispatcher (between execute_input
+    and the cell's code) leaves the cell idle without an execute_reply: the
+    bridge supplies one, once."""
+
+    def run_case(self, real_reply):
+        import asyncio
+        import io
+
+        sys.path.insert(0, os.path.dirname(BRIDGE))
+        import session_bridge
+
+        class KM:
+            async def interrupt_kernel(self):
+                pass
+
+        parent = {"msg_id": "c1", "msg_type": "execute_request", "session": "s"}
+
+        def iopub(mt, **content):
+            return {"header": {"msg_type": mt}, "parent_header": parent, "content": content}
+
+        reply = {"header": {"msg_type": "execute_reply"}, "parent_header": parent, "content": {"status": "ok"}}
+
+        async def run():
+            out = io.BytesIO()
+            b = session_bridge.Bridge(out=out)
+            b.km = KM()
+            old, session_bridge.REPLY_GRACE = session_bridge.REPLY_GRACE, 0.1
+            try:
+                await b.track(iopub("status", execution_state="busy"))
+                await b.track(iopub("execute_input"))
+                await b.interrupt()
+                await b.track(iopub("status", execution_state="idle"))
+                passed = None
+                if real_reply == "in time":
+                    passed = b.replied(reply)
+                await asyncio.sleep(0.3)
+                if real_reply == "late":
+                    passed = b.replied(reply)
+            finally:
+                session_bridge.REPLY_GRACE = old
+            return passed, [json.loads(line) for line in out.getvalue().splitlines()]
+
+        return asyncio.run(run())
+
+    def test_a_lost_reply_is_supplied(self):
+        _, msgs = self.run_case(None)
+        self.assertEqual(len(msgs), 1, msgs)
+        m = msgs[0]
+        self.assertEqual((m["channel"], m["header"]["msg_type"], m["parent_header"]["msg_id"]), ("shell", "execute_reply", "c1"))
+        self.assertEqual((m["content"]["status"], m["content"]["ename"]), ("error", "KeyboardInterrupt"))
+
+    def test_the_kernels_reply_in_time_means_none_is_supplied(self):
+        passed, msgs = self.run_case("in time")
+        self.assertTrue(passed)
+        self.assertEqual(msgs, [])
+
+    def test_a_late_reply_after_a_supplied_one_is_dropped(self):
+        passed, msgs = self.run_case("late")
+        self.assertFalse(passed)
+        self.assertEqual(len(msgs), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
