@@ -49,6 +49,9 @@ helm_ uninstall nbsandbox -n nbsandbox --wait >/dev/null 2>&1 || true
 k -n nbsandbox-runs delete pods,secrets,networkpolicies -l app.kubernetes.io/managed-by=nbsandbox --ignore-not-found >/dev/null 2>&1 || true
 k -n nbsandbox rollout restart deploy/postgres deploy/rustfs >/dev/null # emptyDir: a fresh database and object store
 k -n nbsandbox rollout status deploy/postgres deploy/rustfs --timeout=300s >/dev/null
+# CI checks out one commit without tags: fetch the one this needs.
+git -C "$root" rev-parse -q --verify "refs/tags/${FROM}" >/dev/null ||
+	git -C "$root" fetch -q --depth=1 origin "refs/tags/${FROM}:refs/tags/${FROM}"
 git -C "$root" worktree add --detach "$old" "$FROM" >/dev/null
 # The node pulls the published image itself (it's public): kind load can't
 # import a multi-platform image Docker pulled for one platform.
