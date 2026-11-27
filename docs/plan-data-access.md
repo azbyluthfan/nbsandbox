@@ -83,7 +83,7 @@ Every run records its environment and which connection each name meant.
 ### Functions and shared spaces: the caller's connections
 
 - **A function call resolves names with the caller's own connections.** The publisher declares the names a function needs and what they must be (`crm: postgresql, tables orders, customers`). A caller without a matching connection gets a clear error before anything runs. Each run records whose connections it used. Nothing is pinned to the publisher's credentials, so nothing breaks when the publisher leaves.
-- **Shared spaces** (on the ROADMAP; no organisations): each member runs the space's notebooks with **their own connections** under the space's names.
+- **Shared spaces** (no organisations; [plan-shared-spaces.md](plan-shared-spaces.md)): each member runs the space's notebooks with **their own connections** under the space's names, which the space's owners declare.
 
 ### Two modes: mediated and injected
 
