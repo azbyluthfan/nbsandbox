@@ -7,7 +7,7 @@ package integration
 
 import (
 	"encoding/json"
-	"path/filepath"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -26,20 +26,30 @@ const (
 	apiClientSecret = "oauth-SECRET-cs"
 )
 
-var apiOnce sync.Once
+var (
+	apiOnce sync.Once
+	// apiCA signed the test API's HTTPS certificate.
+	apiCA string
+)
 
 // apiSource starts the test API once per test binary, in the fetcher's own
-// base image.
+// base image: HTTP on 8080, HTTPS on 8443. The script and certificate go in
+// by environment, as for the TLS sources.
 func apiSource(t *testing.T) {
 	t.Helper()
 	apiOnce.Do(func() {
 		_, _ = runDocker("rm", "-fv", srcAPI)
-		script, err := filepath.Abs("testdata/api_source.py")
+		script, err := os.ReadFile("testdata/api_source.py")
 		if err != nil {
 			t.Fatal(err)
 		}
-		docker(t, "run", "-d", "--name", srcAPI, "--network", sourcesNet(), "-v", script+":/srv/api.py:ro",
-			"python:3.13-slim@sha256:09a17cad02668ae61ece136b4fd36ac3849e14f670ebedb637ea3e15580525bc", "python", "/srv/api.py")
+		ca := newAuthority(t, "nbsandbox test API CA")
+		apiCA = ca.pem
+		cert, key := ca.leaf(t, srcAPI)
+		docker(t, "run", "-d", "--name", srcAPI, "--network", sourcesNet(), "-e", "API_SCRIPT="+string(script),
+			"-e", "TLS_CERT="+cert, "-e", "TLS_KEY="+key, "--entrypoint", "sh",
+			"python:3.13-slim@sha256:09a17cad02668ae61ece136b4fd36ac3849e14f670ebedb637ea3e15580525bc",
+			"-c", `printf '%s' "$API_SCRIPT" > /tmp/api.py && exec python /tmp/api.py`)
 		retry(t, "test API", 60*time.Second, func() (string, error) {
 			return runDocker("exec", srcAPI, "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/admin-hits')")
 		})
@@ -132,4 +142,103 @@ nbsandbox.output(out)`))
 		}
 	}
 	assertNoReadLeftovers(t)
+}
+
+// HTTPS APIs: the API's certificate checked against the connection's ca,
+// or the system's authorities without one.
+func TestConnectionsHTTPTLS(t *testing.T) {
+	needConnections(t)
+	apiSource(t)
+	other := newAuthority(t, "another CA").pem
+	secure := func(ca string) string {
+		s := map[string]any{"url": "https://" + srcAPI + ":8443/token-api/"}
+		if ca != "" {
+			s["ca"] = ca
+		}
+		return connection(t, "secure", "http", s, apiToken)
+	}
+	sp := space(t, "alice")
+	upload(t, "alice", sp, "", map[string]string{"tls.ipynb": codeNotebook(`import nbsandbox
+out = {}
+for name in ["ours", "system", "other"]:
+    try:
+        out[name] = nbsandbox.http(name).get("orders").status_code
+    except nbsandbox.APIError as e:
+        out[name] = str(e)
+nbsandbox.output(out)`)})
+	bind(t, sp, "dev", map[string]map[string]string{"dev": {"ours": secure(apiCA), "system": secure(""), "other": secure(other)}})
+	run := startRun(t, "alice", sp, "tls.ipynb", nil)
+	res := runResult(t, "alice", sp, run.ID)
+	if res.Status != "succeeded" {
+		t.Fatalf("run: %+v", res)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(res.Output, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out["ours"] != 200.0 {
+		t.Errorf("with the connection's ca: %v", out["ours"])
+	}
+	for _, k := range []string{"system", "other"} {
+		if s, _ := out[k].(string); !strings.Contains(s, "CERTIFICATE_VERIFY_FAILED") {
+			t.Errorf("%s: %v, want a certificate error", k, out[k])
+		}
+	}
+}
+
+const srcKeycloak = "nbsandbox-src-keycloak"
+
+// OAuth 2.0 client credentials against a real Keycloak (the realm of make
+// test-keycloak, started here as a source): the fetcher gets a token for
+// reader-app and the API sees it.
+func TestConnectionsHTTPKeycloak(t *testing.T) {
+	needConnections(t)
+	if os.Getenv("NBSANDBOX_TEST_KEYCLOAK_SOURCE") == "0" {
+		t.Skip("NBSANDBOX_TEST_KEYCLOAK_SOURCE=0: no Keycloak source")
+	}
+	apiSource(t)
+	realm, err := os.ReadFile("../../deploy/keycloak/realm.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = runDocker("rm", "-fv", srcKeycloak)
+	docker(t, "run", "-d", "--name", srcKeycloak, "--network", sourcesNet(), "--memory", "1g",
+		"-e", "REALM="+string(realm), "-e", "JAVA_OPTS_KC_HEAP=-XX:MaxRAMPercentage=50", "--entrypoint", "sh",
+		"quay.io/keycloak/keycloak:26.8.1@sha256:3f3c5f8e03c614774b4bd9173b88391fefa4153bfc010d8012d59ad825377332", "-c",
+		`mkdir -p /opt/keycloak/data/import && printf '%s' "$REALM" > /opt/keycloak/data/import/realm.json &&
+		exec /opt/keycloak/bin/kc.sh start-dev --import-realm --http-port=8180`)
+	t.Cleanup(func() { _, _ = runDocker("rm", "-fv", srcKeycloak) })
+	retry(t, "Keycloak", 180*time.Second, func() (string, error) {
+		return runDocker("exec", srcAPI, "python", "-c",
+			"import urllib.request; urllib.request.urlopen('http://"+srcKeycloak+":8180/realms/nbsandbox/.well-known/openid-configuration')")
+	})
+	kc := connection(t, "kc", "http", map[string]any{"url": apiURL("keycloak-api/"), "auth": "oauth2", "client_id": "reader-app",
+		"token_url": "http://" + srcKeycloak + ":8180/realms/nbsandbox/protocol/openid-connect/token"}, "reader-test-secret")
+	wrong := connection(t, "kc-wrong", "http", map[string]any{"url": apiURL("keycloak-api/"), "auth": "oauth2", "client_id": "reader-app",
+		"token_url": "http://" + srcKeycloak + ":8180/realms/nbsandbox/protocol/openid-connect/token"}, "not-the-secret")
+	sp := space(t, "alice")
+	upload(t, "alice", sp, "", map[string]string{"kc.ipynb": codeNotebook(`import nbsandbox
+out = {"ok": nbsandbox.http("kc").get("orders").status_code}
+try:
+    nbsandbox.http("wrong").get("orders")
+    out["wrong"] = "allowed"
+except nbsandbox.APIError as e:
+    out["wrong"] = str(e)
+nbsandbox.output(out)`)})
+	bind(t, sp, "dev", map[string]map[string]string{"dev": {"kc": kc, "wrong": wrong}})
+	run := startRun(t, "alice", sp, "kc.ipynb", nil)
+	res := runResult(t, "alice", sp, run.ID)
+	if res.Status != "succeeded" {
+		t.Fatalf("run: %+v", res)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(res.Output, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out["ok"] != 200.0 {
+		t.Errorf("with Keycloak's token: %v", out["ok"])
+	}
+	if s, _ := out["wrong"].(string); !strings.Contains(s, "401") {
+		t.Errorf("a wrong client secret: %v, want the token URL's 401", out["wrong"])
+	}
 }

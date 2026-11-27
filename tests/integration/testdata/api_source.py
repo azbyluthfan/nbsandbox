@@ -6,6 +6,9 @@ a path outside every connection's URL that must never be reached."""
 
 import base64
 import json
+import os
+import ssl
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -44,6 +47,15 @@ class API(BaseHTTPRequestHandler):
             return a.removeprefix("Bearer ") in issued
         if p.startswith("/open-api/"):
             return a == ""
+        if p.startswith("/keycloak-api/"):
+            # A token Keycloak issued to reader-app (client credentials). The
+            # signature isn't checked here: what's tested is that the fetcher
+            # got one from Keycloak and sent it.
+            try:
+                claims = json.loads(base64.urlsafe_b64decode(a.removeprefix("Bearer ").split(".")[1] + "=="))
+            except (ValueError, IndexError):
+                return False
+            return claims.get("azp") == "reader-app" and claims.get("iss", "").endswith("/realms/nbsandbox")
         return False
 
     def handle_any(self):
@@ -82,4 +94,14 @@ class API(BaseHTTPRequestHandler):
     do_GET = do_POST = do_PUT = do_DELETE = do_PATCH = handle_any
 
 
+if os.environ.get("TLS_CERT"):  # also HTTPS on 8443, with the test authority's certificate
+    os.makedirs("/tmp/tls", exist_ok=True)
+    for name in ("cert", "key"):
+        with open(f"/tmp/tls/{name}.pem", "w") as f:
+            f.write(os.environ["TLS_" + name.upper()])
+    secure = ThreadingHTTPServer(("0.0.0.0", 8443), API)
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.load_cert_chain("/tmp/tls/cert.pem", "/tmp/tls/key.pem")
+    secure.socket = ctx.wrap_socket(secure.socket, server_side=True)
+    threading.Thread(target=secure.serve_forever, daemon=True).start()
 ThreadingHTTPServer(("0.0.0.0", 8080), API).serve_forever()

@@ -31,7 +31,7 @@ sessions: { secretName: nbsandbox-sessions }
 connections:
   enabled: true
   allowed: [nbsandbox-src-pg, nbsandbox-src-s3, nbsandbox-src-mysql, nbsandbox-src-mssql,
-    nbsandbox-src-tls-pg, nbsandbox-src-tls-mysql, nbsandbox-src-tls-s3, nbsandbox-src-tls-pg-alias, nbsandbox-src-tls-mysql-alias, nbsandbox-src-api]
+    nbsandbox-src-tls-pg, nbsandbox-src-tls-mysql, nbsandbox-src-tls-s3, nbsandbox-src-tls-pg-alias, nbsandbox-src-tls-mysql-alias, nbsandbox-src-api, nbsandbox-src-keycloak]
   fetcherImage: nbsandbox-fetcher:dev
   fetcherMemory: 384MiB   # beside 1GiB runs on kind's one small node
   fetcherCpus: 0.5
