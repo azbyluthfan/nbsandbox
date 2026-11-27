@@ -4,6 +4,17 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+### Upgrading from 0.4.0
+
+- **Fetchers serve a second port, 8816,** for HTTP APIs. Helm's per-run NetworkPolicies include it; nothing to configure.
+- **An `oauth2` HTTP connection's token URL** is reached through the gateway too: its host must be in `connections.allowed`.
+
+### Added
+
+- **HTTP APIs in notebooks:** an `http` connection's API is called by the notebook's own code, with any HTTP client, through its run's fetcher, which adds the credential: `nbsandbox.http("events").get("orders")`, or `nbsandbox.connection("events")` (a base URL and the run's token) for other clients and SDKs. JSON, uploads and server-sent events stream both ways. The credential never enters the run ([connections.md](docs/connections.md#7-call-an-http-api)).
+- **HTTP connections take `auth`:** `header` (the default, as before), `basic`, `oauth2` (client credentials: the fetcher gets and renews the access token) or `none`; and `ca` for an HTTPS API with a private authority. A connection allows paths under its `url` only.
+- **The isolation report** has seven rows for HTTP APIs, and the soak's reading space calls one.
+
 ## [0.4.0] - 2026-11-26
 
 ### Upgrading from 0.3.0

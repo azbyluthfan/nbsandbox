@@ -168,6 +168,9 @@ func TestConnectionsHTTPTLS(t *testing.T) {
 		}
 		return connection(t, "secure", "http", s, apiToken)
 	}
+	// Connections before the space: cleanups run last first, and a space's
+	// connections can be deleted only once it is gone.
+	ours, system, others := secure(apiCA), secure(""), secure(other)
 	sp := space(t, "alice")
 	upload(t, "alice", sp, "", map[string]string{"tls.ipynb": codeNotebook(`import nbsandbox
 out = {}
@@ -177,7 +180,7 @@ for name in ["ours", "system", "other"]:
     except nbsandbox.APIError as e:
         out[name] = str(e)
 nbsandbox.output(out)`)})
-	bind(t, sp, "dev", map[string]map[string]string{"dev": {"ours": secure(apiCA), "system": secure(""), "other": secure(other)}})
+	bind(t, sp, "dev", map[string]map[string]string{"dev": {"ours": ours, "system": system, "other": others}})
 	run := startRun(t, "alice", sp, "tls.ipynb", nil)
 	res := runResult(t, "alice", sp, run.ID)
 	if res.Status != "succeeded" {

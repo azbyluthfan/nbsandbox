@@ -100,15 +100,15 @@ With a session, completion asks the kernel itself, so it knows the real objects:
 
 ### 16. Your connections
 
-![The Connections page: a PostgreSQL connection, its host and database, its secret never shown](images/tour/16-connections.png)
+![The Connections page: a PostgreSQL connection and an HTTP API, where each points, their secrets never shown](images/tour/16-connections.png)
 
-Where the operator turns them on, **Connections** holds your databases and buckets ([connections.md](connections.md)). You give each one's address and credential once; the secret goes to nbsandbox's secret provider and is never shown again.
+Where the operator turns them on, **Connections** holds your databases, buckets and APIs ([connections.md](connections.md)). You give each one's address and credential once; the secret goes to nbsandbox's secret provider and is never shown again.
 
 ### 17. A space's names for them
 
-![A space's Connections table: the name crm, the environments dev and prod, the connection each means](images/tour/17-space-connections.png)
+![A space's Connections table: the names crm and events, the environments dev and prod, the connection each means](images/tour/17-space-connections.png)
 
-A space gives each connection a short name, per environment, so the same notebook reads development or production data: `nbsandbox.sql("SELECT … FROM crm.orders")`. A run never sees the credential: a fetcher beside it reads the source.
+A space gives each connection a short name, per environment, so the same notebook reads development or production data: `nbsandbox.sql("SELECT … FROM crm.orders")`, or calls an API: `nbsandbox.http("events").get("orders")`. A run never sees the credential: a fetcher beside it reads the source, or adds the credential to the notebook's requests.
 
 ### 18. What a run uses
 

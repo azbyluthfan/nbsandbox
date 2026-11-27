@@ -1,6 +1,6 @@
 # Reading data where it lives: connections
 
-A notebook can read a database or an object store without the data being copied into nbsandbox, and without seeing a host name or a password. The user registers a **connection** once (where the data is, and its credential), and a space gives it a short **name**. The notebook then queries the name:
+A notebook can read a database or an object store, and call an HTTP API, without the data being copied into nbsandbox, and without seeing a host name or a password. The user registers a **connection** once (where the data is, and its credential), and a space gives it a short **name**. The notebook then queries the name:
 
 ```python
 import nbsandbox
@@ -14,9 +14,10 @@ This is off unless the operator turns it on ([below](#for-operators)).
 
 **What works today:**
 - PostgreSQL, MySQL and SQL Server databases, and S3-compatible object storage (AWS S3, MinIO, Ceph, RustFS), with CSV and Parquet files.
+- HTTP APIs (JSON, uploads, server-sent events), called by the notebook's own code through the fetcher, which adds the credential: a header token, basic auth, or OAuth 2.0 client credentials ([below](#7-call-an-http-api)).
 - Runs, interactive sessions and published functions, on Docker and on Kubernetes.
 
-**Not yet:** Azure Blob storage and HTTP APIs (connections of those types can be created and bound, but nothing reads them yet).
+**Not yet:** Azure Blob storage (connections of that type can be created and bound, but nothing reads them yet).
 
 **In the web UI:** **Connections** on the spaces page lists yours, to add, change or delete (the secret field is write-only); each space's page has a **Connections** section, a name per row and an environment per column; and where a space has several environments, a picker next to **Run** chooses the one runs, sessions and function calls read in.
 
@@ -41,6 +42,7 @@ curl -u alice:… -X POST https://nbsandbox.example/v1/connections -H 'Content-T
 | `mysql` | `host`, `port` (3306), `database`, `user`, `tls` (`prefer`), `ca` | the password |
 | `sqlserver` | `host`, `port` (1433), `database`, `user` (a SQL login), `tls` (`prefer`; not `verify`) | the password |
 | `s3` | `endpoint` (`host[:port]`, no scheme), `bucket`, `region` (us-east-1), `access_key_id`, `use_ssl` (true), `url_style` (`vhost`, or `path` for MinIO, Ceph, RustFS), `ca` | the secret access key |
+| `http` | `url` (notebooks call paths under it), `auth` (`header`), and by `auth`: `auth_header` (Authorization) and `auth_prefix` (`"Bearer "`) for `header`; `user` for `basic`; `token_url`, `client_id`, `scope`, `audience` for `oauth2`; `ca` | the token or API key (`header`, optional), the password (`basic`), the client secret (`oauth2`); none for `none` |
 
 **Give nbsandbox a read-only user.** The database's own permissions are what really limits a query: nbsandbox refuses writes and more, but a role that can only `SELECT` the tables a notebook needs is the guarantee.
 
@@ -128,12 +130,42 @@ A version records the names its space bound when it was published, and their typ
 
 Functions are called by their space's owner today, so they read the space's own bindings. With shared spaces, each caller's own connections will stand behind the same names.
 
+### 7. Call an HTTP API
+
+The notebook's own code makes the requests, with any HTTP client, through its fetcher: the fetcher checks them, adds the connection's credential, and forwards them through the egress gateway. The credential never enters the run.
+
+```python
+import nbsandbox
+
+api = nbsandbox.http("events")                       # a requests.Session for the name
+orders = api.get("orders", params={"since": "2026-11-01"}).json()
+api.post("imports", json={"rows": 120})
+for line in api.get("stream", stream=True).iter_lines():   # server-sent events, as they arrive
+    ...
+
+c = nbsandbox.connection("events")                   # for other clients and SDKs
+c.url        # the fetcher's address for the name: call paths under it
+c.headers    # the header with the run's token: send it with each request
+c.token      # or give the token to an SDK as its API key
+client = SomeSDK(base_url=c.url, api_key=c.token)
+```
+
+- **Paths** are relative to the connection's `url`: with `https://api.example.com/v1/`, `api.get("orders")` calls `https://api.example.com/v1/orders`. A path outside it (`../admin`) is refused. Any method works.
+- **The run's token stands in for the credential:** in `X-Nbsandbox-Token`, or in the connection's own auth header (`Authorization: Bearer <token>`, or the `auth_header` you set), so an SDK that takes a base URL and an API key works unchanged. The fetcher replaces it with the real credential.
+- **The credential's own permissions in the API are what limits a notebook,** as a database's role does: give nbsandbox a key that can do only what notebooks need.
+- **`oauth2`** is the client credentials grant: the fetcher gets an access token from `token_url` (sending `client_id`, the secret, and `scope` and `audience` if set), keeps it until a minute before it expires, and gets a new one once if the API answers `401`. The operator must allow the token URL's host too.
+- **HTTPS** certificates are checked against the system's authorities, and `ca` if you give it. Plain `http://` works, but anyone on the network can read it.
+- **Redirects** aren't followed: one under the connection's URL comes back with the fetcher's address, which requests follows; one elsewhere can't be reached from the run. WebSocket upgrades aren't supported.
+- **Errors** from the fetcher itself (a name the run doesn't have, a path outside the URL, an API it can't reach) raise `nbsandbox.APIError` in `nbsandbox.http()`; other clients see the status, with an `X-Nbsandbox-Error: fetcher` header. The API's own answers, errors included, come back as they are.
+- **In the fetcher's log** (the run's log, `[fetcher]`): each request's name, method, path, status, bytes and time; never query strings, bodies or credentials.
+
 ## What a run can and can't reach
 
 | | |
 |---|---|
-| The credentials | Never in the run: only the fetcher has them. The run gets a token for its own fetcher. |
+| The credentials | Never in the run: only the fetcher has them, for APIs too. The run gets a token for its own fetcher. |
 | The sources directly | No: the run's network is private to it and its fetcher (and the gateway, which needs the fetcher's own token). |
+| An API, beyond its connection | Only paths under the connection's `url`, with the run's token, and certificates checked. |
 | Another run's fetcher | No: each reading run has its own network (Docker), or its own network policies (Kubernetes). |
 | The internet | No. |
 | The fetcher's files and settings | No: it reads only its run's buckets, and its configuration is locked after start. |

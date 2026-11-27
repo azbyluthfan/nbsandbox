@@ -245,7 +245,7 @@ Each phase usable on its own:
    - H1: the fetcher's HTTP port with `header` and `none` auth, `nbsandbox.http()` and `connection()`, on Docker, with tests against a local API (JSON, SSE, uploads, refused paths and tokens);
    - H2: `basic` and `oauth2` (against Keycloak, already in the weekly run), and `ca`;
    - H3: Kubernetes (the NetworkPolicy's port), the isolation-report rows, the soak's reading space calling an API (`nbsandbox-report check` has no connections section yet, for databases either);
-   - H4: the web UI's connection form, API, gRPC and MCP fields, docs, an example notebook, the tour.
+   - H4: the web UI's connection form, the API's description of the settings, docs, the tour (gRPC takes settings as a Struct and MCP has no connection tools: nothing to change; no example notebook, as the dev stack has no API to call).
 3. **Iceberg tables and catalogs.**
 4. **Runs with several runners:** orchestrator and workers, splits, partial aggregation with DuckDB, limits per run (and so run sizes).
 5. **A distributed engine,** when a workload needs one.

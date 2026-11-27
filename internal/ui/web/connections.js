@@ -25,8 +25,13 @@ export const TYPES = {
   },
   azureblob: { label: "Azure Blob Storage", secret: "Connection string, account key or SAS",
     fields: [["account", "Account"], ["container", "Container"], ["endpoint", "Endpoint URL (optional)"], ["auth", "Secret kind (connection_string, account_key or sas)", "connection_string"]] },
-  http: { label: "HTTP API", secret: "Token or API key", optionalSecret: true,
-    fields: [["url", "URL"], ["auth_header", "Header", "Authorization"], ["auth_prefix", "Prefix", "Bearer "]] },
+  http: { label: "HTTP API", secret: "Token, API key, password or client secret (per auth)", optionalSecret: true,
+    fields: [["url", "URL (notebooks call paths under it)", "https://api.example.com/v1/"],
+      ["auth", "Auth (header, basic, oauth2 or none)", "header"],
+      ["auth_header", "Header (auth header)", "Authorization"], ["auth_prefix", "Prefix (auth header)", "Bearer "],
+      ["user", "User (auth basic)"], ["token_url", "Token URL (auth oauth2)"], ["client_id", "Client ID (auth oauth2)"],
+      ["scope", "Scope (auth oauth2, optional)"], ["audience", "Audience (auth oauth2, optional)"],
+      ["ca", "CA certificates (PEM; optional, for https, trusted beside the system's)", "-----BEGIN CERTIFICATE-----", "pem"]] },
 };
 
 const NAME = /^[a-z][a-z0-9_]{0,62}$/;
@@ -91,8 +96,9 @@ export function environmentPicker(api, space) {
 /** The Connections page: the user's connections, to add, change or delete. */
 export async function showConnections(api, page) {
   clear(page).append(el("div", { class: "hero" }, el("h1", {}, "Connections"),
-    el("p", {}, "Your databases and object storage. A space gives each a short name (crm, lake) that notebooks query: ",
-      el("code", {}, 'nbsandbox.sql("SELECT … FROM crm.orders")'), ". Secrets are kept by nbsandbox's secret provider and never shown again.")));
+    el("p", {}, "Your databases, object storage and APIs. A space gives each a short name (crm, lake, events) that notebooks use: ",
+      el("code", {}, 'nbsandbox.sql("SELECT … FROM crm.orders")'), " or ", el("code", {}, 'nbsandbox.http("events").get("orders")'),
+      ". Secrets are kept by nbsandbox's secret provider and never shown again. The API's own permissions for a credential are what limits it.")));
   const list = el("div", { class: "section" }, el("p", { class: "muted" }, "Loading…"));
   page.append(list);
   const render = async () => {

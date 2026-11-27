@@ -1705,8 +1705,14 @@ components:
         (true), url_style (vhost or path), ca (PEM certificates trusted beside
         the system's).
         azureblob: account, container, endpoint, auth (connection_string,
-        account_key or sas: what the secret is). http: url, auth_header
-        (Authorization), auth_prefix ("Bearer ").
+        account_key or sas: what the secret is). http: url (notebooks call
+        paths under it, through their fetcher), auth (header: header, basic,
+        oauth2 or none), auth_header (Authorization) and auth_prefix
+        ("Bearer ") for header, user for basic, token_url, client_id, scope
+        and audience for oauth2 (client credentials; the token URL's host must
+        be allowed too), ca (PEM certificates trusted beside the system's,
+        for https). The secret is the token (optional for header), the
+        password (basic) or the client secret (oauth2); none takes no secret.
       additionalProperties: true
     ConnectionSecretInput:
       type: object
