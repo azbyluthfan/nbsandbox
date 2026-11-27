@@ -1,6 +1,6 @@
 # Plan: data outside nbsandbox
 
-**Status (2026-11-25):** phase 1 of the [order of work](#order-of-work) is built, in milestones M0 to M5: connections, secret providers (Kubernetes Secrets, Vault/OpenBao, a built-in store for development), names and environments, mediated reads (PostgreSQL, MySQL, SQL Server, S3-compatible storage) for runs, sessions and functions, the egress gateway, on Docker and Kubernetes, the web UI, and the isolation rows. User and operator documentation: [connections.md](connections.md). The later phases are on the [ROADMAP](../ROADMAP.md).
+**Status (2026-11-25):** phase 1 of the [order of work](#order-of-work) is built, in milestones M0 to M5: connections, secret providers (Kubernetes Secrets, Vault/OpenBao, a built-in store for development), names and environments, mediated reads (PostgreSQL, MySQL, SQL Server, S3-compatible storage) for runs, sessions and functions, the egress gateway, on Docker and Kubernetes, the web UI, and the isolation rows. User and operator documentation: [connections.md](connections.md). Phase 2, HTTP APIs through the fetcher, is designed ([below](#http-apis-through-the-fetcher), 2026-11-27). The later phases are on the [ROADMAP](../ROADMAP.md).
 
 ## Today
 
@@ -31,7 +31,7 @@ A **connection** is a data source a user can read: **a type, an endpoint and how
 | MySQL | MySQL, MariaDB | tables, SQL |
 | SQL Server | on-premises, Azure SQL | tables, SQL |
 | Object storage | S3-compatible (MinIO, Ceph, RustFS, cloud), Azure Blob / ADLS | Parquet and CSV files; Iceberg tables |
-| HTTP | the customer's own APIs, including streaming (SSE) | through the notebook's own code ([injected mode](#two-modes-mediated-and-injected)) |
+| HTTP | the customer's own APIs, including streaming (SSE) | by the notebook's own code, through the run's fetcher, which adds the credential ([HTTP APIs](#http-apis-through-the-fetcher)) |
 
 - **Connections belong to a user**, defined once, at user level, and used by any number of their spaces. Rotating a password happens in one place. A connection's page lists where it is used, and a connection in use can't be deleted until it is detached.
 - **The operator limits where connections may point**: the address ranges and domains allowed (`settings.yaml`), so users can't aim nbsandbox at arbitrary internal systems.
@@ -96,6 +96,48 @@ Every run records its environment and which connection each name meant.
 | What the notebook gets | Arrow data: `nbsandbox.sql(...)`, `nbsandbox.stream(...)` | `nbsandbox.connection("events_api")`: endpoint, headers or token, for `requests`, an SSE client or an SDK |
 
 Injected mode is the user's own secret in the user's own code. The risk is accidental exposure, which redaction and the single allowed endpoint limit. Mediated mode is preferred wherever it fits. Injected mode replaces the ROADMAP's earlier "network access to registered endpoints" item.
+
+**HTTP APIs don't need injected mode** (decided 2026-11-27): the notebook's own code makes the requests, but through the run's fetcher, which adds the credential ([below](#http-apis-through-the-fetcher)). The secret stays out of the run, as in mediated mode. Injected mode waits until a client needs the raw credential itself (an SDK that signs requests or runs an OAuth flow of its own, a database driver in the notebook).
+
+### HTTP APIs through the fetcher
+
+The notebook calls its API with any HTTP client; the run's fetcher forwards each request to the connection's URL with the credential added, through the egress gateway.
+
+```
+notebook code ── http://<fetcher>:8817/events/orders?since=… ──► fetcher ── CONNECT ──► gateway ──► https://api.example.com/v2/orders?since=…
+   (no secret; the run's token)                                     (adds the credential; TLS to the API)
+```
+
+**In the notebook:**
+
+```python
+api = nbsandbox.http("events")                 # a requests.Session for the connection
+orders = api.get("orders", params={"since": "2026-11-01"}).json()
+
+for line in api.get("stream", stream=True).iter_lines():   # SSE, streamed as it arrives
+    ...
+
+c = nbsandbox.connection("events")             # for other clients and SDKs:
+c.url                                          #   the base URL to call (the fetcher's)
+c.headers                                      #   the header carrying the run's token
+c.token                                        #   the run's token, as an SDK's API key
+client = SomeSDK(base_url=c.url, api_key=c.token)
+```
+
+- **The run's token stands in for the credential.** The fetcher accepts it in `X-Nbsandbox-Token` or in the connection's own auth header (so an SDK that takes a base URL and an API key works unchanged), checks it, strips both, and sets the real credential. A request without the run's token is refused.
+- **What a connection allows:** its URL's scheme, host and port, and paths under its path (`https://api.example.com/v2/` allows `/v2/…`, not `/admin`), checked after percent-decoding and resolving `..`. Any method. As with a database's role, **the credential's own permissions in the API are the real limit**; the docs and the connection form say so.
+- **Authentication,** a connection's `auth`:
+  - `header` (the default; today's `http` connections): the secret in a header, `auth_header` and `auth_prefix` as now (`Authorization: Bearer …`, `X-API-Key: …`);
+  - `basic`: a `user` setting, the password as the secret;
+  - `oauth2`: OAuth 2.0 client credentials. Settings `token_url`, `client_id`, `scope` and `audience` (optional), the client secret as the secret. The fetcher gets an access token, keeps it in memory until a minute before it expires, and gets a new one once on a `401`. The token URL's host joins the run's gateway token and must be allowed by the operator, like the API's;
+  - `none`: an API that needs no credential, reached only through the gateway like any other.
+- **Requests and responses stream both ways,** unbuffered: large uploads and downloads, SSE and chunked responses work, and the fetcher's memory doesn't grow with them. Hop-by-hop and `Proxy-*` headers are dropped, `Host` is the API's. WebSocket upgrades are refused for now.
+- **Redirects are not followed:** a redirect under the connection's URL is rewritten to the fetcher's address, any other is passed back as is (the run can't reach it), and the credential never follows one.
+- **TLS:** the fetcher checks the API's certificate against the system's authorities, plus `ca` (a private authority) if set. Plain `http://` URLs are allowed, as today, and the connection form warns about them.
+- **The fetcher** serves HTTP on a second port, 8817, beside Flight's 8816, with its standard library (a threaded server and `http.client` over its existing gateway tunnel); no new package. At most 32 requests at a time per run.
+- **Logs:** the fetcher logs each request (name, method, path without the query string, status, bytes each way, duration) to the run's fetcher log; the gateway logs each tunnel as for databases. Query strings and bodies are never logged.
+- **Unchanged:** the run reaches only its fetcher (on Kubernetes, the per-run NetworkPolicy gains port 8817); nbsandboxd resolves names, secrets and the gateway token as for databases; runs, sessions and function calls work alike; `nbsandbox.connections()` lists HTTP names with their type.
+- **Contract,** so any image can use it: `NBSANDBOX_FETCHER_HTTP` (the base address, `http://<fetcher>:8817/`) and the run's existing `NBSANDBOX_FETCHER_TOKEN`; a connection's base URL is `NBSANDBOX_FETCHER_HTTP` plus its name and `/`.
 
 ### A run with several runners
 
@@ -188,10 +230,10 @@ The design already has its parts: workers, splits and the run's private network.
 ## Security
 
 New guarantees, each with an isolation-report row, as for runs and sessions:
-- **Secrets stay out of runs** in mediated mode: absent from the run's environment, files, logs, outputs and API responses. Injected secrets are redacted wherever nbsandbox writes text.
+- **Secrets stay out of runs** in mediated mode and for HTTP APIs: absent from the run's environment, files, logs, outputs and API responses. Injected secrets are redacted wherever nbsandbox writes text.
 - **Names are bounded:** a run can use only its space's names in the chosen environment; a function call only the caller's connections; another space's or user's connections are unreachable.
 - **Runs are separated:** a runner can't reach another run's runners or fetcher, nbsandboxd, the host, the cloud metadata address or the internet; a token from one run is useless in another and after the run.
-- **Egress is bounded:** the gateway refuses endpoints that aren't the run's connections, and addresses outside the operator's allowed ranges.
+- **Egress is bounded:** the gateway refuses endpoints that aren't the run's connections, and addresses outside the operator's allowed ranges. The fetcher refuses HTTP requests outside a connection's URL, for names the run doesn't have, and without the run's token.
 - **The fetcher stays locked:** no file or URL access through SQL, no extension loading, its own limits.
 - **Audit:** connection and environment changes, and every read (run, connection, table).
 
@@ -199,11 +241,16 @@ New guarantees, each with an isolation-report row, as for runs and sessions:
 
 Each phase usable on its own:
 1. **Connections, secret providers, names and environments;** mediated reads with one runner plus a fetcher (PostgreSQL, MySQL, SQL Server, object storage with Parquet); the egress gateway; runs, sessions and function calls with the caller's connections; the isolation rows. **Built** (M0 to M5, 2026-11-25).
-2. **Injected mode** (HTTP and SSE APIs, custom storage) with redaction.
+2. **HTTP APIs through the fetcher** ([design](#http-apis-through-the-fetcher)), in four milestones:
+   - H1: the fetcher's HTTP port with `header` and `none` auth, `nbsandbox.http()` and `connection()`, on Docker, with tests against a local API (JSON, SSE, uploads, refused paths and tokens);
+   - H2: `basic` and `oauth2` (against Keycloak, already in the weekly run), and `ca`;
+   - H3: Kubernetes (the NetworkPolicy's port), the isolation-report rows, `nbsandbox-report check`, the soak's reading space calling an API;
+   - H4: the web UI's connection form, API, gRPC and MCP fields, docs, an example notebook, the tour.
 3. **Iceberg tables and catalogs.**
 4. **Runs with several runners:** orchestrator and workers, splits, partial aggregation with DuckDB, limits per run (and so run sizes).
 5. **A distributed engine,** when a workload needs one.
 6. **Writes to external sources.**
+7. **Injected mode,** when a client needs the raw credential.
 
 Shared spaces and their per-member connections follow the shared-spaces item.
 
@@ -261,7 +308,7 @@ Verified with Cilium and Calico (kind, 2026-11-26; the weekly run repeats both);
 - Secret providers: Kubernetes Secrets (with Sealed Secrets and External Secrets Operator) and Vault/OpenBao; a built-in store for development only. Each secret managed or referenced. Kubernetes Secrets live in the runs namespace, where the fetcher Pods that mount them run.
 - Connections at user level; names per space; environments; no "protected" environment.
 - Functions and shared spaces use the caller's or member's own connections.
-- Mediated mode for SQL and files, injected mode for APIs and custom storage.
+- Mediated mode for SQL and files; HTTP APIs through the fetcher (2026-11-27); injected mode only when a client needs the raw credential.
 - A run = an orchestrator, workers and a fetcher, on a private network per run.
 - The broker (resolving names and permissions, auditing) inside nbsandboxd; the fetcher a per-run Pod of its own image.
 - DuckDB first; other engines only for the cases above.
@@ -287,3 +334,4 @@ Verified with Cilium and Calico (kind, 2026-11-26; the weekly run repeats both);
 - The gateway token lives until the run's time limit plus five minutes; a connection deleted, or pointing somewhere the operator no longer allows, fails a queued run at start.
 - Live data is the source's concern: for repeatable results, read a snapshot.
 - TLS to sources (2026-11-25): databases take `tls` (`off`, `prefer`, `require`, `verify`) and `ca`; the default stays `prefer`, the drivers' own (encrypted when offered, unchecked), with `verify` a choice. The fetcher reaches databases through a forwarder on loopback, so a certificate can't be checked against the name connected to: Postgres connects to `hostaddr=127.0.0.1` with `host` set to the source's name; MySQL's client skips the name check for 127.0.0.1 and has no `hostaddr`, so a source with `verify` gets a host alias (Docker `--add-host`, Kubernetes `hostAliases`) from its name to a loopback address of its own, where its forwarder listens. SQL Server can't verify: the community `mssql` extension published for DuckDB 1.5.6 (0.2.5) encrypts but accepts any certificate (`TrustServerCertificate` and `HostNameInCertificate` come in its 0.3.0), so `verify` is refused for it. S3 over HTTPS was already checked (curl, the system's authorities); `ca` adds a private authority (DuckDB's `ca_cert_file`, one bundle for all of a run's stores).
+- HTTP APIs (2026-11-27): the notebook's code calls through its run's fetcher, which adds the credential; the run's token stands in for it. Auth `header`, `basic`, `oauth2` (client credentials) and `none`; a connection allows its URL's host and paths under its path, any method, the credential's own permissions being the limit. Injected mode is deferred until a client needs the raw credential.
