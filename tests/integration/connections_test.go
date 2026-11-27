@@ -197,8 +197,11 @@ var connSeq atomic.Int64
 func connection(t *testing.T, name, typ string, settings map[string]any, secret string) string {
 	t.Helper()
 	name = fmt.Sprintf("%s-%d", name, connSeq.Add(1)+time.Now().UnixNano()%1_000_000*1000)
-	r := jsonCall(t, "POST", "/v1/connections", "alice", map[string]any{"name": name, "type": typ, "settings": settings,
-		"secret": map[string]any{"value": secret}}, nil)
+	body := map[string]any{"name": name, "type": typ, "settings": settings}
+	if secret != "" { // "": a connection without a credential
+		body["secret"] = map[string]any{"value": secret}
+	}
+	r := jsonCall(t, "POST", "/v1/connections", "alice", body, nil)
 	if r.Code != http.StatusCreated {
 		t.Fatalf("create connection: %d %s", r.Code, r.Body)
 	}

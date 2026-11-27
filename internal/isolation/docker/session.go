@@ -45,6 +45,7 @@ func buildSessionConfig(spec isolation.SessionSpec) (*container.Config, *contain
 	if spec.Fetcher != nil { // its network is the session's own (buildContainerConfig)
 		cfg.Env = append(cfg.Env,
 			isolation.FetcherEnv+"=grpc://"+FetcherName(spec.SessionID)+":"+strconv.Itoa(isolation.FetcherPort),
+			isolation.FetcherHTTPEnv+"=http://"+FetcherName(spec.SessionID)+":"+strconv.Itoa(isolation.FetcherHTTPPort)+"/",
 			isolation.FetcherTokenEnv+"="+spec.Fetcher.Token)
 	}
 	cfg.Labels = map[string]string{LabelSession: spec.SessionID, LabelSpace: spec.SpaceID}

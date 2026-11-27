@@ -58,6 +58,13 @@ never a host or a password (docs/connections.md):
 One SELECT per call; the run's fetcher holds the credentials and answers
 over Arrow Flight (NBSANDBOX_FETCHER, NBSANDBOX_FETCHER_TOKEN).
 
+HTTP APIs are called by the notebook's own code, through the fetcher, which
+adds the credential (NBSANDBOX_FETCHER_HTTP):
+
+    api = nbsandbox.http("events")              # a requests.Session for the connection
+    api.get("orders", params={"since": "2026-11-01"}).json()
+    c = nbsandbox.connection("events")          # c.url, c.token, c.headers: for other clients and SDKs
+
 In an interactive session (NBSANDBOX_SESSION is set) there is no caller:
 output(), emit() and progress() also show, under the cell, what a run would
 return, and write it to a scratch folder in /tmp, as a run would to its
@@ -71,7 +78,8 @@ import math as _math
 import os as _os
 import time as _time
 
-__all__ = ["parameters", "output", "emit", "progress", "sql", "stream", "connections", "QueryError"]
+__all__ = ["parameters", "output", "emit", "progress", "sql", "stream", "connections", "connection", "http",
+           "QueryError", "APIError", "Connection"]
 
 _MAX_DEPTH = 64
 
@@ -306,3 +314,68 @@ def connections():
     except fl.FlightError as e:
         raise QueryError(_flight_message(e)) from None
     return _json.loads(results[0].body.to_pybytes()) if results else []
+
+
+class APIError(Exception):
+    """A request the fetcher itself refused or couldn't forward (not the API's
+    own answer): a name the run doesn't have, a path outside the connection's
+    URL, an API that can't be reached. The message says why."""
+
+
+class Connection:
+    """An HTTP connection, for clients other than nbsandbox.http(): call url
+    (with paths under it) and send headers, or give token to an SDK as its
+    API key. The credential itself stays in the fetcher."""
+
+    def __init__(self, name, type_, url, token):
+        self.name, self.type, self.url, self.token = name, type_, url, token
+        self.headers = {"X-Nbsandbox-Token": token}
+
+    def __repr__(self):
+        return f"Connection(name={self.name!r}, type={self.type!r}, url={self.url!r})"
+
+
+def connection(name):
+    """The HTTP connection called name: its url (the fetcher's address for it),
+    token and headers."""
+    if not isinstance(name, str) or not name:
+        raise TypeError("nbsandbox.connection: name must be a non-empty string")
+    known = {c["name"]: c["type"] for c in connections()}
+    if name not in known:
+        raise APIError(f"this run has no connection named {name!r} (its names: {', '.join(sorted(known)) or 'none'})")
+    if known[name] != "http":
+        raise APIError(f"{name!r} is a {known[name]} connection: read it with nbsandbox.sql() or nbsandbox.stream()")
+    base = _os.environ.get("NBSANDBOX_FETCHER_HTTP", "")
+    if not base:
+        raise APIError("this run has no fetcher address for HTTP APIs (NBSANDBOX_FETCHER_HTTP)")
+    from urllib.parse import quote
+
+    return Connection(name, "http", base.rstrip("/") + "/" + quote(name, safe="") + "/",
+                      _os.environ.get("NBSANDBOX_FETCHER_TOKEN", ""))
+
+
+def http(name):
+    """A requests.Session for the HTTP connection called name. Paths are
+    relative to the connection's URL ("orders", or "/orders"); everything
+    else is requests' own (params, json, stream=True for server-sent events)."""
+    import requests
+
+    c = connection(name)
+
+    class _Session(requests.Session):
+        def request(self, method, url, *args, **kwargs):
+            if "://" in str(url):
+                raise ValueError(f"nbsandbox.http({c.name!r}): give a path under the connection's URL, not a full URL")
+            r = super().request(method, c.url + str(url).lstrip("/"), *args, **kwargs)
+            if r.headers.get("X-Nbsandbox-Error") == "fetcher":
+                try:
+                    msg = r.json().get("error") or r.text
+                except ValueError:
+                    msg = r.text
+                raise APIError(f"{c.name}: {msg}")
+            return r
+
+    sess = _Session()
+    sess.headers.update(c.headers)
+    sess.trust_env = False  # never a proxy from the environment: the fetcher is the way out
+    return sess

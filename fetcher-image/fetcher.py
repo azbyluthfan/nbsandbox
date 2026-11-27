@@ -28,6 +28,8 @@ import threading
 import duckdb
 import pyarrow.flight as fl
 
+import httpapi
+
 EXTENSIONS = "/opt/nbsandbox-fetcher/extensions"
 BATCH_ROWS = 65536
 
@@ -334,6 +336,7 @@ def connect(cfg):
     gw["address"] = os.environ.get("NBSANDBOX_FETCHER_GATEWAY") or gw["address"]
     allowed = []
     served = []
+    apis = {}
     loaded = set()
     s3_cas = []
     # Secrets in Vault: read now, all at once, and the token revoked.
@@ -350,7 +353,7 @@ def connect(cfg):
     for i, src in enumerate(cfg.get("sources", [])):
         name, typ, s = src["name"], src["type"], src.get("settings", {})
         _attaching.clear()
-        _attaching.update(name=name, type=typ, target=f"{s['host']}:{s.get('port')}" if s.get("host") else s.get("endpoint", ""))
+        _attaching.update(name=name, type=typ, target=f"{s['host']}:{s.get('port')}" if s.get("host") else s.get("endpoint") or s.get("url", ""))
         secret = src.get("secret") or from_vault.get(name, "")
         if src.get("secret_file"):  # a mounted Secret (Kubernetes): nbsandboxd never read it
             with open(src["secret_file"]) as f:
@@ -430,8 +433,12 @@ def connect(cfg):
             con.execute(f"CREATE MACRO {schema}.parquet(p) AS TABLE SELECT * FROM read_parquet({_lit(root)} || p)")
             con.execute(f"CREATE MACRO {schema}.csv(p) AS TABLE SELECT * FROM read_csv({_lit(root)} || p)")
             allowed.append(root)
+        elif typ == "http":
+            # Called by the notebook's own code, through httpapi: not in SQL.
+            ca = _ca_file(f"{sec}.pem", open(SYSTEM_CAS).read(), s["ca"]) if s.get("ca") else None
+            apis[name] = httpapi.API(name, s, secret, gw["address"], gw["token"], ca)
         else:
-            continue  # served elsewhere (injected mode), or not yet
+            continue  # not read yet (Azure Blob)
         served.append({"name": name, "type": typ})
     _attaching.clear()
     # Under the container's limit, with room for Arrow buffers and Python:
@@ -454,7 +461,7 @@ def connect(cfg):
     con.execute(f"SET allowed_directories = [{', '.join(_lit(a) for a in allowed)}]")
     con.execute("SET enable_external_access = false")
     con.execute("SET lock_configuration = true")
-    return con, served
+    return con, served, apis
 
 
 class _Auth(fl.ServerMiddlewareFactory):
@@ -471,7 +478,7 @@ class _Auth(fl.ServerMiddlewareFactory):
 class Fetcher(fl.FlightServerBase):
     def __init__(self, location, cfg):
         super().__init__(location, middleware={"auth": _Auth(cfg["token"])})
-        self.base, self.served = connect(cfg)
+        self.base, self.served, self.apis = connect(cfg)
         self.parser = duckdb.connect()  # parses only: holds nothing
 
     def do_get(self, context, ticket):
@@ -512,6 +519,10 @@ def main():
     except Exception as e:  # a source that can't be attached, a secret that can't be read
         print(f"{START_FAILED}{start_error(e)}", file=sys.stderr)
         sys.exit(1)
+    if server.apis:
+        http_listen = os.environ.get("NBSANDBOX_FETCHER_HTTP_LISTEN", "0.0.0.0:8816")
+        httpapi.serve(http_listen, cfg["token"], server.apis)
+        print(f"fetcher: HTTP APIs {', '.join(sorted(server.apis))} on {http_listen}", file=sys.stderr)
     print(f"fetcher: serving {len(server.served)} source(s) on {listen}", file=sys.stderr)
     server.serve()
 

@@ -89,8 +89,9 @@ func buildFetcherConfigSecret(cfg Config, spec isolation.RunSpec, kind fetcherKi
 // the chart's, the same for every fetcher.)
 func buildFetcherPolicies(cfg Config, spec isolation.RunSpec, kind fetcherKind) []*networkingv1.NetworkPolicy {
 	port := intstr.FromInt32(isolation.FetcherPort)
+	httpPort := intstr.FromInt32(isolation.FetcherHTTPPort)
 	tcp := corev1.ProtocolTCP
-	ports := []networkingv1.NetworkPolicyPort{{Protocol: &tcp, Port: &port}}
+	ports := []networkingv1.NetworkPolicyPort{{Protocol: &tcp, Port: &port}, {Protocol: &tcp, Port: &httpPort}}
 	runner := &metav1.LabelSelector{MatchLabels: map[string]string{kind.peer: spec.RunID}}
 	fetcher := &metav1.LabelSelector{MatchLabels: map[string]string{kind.label: spec.RunID}}
 	meta := func(name string) metav1.ObjectMeta {
@@ -189,10 +190,14 @@ func buildFetcherPod(cfg Config, spec isolation.RunSpec, kind fetcherKind, gatew
 					{Name: "PYTHONUNBUFFERED", Value: "1"},
 					{Name: "NBSANDBOX_FETCHER_CONFIG", Value: fetcherConfigPath},
 					{Name: "NBSANDBOX_FETCHER_LISTEN", Value: "grpc://0.0.0.0:" + strconv.Itoa(isolation.FetcherPort)},
+					{Name: "NBSANDBOX_FETCHER_HTTP_LISTEN", Value: "0.0.0.0:" + strconv.Itoa(isolation.FetcherHTTPPort)},
 					{Name: "NBSANDBOX_FETCHER_GATEWAY", Value: gateway},
 					{Name: "NBSANDBOX_FETCHER_MEMORY", Value: strconv.FormatInt(memBytes, 10)},
 				},
-				Ports: []corev1.ContainerPort{{Name: "flight", ContainerPort: isolation.FetcherPort, Protocol: corev1.ProtocolTCP}},
+				Ports: []corev1.ContainerPort{
+					{Name: "flight", ContainerPort: isolation.FetcherPort, Protocol: corev1.ProtocolTCP},
+					{Name: "http", ContainerPort: isolation.FetcherHTTPPort, Protocol: corev1.ProtocolTCP},
+				},
 				SecurityContext: &corev1.SecurityContext{
 					RunAsNonRoot: &yes, RunAsUser: &uid, RunAsGroup: &uid,
 					AllowPrivilegeEscalation: &no, ReadOnlyRootFilesystem: &yes, Privileged: &no,
@@ -222,6 +227,7 @@ func withFetcher(pod *corev1.Pod, addr, token string) {
 		if c := &pod.Spec.Containers[i]; c.Name == runnerContainer {
 			c.Env = append(c.Env,
 				corev1.EnvVar{Name: isolation.FetcherEnv, Value: "grpc://" + net.JoinHostPort(addr, strconv.Itoa(isolation.FetcherPort))},
+				corev1.EnvVar{Name: isolation.FetcherHTTPEnv, Value: "http://" + net.JoinHostPort(addr, strconv.Itoa(isolation.FetcherHTTPPort)) + "/"},
 				corev1.EnvVar{Name: isolation.FetcherTokenEnv, Value: token})
 		}
 	}

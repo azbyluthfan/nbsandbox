@@ -77,13 +77,16 @@ class GateTest(unittest.TestCase):
 class LockdownTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.con, cls.served = fetcher.connect(CFG)
+        cls.con, cls.served, cls.apis = fetcher.connect(CFG)
 
     def run_sql(self, q):
         return self.con.cursor().execute(q).fetchall()
 
     def test_serves_only_its_sources(self):
-        self.assertEqual(self.served, [{"name": "lake", "type": "s3"}])
+        # SQL for lake; the HTTP API through httpapi, not in SQL.
+        self.assertEqual(self.served, [{"name": "lake", "type": "s3"}, {"name": "api", "type": "http"}])
+        self.assertEqual(list(self.apis), ["api"])
+        self.assertEqual(self.apis["api"].credential(), ("Authorization", "Bearer t"))
 
     def test_no_local_files(self):
         for q in ["SELECT * FROM read_csv('/etc/passwd')", "SELECT * FROM read_text('/etc/hostname')",
@@ -132,7 +135,7 @@ class MountedSecretTest(unittest.TestCase):
         cfg["sources"][0].pop("secret")
         cfg["sources"][0]["secret_file"] = f.name
         with mock.patch.dict(os.environ, {"NBSANDBOX_FETCHER_GATEWAY": "10.96.0.9:3128"}):
-            con, _ = fetcher.connect(cfg)
+            con, _, _ = fetcher.connect(cfg)
         rows = con.cursor().execute("SELECT current_setting('http_proxy')").fetchall()
         self.assertEqual(rows, [("10.96.0.9:3128",)])
 
@@ -150,7 +153,7 @@ class TLSTest(unittest.TestCase):
     def test_s3_ca_reaches_every_cursor(self):
         cfg = json.loads(json.dumps(CFG))
         cfg["sources"][0]["settings"].update(use_ssl=True, ca=self._ca())
-        con, _ = fetcher.connect(cfg)
+        con, _, _ = fetcher.connect(cfg)
         path = con.cursor().execute("SELECT current_setting('ca_cert_file')").fetchone()[0]
         self.assertTrue(path.startswith("/tmp/nbsandbox-ca/"), path)
         with open(path) as f:
@@ -162,7 +165,7 @@ class TLSTest(unittest.TestCase):
             con.cursor().execute("SET ca_cert_file = '/etc/passwd'")
 
     def test_no_ca_no_setting(self):
-        con, _ = fetcher.connect(CFG)
+        con, _, _ = fetcher.connect(CFG)
         self.assertEqual(con.cursor().execute("SELECT current_setting('ca_cert_file')").fetchone()[0], "")
 
     def test_modes_in_each_driver(self):
@@ -179,7 +182,7 @@ class MemoryTest(unittest.TestCase):
         from unittest import mock
 
         with mock.patch.dict(os.environ, {"NBSANDBOX_FETCHER_MEMORY": str(256 << 20)}):
-            con, _ = fetcher.connect(CFG)
+            con, _, _ = fetcher.connect(CFG)
         cur = con.cursor()
         self.assertEqual(cur.execute("SELECT current_setting('memory_limit')").fetchone()[0], "192.0 MiB")
         # Sorting more than the limit spills to /tmp instead of failing.
@@ -242,8 +245,8 @@ class VaultTest(unittest.TestCase):
         cfg["sources"][0]["secret_vault"] = {"path": "nbsandbox/connections/conn-1", "key": "secret"}
         cfg["vault"] = {"address": "http://vault.internal:8200", "mount": "secret", "auth_mount": "kubernetes",
                         "role": "fetchers", "token_file": tok.name}
-        con, served = fetcher.connect(cfg)
-        self.assertEqual(served, [{"name": "lake", "type": "s3"}])
+        con, served, _ = fetcher.connect(cfg)
+        self.assertEqual(served[0], {"name": "lake", "type": "s3"})
         self.assertEqual([p for _, p in seen], [
             "http://vault.internal:8200/v1/auth/kubernetes/login",
             "http://vault.internal:8200/v1/secret/data/nbsandbox/connections/conn-1",
@@ -284,7 +287,7 @@ class FlightTest(unittest.TestCase):
     def test_connections(self):
         c, o = self.client("fetcher-token")
         got = [json.loads(r.body.to_pybytes()) for r in c.do_action(fl.Action("connections", b""), o)]
-        self.assertEqual(got, [[{"name": "lake", "type": "s3"}]])
+        self.assertEqual(got, [[{"name": "lake", "type": "s3"}, {"name": "api", "type": "http"}]])
 
     def test_refused(self):
         c, o = self.client("fetcher-token")

@@ -104,7 +104,7 @@ Injected mode is the user's own secret in the user's own code. The risk is accid
 The notebook calls its API with any HTTP client; the run's fetcher forwards each request to the connection's URL with the credential added, through the egress gateway.
 
 ```
-notebook code ── http://<fetcher>:8817/events/orders?since=… ──► fetcher ── CONNECT ──► gateway ──► https://api.example.com/v2/orders?since=…
+notebook code ── http://<fetcher>:8816/events/orders?since=… ──► fetcher ── CONNECT ──► gateway ──► https://api.example.com/v2/orders?since=…
    (no secret; the run's token)                                     (adds the credential; TLS to the API)
 ```
 
@@ -127,17 +127,17 @@ client = SomeSDK(base_url=c.url, api_key=c.token)
 - **The run's token stands in for the credential.** The fetcher accepts it in `X-Nbsandbox-Token` or in the connection's own auth header (so an SDK that takes a base URL and an API key works unchanged), checks it, strips both, and sets the real credential. A request without the run's token is refused.
 - **What a connection allows:** its URL's scheme, host and port, and paths under its path (`https://api.example.com/v2/` allows `/v2/…`, not `/admin`), checked after percent-decoding and resolving `..`. Any method. As with a database's role, **the credential's own permissions in the API are the real limit**; the docs and the connection form say so.
 - **Authentication,** a connection's `auth`:
-  - `header` (the default; today's `http` connections): the secret in a header, `auth_header` and `auth_prefix` as now (`Authorization: Bearer …`, `X-API-Key: …`);
+  - `header` (the default; today's `http` connections): the secret in a header, `auth_header` and `auth_prefix` as now (`Authorization: Bearer …`, `X-API-Key: …`). The secret stays optional, as before: without one, no header is set;
   - `basic`: a `user` setting, the password as the secret;
   - `oauth2`: OAuth 2.0 client credentials. Settings `token_url`, `client_id`, `scope` and `audience` (optional), the client secret as the secret. The fetcher gets an access token, keeps it in memory until a minute before it expires, and gets a new one once on a `401`. The token URL's host joins the run's gateway token and must be allowed by the operator, like the API's;
   - `none`: an API that needs no credential, reached only through the gateway like any other.
 - **Requests and responses stream both ways,** unbuffered: large uploads and downloads, SSE and chunked responses work, and the fetcher's memory doesn't grow with them. Hop-by-hop and `Proxy-*` headers are dropped, `Host` is the API's. WebSocket upgrades are refused for now.
 - **Redirects are not followed:** a redirect under the connection's URL is rewritten to the fetcher's address, any other is passed back as is (the run can't reach it), and the credential never follows one.
 - **TLS:** the fetcher checks the API's certificate against the system's authorities, plus `ca` (a private authority) if set. Plain `http://` URLs are allowed, as today, and the connection form warns about them.
-- **The fetcher** serves HTTP on a second port, 8817, beside Flight's 8816, with its standard library (a threaded server and `http.client` over its existing gateway tunnel); no new package. At most 32 requests at a time per run.
+- **The fetcher** serves HTTP on a second port, 8816, beside Flight's 8815, with its standard library (a threaded server and `http.client` over its existing gateway tunnel); no new package. At most 32 requests at a time per run.
 - **Logs:** the fetcher logs each request (name, method, path without the query string, status, bytes each way, duration) to the run's fetcher log; the gateway logs each tunnel as for databases. Query strings and bodies are never logged.
-- **Unchanged:** the run reaches only its fetcher (on Kubernetes, the per-run NetworkPolicy gains port 8817); nbsandboxd resolves names, secrets and the gateway token as for databases; runs, sessions and function calls work alike; `nbsandbox.connections()` lists HTTP names with their type.
-- **Contract,** so any image can use it: `NBSANDBOX_FETCHER_HTTP` (the base address, `http://<fetcher>:8817/`) and the run's existing `NBSANDBOX_FETCHER_TOKEN`; a connection's base URL is `NBSANDBOX_FETCHER_HTTP` plus its name and `/`.
+- **Unchanged:** the run reaches only its fetcher (on Kubernetes, the per-run NetworkPolicy gains port 8816); nbsandboxd resolves names, secrets and the gateway token as for databases; runs, sessions and function calls work alike; `nbsandbox.connections()` lists HTTP names with their type.
+- **Contract,** so any image can use it: `NBSANDBOX_FETCHER_HTTP` (the base address, `http://<fetcher>:8816/`) and the run's existing `NBSANDBOX_FETCHER_TOKEN`; a connection's base URL is `NBSANDBOX_FETCHER_HTTP` plus its name and `/`.
 
 ### A run with several runners
 

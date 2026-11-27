@@ -74,6 +74,7 @@ func buildFetcherConfig(spec isolation.RunSpec, kind fetcherKind) (*container.Co
 			"HOME=/tmp",
 			"PYTHONUNBUFFERED=1",
 			"NBSANDBOX_FETCHER_LISTEN=grpc://0.0.0.0:" + strconv.Itoa(isolation.FetcherPort),
+			"NBSANDBOX_FETCHER_HTTP_LISTEN=0.0.0.0:" + strconv.Itoa(isolation.FetcherHTTPPort),
 			"NBSANDBOX_FETCHER_CONFIG_JSON=" + string(spec.Fetcher.Config),
 			"NBSANDBOX_FETCHER_MEMORY=" + strconv.FormatInt(fetcherMemory(spec), 10),
 		},
