@@ -231,13 +231,24 @@ func s3Settings() map[string]any {
 // password (prod), with the notebook given.
 func readerSpace(t *testing.T, notebook string) string {
 	t.Helper()
+	return readerSpaceWith(t, notebook, nil)
+}
+
+// readerSpaceWith is readerSpace with more names (name -> connection ID),
+// bound the same in both environments.
+func readerSpaceWith(t *testing.T, notebook string, more map[string]string) string {
+	t.Helper()
 	sources(t)
 	crm := connection(t, "crm", "postgresql", pgSettings(), readerPass)
 	wrong := connection(t, "crm-wrong", "postgresql", pgSettings(), "not-the-password")
 	lake := connection(t, "lake", "s3", s3Settings(), s3Secret)
 	sp := space(t, "alice")
 	upload(t, "alice", sp, "", map[string]string{"read.ipynb": notebook})
-	bind(t, sp, "dev", map[string]map[string]string{"dev": {"crm": crm, "lake": lake}, "prod": {"crm": wrong, "lake": lake}})
+	dev, prod := map[string]string{"crm": crm, "lake": lake}, map[string]string{"crm": wrong, "lake": lake}
+	for n, id := range more {
+		dev[n], prod[n] = id, id
+	}
+	bind(t, sp, "dev", map[string]map[string]string{"dev": dev, "prod": prod})
 	return sp
 }
 

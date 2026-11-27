@@ -7,6 +7,7 @@ package integration
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -120,8 +121,18 @@ nbsandbox.output(out)`))
 		t.Fatal(err)
 	}
 	want := map[string]any{"orders": 10.0, "upload": float64(2 << 20), "query": "/token-api/echo?q=a+b", "events": 5.0,
-		"basic": 200.0, "oauth": 200.0, "open": 200.0, "plain": 200.0, "sdk_style": 200.0, "no_token": 401.0,
-		"outside": 404.0, "encoded": 403.0, "missing": "refused", "direct": "refused", "secret_seen": false}
+		"basic": 200.0, "oauth": 200.0, "open": 200.0, "plain": 200.0, "sdk_style": 200.0, "outside": 404.0}
+	// What the isolation report shows.
+	expectRefused(t, "connections-http_credentials", "a notebook looks for its HTTP connections' credentials in its environment",
+		fmt.Sprintf("found: %v", out["secret_seen"]), out["secret_seen"] == false)
+	expectRefused(t, "connections-http_direct", "a notebook calls an API directly, not through its fetcher",
+		fmt.Sprint(out["direct"]), out["direct"] == "refused")
+	expectRefused(t, "connections-http_no_token", "a request to the fetcher's HTTP port without the run's token",
+		fmt.Sprintf("HTTP %v", out["no_token"]), out["no_token"] == 401.0)
+	expectRefused(t, "connections-http_outside_path", "a request for a path outside the connection's URL (an encoded ..)",
+		fmt.Sprintf("HTTP %v", out["encoded"]), out["encoded"] == 403.0)
+	expectRefused(t, "connections-http_unbound", "an HTTP name the run's space doesn't bind",
+		fmt.Sprint(out["missing"]), out["missing"] == "refused")
 	for k, v := range want {
 		if out[k] != v {
 			t.Errorf("%s: got %v, want %v", k, out[k], v)
@@ -179,10 +190,12 @@ nbsandbox.output(out)`)})
 	if out["ours"] != 200.0 {
 		t.Errorf("with the connection's ca: %v", out["ours"])
 	}
-	for _, k := range []string{"system", "other"} {
-		if s, _ := out[k].(string); !strings.Contains(s, "CERTIFICATE_VERIFY_FAILED") {
-			t.Errorf("%s: %v, want a certificate error", k, out[k])
-		}
+	for k, what := range map[string]string{
+		"system": "an HTTPS API whose certificate is from an authority the system doesn't trust",
+		"other":  "an HTTPS API whose certificate is from another authority than the connection's ca",
+	} {
+		s, _ := out[k].(string)
+		expectRefused(t, "connections-http_tls_"+k, what, s, strings.Contains(s, "CERTIFICATE_VERIFY_FAILED"))
 	}
 }
 
