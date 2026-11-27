@@ -26,7 +26,7 @@ export const TYPES = {
   azureblob: { label: "Azure Blob Storage", secret: "Connection string, account key or SAS",
     fields: [["account", "Account"], ["container", "Container"], ["endpoint", "Endpoint URL (optional)"], ["auth", "Secret kind (connection_string, account_key or sas)", "connection_string"]] },
   http: { label: "HTTP API", secret: "Token, API key, password or client secret (per auth)", optionalSecret: true,
-    fields: [["url", "URL (notebooks call paths under it)", "https://api.example.com/v1/"],
+    fields: [["url", "URL (notebooks call paths under it)", "the API's base URL, with https"],
       ["auth", "Auth (header, basic, oauth2 or none)", "header"],
       ["auth_header", "Header (auth header)", "Authorization"], ["auth_prefix", "Prefix (auth header)", "Bearer "],
       ["user", "User (auth basic)"], ["token_url", "Token URL (auth oauth2)"], ["client_id", "Client ID (auth oauth2)"],
