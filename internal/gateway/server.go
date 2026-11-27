@@ -100,8 +100,23 @@ func (s *Server) resolve(ctx context.Context, hostport string) (string, error) {
 			return net.JoinHostPort(a.Unmap().String(), port), nil
 		}
 	}
-	return "", fmt.Errorf("%s resolves only to internal addresses", host)
+	return "", fmt.Errorf("%w: %s resolves only to internal addresses", errInternal, host)
 }
+
+// lookupReason says why a name couldn't be looked up, for the run's user:
+// not the resolver's address, which the error carries (the log has it).
+func lookupReason(to string, err error) string {
+	host, _, _ := net.SplitHostPort(to)
+	var dns *net.DNSError
+	if errors.As(err, &dns) && dns.IsNotFound {
+		return host + " doesn't resolve (no such host)"
+	}
+	return "can't look up " + host
+}
+
+// errInternal is a target refused on purpose (loopback, link-local, ...),
+// unlike one that can't be looked up.
+var errInternal = errors.New("refused")
 
 func (s *Server) dial(ctx context.Context, addr string) (net.Conn, error) {
 	if s.Dial != nil {
@@ -148,8 +163,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	addr, err := s.resolve(r.Context(), to)
 	if err != nil {
+		// Refused on purpose: 403. A name that doesn't resolve: 502, the
+		// lookup's error as the reason (the fetcher shows it to the user).
+		code, reason := http.StatusBadGateway, lookupReason(to, err)
+		if errors.Is(err, errInternal) {
+			code, reason = http.StatusForbidden, err.Error()
+		}
 		s.log().Warn("gateway refused", "run", c.Run, "to", to, "reason", err.Error())
-		http.Error(w, err.Error(), http.StatusForbidden)
+		http.Error(w, reason, code)
 		return
 	}
 	if r.Method == http.MethodConnect {

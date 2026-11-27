@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -159,12 +160,24 @@ func TestTunnel(t *testing.T) {
 		"no token":         {to, "", http.StatusProxyAuthRequired},
 		"forged token":     {to, "Bearer " + Sign([]byte("not the key not the key not the k"), Claims{Run: "r1", Allow: []string{to}, Exp: exp}), http.StatusProxyAuthRequired},
 		"other endpoint":   {"db.internal:1", "Bearer " + tok, http.StatusForbidden},
-		"unresolvable":     {"nope.internal:" + port, "Bearer " + Sign(testKey, Claims{Run: "r1", Allow: []string{"nope.internal:" + port}, Exp: exp}), http.StatusForbidden},
+		"unresolvable":     {"nope.internal:" + port, "Bearer " + Sign(testKey, Claims{Run: "r1", Allow: []string{"nope.internal:" + port}, Exp: exp}), http.StatusBadGateway},
 		"upstream refused": {"127.0.0.1:1", "Bearer " + Sign(testKey, Claims{Run: "r1", Allow: []string{"127.0.0.1:1"}, Exp: exp}), http.StatusBadGateway},
 	} {
 		if _, _, code := connect(t, gwAddr, tc.to, tc.auth); code != tc.code {
 			t.Errorf("%s: %d, want %d", name, code, tc.code)
 		}
+	}
+}
+
+// A name that doesn't resolve: the user is told so, not the resolver's
+// address.
+func TestLookupReason(t *testing.T) {
+	err := &net.DNSError{Err: "no such host", Name: "crm.internal", Server: "10.96.0.10:53", IsNotFound: true}
+	if got := lookupReason("crm.internal:5432", fmt.Errorf("x: %w", err)); got != "crm.internal doesn't resolve (no such host)" {
+		t.Fatalf("%q", got)
+	}
+	if got := lookupReason("crm.internal:5432", errors.New("lookup crm.internal on 10.96.0.10:53: i/o timeout")); strings.Contains(got, "10.96") {
+		t.Fatalf("the resolver's address: %q", got)
 	}
 }
 

@@ -50,12 +50,18 @@ func newConnections(cfg config.Settings, db *store.DB, logger *slog.Logger) (*co
 		if cfg.Backend == "kubernetes" {
 			logger.Warn("connections keep their secrets in the built-in store, which is for development: use the kubernetes provider in production")
 		}
+		if config.PublicDevKey(c.Secrets.MasterKey) {
+			logger.Warn("connections.secrets.master_key is the repository's development key, which is public: anyone can decrypt the stored secrets; for local development only, never deploy it")
+		}
 		provider = b
 	}
 	logger.Info("connections on", "secrets", provider.Name(), "allowed", c.Allowed)
 	key, err := config.GatewayKey(c.Gateway.Key)
 	if err != nil {
 		return nil, err
+	}
+	if config.PublicDevKey(c.Gateway.Key) {
+		logger.Warn("connections.gateway.key is the repository's development key, which is public: anyone can sign gateway tokens; for local development only, never deploy it")
 	}
 	// Docker joins the gateway's container (the address's host) to each
 	// run's network; on Kubernetes the worker resolves the whole address.

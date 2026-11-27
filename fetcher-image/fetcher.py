@@ -51,6 +51,7 @@ class Refused(Exception):
 # forwarder's local port and the endpoint it stands for.
 _attaching = {}
 _forwarded = {}
+_refused = {}  # endpoint -> why the gateway refused it (its status and reason)
 
 
 def start_error(e):
@@ -58,6 +59,11 @@ def start_error(e):
     and the driver's reason, without the forwarders' local addresses (the
     user never gave those)."""
     msg = " ".join(str(e).split())
+    target = _attaching.get("target", "")
+    if target in _refused:
+        # The driver only saw its connection close: the gateway's reason is
+        # the one that helps.
+        msg = _refused[target]
     msg = re.sub(r'Unable to connect to Postgres at "[^"]*": ', "", msg)
     for port, target in _forwarded.items():
         msg = re.sub(rf'connection to server at "127\.0\.0\.1", port {port} failed: ', "", msg)
@@ -262,8 +268,22 @@ class Forwarder:
                 break
         status = head.split(b"\r\n", 1)[0].decode(errors="replace")
         if " 200 " not in status + " ":
+            # The reason is the response's body: read what comes, briefly.
+            body = head.split(b"\r\n\r\n", 1)[1] if b"\r\n\r\n" in head else b""
+            up.settimeout(1)
+            try:
+                while len(body) < 2048:
+                    b = up.recv(2048)
+                    if not b:
+                        break
+                    body += b
+            except OSError:
+                pass
             up.close()
-            raise OSError(f"gateway refused {self.target}: {status}")
+            why = " ".join(status.split(" ", 1)[1:]).strip()
+            reason = " ".join(body[:2048].decode(errors="replace").split())
+            _refused[self.target] = f"the gateway refused {self.target} ({why})" + (f": {reason}" if reason else "")
+            raise OSError(_refused[self.target])
         up.settimeout(None)
         rest = head.split(b"\r\n\r\n", 1)[1]
         return up, rest

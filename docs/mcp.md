@@ -11,13 +11,13 @@ It's a thin layer over the [REST API](api.md): every tool is one or two API call
 | `nbsandbox_runtime` | Python version, installed packages and per-run limits (runs have no network: a package not listed can't be installed in a run; with custom packages on, the space's `requirements.txt` adds packages: [packages.md](packages.md)) |
 | `list_spaces`, `create_space` | the user's spaces |
 | `list_files`, `read_file`, `write_file` | the space's files; `write_file` writes text (a notebook as nbformat 4 JSON, a CSV), creating folders |
-| `run_notebook` | run a notebook with parameters (optionally `read_only`) and wait for its result, up to `wait_seconds` (default 120, at most 600) |
+| `run_notebook` | run a notebook with parameters (optionally `read_only`, and in a space `environment` whose connections it reads: [connections.md](connections.md)) and wait for its result, up to `wait_seconds` (default 120, at most 600) |
 | `get_run_result`, `get_run`, `list_runs` | keep waiting for a result; a run's details; the space's runs |
 | `get_run_log` | the end of a run's log (up to 64 KiB) |
 | `cancel_run` | stop a run; its partial output is kept |
 | `list_artifacts`, `read_artifact` | the files a run wrote to its artifacts folder; text ones are returned (up to 64 KiB) |
-| `list_functions`, `get_function`, `invoke_function` | published functions: their contracts, and calls with parameters |
-| `open_session`, `list_sessions` | a notebook's live kernel, an **interactive session** ([sessions.md](sessions.md)), optionally `read_only`; the space's open sessions |
+| `list_functions`, `get_function`, `invoke_function` | published functions: their contracts, and calls with parameters (and an `environment`) |
+| `open_session`, `list_sessions` | a notebook's live kernel, an **interactive session** ([sessions.md](sessions.md)), optionally `read_only` and in an `environment`; the space's open sessions |
 | `run_cell` | run code in a session and return what it printed, its result, the error with its traceback, and charts as images (at most 4 a cell); variables stay for the next cell. Waits up to `wait_seconds` (default 120); a longer cell goes on in the session |
 | `complete_code` | completions from the session's live objects (a DataFrame's columns after `df["`) |
 | `interrupt_session`, `end_session` | stop the running cell; end the session (its kernel stops; a read-write session's files are written to the space first) |

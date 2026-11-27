@@ -41,6 +41,9 @@ func runGateway(ctx context.Context, args []string, getenv func(string) string, 
 		return err
 	}
 	logger.Info("nbsandboxd gateway starting", "version", version)
+	if config.PublicDevKey(getenv("NBSANDBOX_GATEWAY_KEY")) {
+		logger.Warn("NBSANDBOX_GATEWAY_KEY is the repository's development key, which is public: anyone can sign tokens it accepts; for local development only, never deploy it")
+	}
 	return gateway.Serve(ctx, *listen, &gateway.Server{Key: key, Log: logger})
 }
 

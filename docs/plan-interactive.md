@@ -1,6 +1,6 @@
 # Plan: interactive mode
 
-**Status (2026-11-21):** agreed, with the changes from the research below. Step 1, the spike, is done (results below); steps 2 to 7 are being built, for **v0.3.0** (the release after 0.2.x; this plan said v0.2.0 before that shipped without it).
+**Status (2026-11-26):** built and released in **v0.3.0** (2026-11-22). Originally: agreed, with the changes from the research below. Step 1, the spike, is done (results below); steps 2 to 7 were built for **v0.3.0** (the release after 0.2.x; this plan said v0.2.0 before that shipped without it).
 
 ## Today
 

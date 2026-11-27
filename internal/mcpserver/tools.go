@@ -47,6 +47,7 @@ type runNotebookInput struct {
 	Parameters  map[string]any `json:"parameters,omitempty" jsonschema:"values for the notebook's parameters cell (any JSON)"`
 	ReadOnly    bool           `json:"read_only,omitempty" jsonschema:"mount the space read-only, so the run can't change its files"`
 	WaitSeconds *int           `json:"wait_seconds,omitempty" jsonschema:"how long to wait for the result, 0 to 600 (default 120); if the run is still going, call get_run_result later"`
+	Environment string         `json:"environment,omitempty" jsonschema:"the space environment its connections' names are read in, e.g. dev or prod (default: the space's default)"`
 }
 
 type runInput struct {
@@ -156,6 +157,9 @@ func (t *tools) register(s *mcp.Server) {
 			}
 			if in.ReadOnly {
 				body["space"] = "read-only"
+			}
+			if in.Environment != "" {
+				body["environment"] = in.Environment
 			}
 			v, _, err := t.call(ctx, req, "POST", "/v1/spaces/"+seg(in.SpaceID)+"/runs", body, http.StatusCreated, http.StatusOK)
 			if err != nil {

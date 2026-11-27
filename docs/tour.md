@@ -98,6 +98,30 @@ With a session, completion asks the kernel itself, so it knows the real objects:
 
 **Variables** lists what the kernel holds, refreshed after every cell. **End session** stops the kernel; one with no cell running and nobody connected ends by itself after 30 minutes (`sessions.idle`).
 
+### 16. Your connections
+
+![The Connections page: a PostgreSQL connection, its host and database, its secret never shown](images/tour/16-connections.png)
+
+Where the operator turns them on, **Connections** holds your databases and buckets ([connections.md](connections.md)). You give each one's address and credential once; the secret goes to nbsandbox's secret provider and is never shown again.
+
+### 17. A space's names for them
+
+![A space's Connections table: the name crm, the environments dev and prod, the connection each means](images/tour/17-space-connections.png)
+
+A space gives each connection a short name, per environment, so the same notebook reads development or production data: `nbsandbox.sql("SELECT … FROM crm.orders")`. A run never sees the credential: a fetcher beside it reads the source.
+
+### 18. What a run uses
+
+![A run's page: memory against its limit, CPU, and disk written, charted live](images/tour/18-run-usage.png)
+
+A run's page names the worker it runs on and charts its memory (against its limit), CPU and disk writes, every few seconds while it runs and kept afterwards. This is `compute_demo.ipynb` from the examples, which uses each in turn.
+
+### 19. The workers
+
+![The Compute page: each worker, its runs and sessions of its capacity, and what they use now](images/tour/19-compute.png)
+
+**Compute** lists the workers that run notebooks and sessions: their state, how many runs and sessions each holds of what it can take, the memory and CPU those use against what they reserve, and what they run on ([scaling.md](scaling.md)). Every signed-in user sees the counts; administrators also see whose runs and sessions are on each.
+
 ## Part 2: the API
 
 The same things from a service, with `curl`. The API is REST with an [OpenAPI spec](../api/openapi.yaml), and also gRPC ([api.md](api.md)). In development it takes basic auth; in production, bearer tokens from your identity provider ([auth.md](auth.md)).

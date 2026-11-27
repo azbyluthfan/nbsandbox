@@ -609,6 +609,11 @@ nbsandbox.output(int(nbsandbox.sql("SELECT count(*) FROM crm.orders WHERE region
 	// The space now binds crm to an object store: the version's crm is gone.
 	lake := connection(t, "lake2", "s3", s3Settings(), s3Secret)
 	bind(t, sp, "main", map[string]map[string]string{"main": {"crm": lake, "lake": lake}})
+	// Cleanups run last first: unbind before lake2's is deleted (a bound
+	// connection can't be), or it is left behind.
+	t.Cleanup(func() {
+		jsonCall(t, "PUT", "/v1/spaces/"+sp+"/connections", "alice", map[string]any{"environments": map[string]map[string]string{}}, nil)
+	})
 	r = jsonCall(t, "POST", "/v1/spaces/"+sp+"/functions/eu_orders/invoke", "alice", map[string]any{}, nil)
 	if r.Code != http.StatusBadRequest || !strings.Contains(string(r.Body), "crm (postgresql, bound to a s3 connection)") {
 		t.Fatalf("mismatched bindings: %d %s", r.Code, r.Body)

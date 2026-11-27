@@ -17,7 +17,7 @@ Run Jupyter notebooks headless, each in its own isolated sandbox, with live logs
 
 Every run executes in a **fresh, locked-down container or Pod**. Code in one space can't see another space's files, processes or memory, can't reach the network, and can't use up another run's resources. An automated test suite checks each of these and writes a report: Docker ([report](docs/isolation-report.md)), Linux with Docker Engine with `runc` and gVisor side by side ([report](docs/isolation-report-linux.md)), and Kubernetes ([report](docs/isolation-report-kubernetes.md)).
 
-> **Status:** v0.3, pre-1.0: the API is versioned (`/v1`) and follows the compatibility policy in [docs/api.md](docs/api.md), but expect changes between minor versions. See [Limitations](#limitations).
+> **Status:** v0.4, pre-1.0: the API is versioned (`/v1`) and follows the compatibility policy in [docs/api.md](docs/api.md), but expect changes between minor versions. See [Limitations](#limitations).
 
 **See it working:** [docs/tour.md](docs/tour.md) walks through the web editor and the API step by step, with a screenshot or the real output of each step.
 
@@ -47,6 +47,9 @@ client ──HTTPS──> nbsandboxd (API) ───────┐
 - **API and workers:** one process can be both (`role: all`), or run them separately and scale each ([docs/scaling.md](docs/scaling.md)). Workers claim queued runs from PostgreSQL, with leases so a run whose worker dies is taken over.
 - **Runner image:** Python 3.13 with papermill and the data-science packages listed by `GET /v1/runtime`. A space can add its own packages ([docs/packages.md](docs/packages.md)), or you build your own image for everyone.
 - **Files:** contents live in object storage (RustFS, Ceph, AWS S3, Azure Blob), each stored once. A run works on its own copy, and its changes are written back with conflict checks.
+- **Reading data where it lives:** a space names your databases and buckets (PostgreSQL, MySQL, SQL Server, S3-compatible storage), and notebooks query them with `nbsandbox.sql(...)`. A run never sees a credential: a fetcher container or Pod beside it holds them and reads the sources through an egress gateway, only the endpoints that run may reach ([docs/connections.md](docs/connections.md)).
+- **Interactive sessions** keep a notebook's kernel alive between cells, in the web editor or over the API ([docs/sessions.md](docs/sessions.md)); **published functions** let a service call a notebook ([docs/functions.md](docs/functions.md)).
+- **Compute:** `GET /v1/workers` and the web UI's Compute page show the workers and how busy each is; a run's page charts its memory, CPU and disk writes ([docs/scaling.md](docs/scaling.md)).
 
 ## Quickstart (local, Docker Desktop or Linux)
 

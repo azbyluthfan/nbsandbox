@@ -4,6 +4,15 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-26
+
+### Upgrading from 0.3.0
+
+- **Database migrations 13 to 18** run at startup: connections, their bindings, and the built-in secret store; the environment a run or session read in, and which connection each name meant; the names a function version reads; the workers' role, version, capacity and usage, and runs' usage samples. Upgrades from 0.3.0 are tested with Compose and with Helm.
+- **Helm:** the workers' Role gains `get` on Pods' metrics (`metrics.k8s.io`) in the runs namespace, for the usage charts.
+- **Helm, with `connections.enabled`:** the workers' Role gains Secrets and NetworkPolicies in the runs namespace; with the `kubernetes` secret provider, the API processes get a service account token and a Role for Secrets in the runs namespace (and nothing else).
+- **With connections on,** the settings need `connections.gateway.key` (and the gateway the same key), and the Docker socket proxy must allow network create, connect, disconnect, list and delete: the Compose files in `deploy/` do.
+
 ### Added
 
 - **Connections, the first part of reading data outside nbsandbox** ([docs/plan-data-access.md](docs/plan-data-access.md)): a user's data sources (PostgreSQL, MySQL, SQL Server, S3-compatible object storage), created through the API and gRPC (`ConnectionService`) and bound to a space's names per environment (dev, prod). Secrets go to a secret provider (Kubernetes Secrets, or a built-in encrypted store for development) and are never returned. Connections may point only where the operator allows (`connections.allowed`). Off by default (`connections.enabled`). A new scope, `nbsandbox.connections`, for changing them.
@@ -15,6 +24,8 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 - **Encrypted connections** ([docs/connections.md](docs/connections.md)): a database connection's `tls` is `off`, `prefer` (the default: encrypted if the server offers it), `require`, or `verify` (the certificate must come from a trusted authority, or the connection's own `ca`, and name its host); object storage over HTTPS always checks the certificate.
 - **The workers, in the API and the web UI** ([docs/scaling.md](docs/scaling.md)): `GET /v1/workers` (gRPC `ListWorkers`) lists each worker with its state, runtime and version, and the runs and sessions it holds of what it can take; a single process lists itself. A run names its `worker`; administrators filter runs and sessions by worker. The web UI's **Compute** page shows them, with what each worker's runs and sessions use now.
 - **A run's memory, CPU and disk writes over its life** (`GET …/runs/{run_id}/usage`, gRPC `GetRunUsage`): its worker samples it every 5 seconds on Docker (every minute after its first hour), and the run's page charts them, live while it runs. On Kubernetes the workers read memory and CPU from the metrics API every 15 seconds, when the cluster has metrics-server (no disk writes there).
+- **MCP:** `run_notebook`, `invoke_function` and `open_session` take the space `environment` whose connections they read.
+- **A warning for public keys:** nbsandboxd and the gateway warn at startup when given the repository's development master key or gateway key (from the dev and kind stacks), as they do for the demo users' passwords.
 - **Connections on Kubernetes** ([docs/kubernetes.md](docs/kubernetes.md#reading-external-data)): a reading run's fetcher is a Pod with its connections' Secrets mounted (nbsandboxd never reads them), its own NetworkPolicies, and the egress gateway as a Deployment of the chart (`connections.*` values).
 
 ### Fixed
@@ -28,14 +39,6 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 - **Azure Blob storage and HTTP API connections** can be created and bound, but nothing reads them yet.
 - **SQL Server connections can't be verified** (`tls: verify` is refused): DuckDB's SQL Server extension accepts any certificate. Use `require`, over a network you trust.
 - **Published functions read their space owner's connections:** functions are called by their space's owner today; with shared spaces, each caller's own connections will stand behind the same names.
-
-### Upgrading
-
-- **Database migrations 17 and 18** (the workers' role, version, capacity and usage; runs' samples) run at startup too; workers from before it show as `worker` until they restart.
-- **Database migrations 13 to 16** run at startup: connections, their bindings, and the built-in secret store; the environment a run or session read in, and which connection each name meant; the names a function version reads.
-- **Helm:** the workers' Role gains `get` on Pods' metrics (`metrics.k8s.io`) in the runs namespace, for the usage charts.
-- **Helm, with `connections.enabled`:** the workers' Role gains Secrets and NetworkPolicies in the runs namespace; with the `kubernetes` secret provider, the API processes get a service account token and a Role for Secrets in the runs namespace (and nothing else).
-- **With connections on,** the settings need `connections.gateway.key` (and the gateway the same key), and the Docker socket proxy must allow network create, connect, disconnect, list and delete: the Compose files in `deploy/` do.
 
 ## [0.3.0] - 2026-11-22
 
