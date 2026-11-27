@@ -519,7 +519,7 @@ test-connections: dev-data fetcher-image ## Reading external data, end to end: t
 		status=$$?; docker rm -fv $(TEST_SOURCES) >/dev/null 2>&1; exit $$status
 
 # The release the upgrade test starts from: the newest one (docs/releasing.md).
-UPGRADE_FROM ?= v0.3.0
+UPGRADE_FROM ?= v0.4.0
 
 .PHONY: test-upgrade
 test-upgrade: fetcher-image ## Upgrade from UPGRADE_FROM (the newest release, its published image) on the same volumes; checks the data survives (stops the dev stack, keeps its data)
