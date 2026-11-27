@@ -23,6 +23,9 @@ var (
 type Space struct {
 	ID, Owner, Name      string
 	CreatedAt, UpdatedAt time.Time
+	// Role is the caller's role in it, where a query asked for one
+	// (SpaceAccess, ListSpaces): "owner", "write" or "read".
+	Role string
 }
 
 // CreateSpace inserts a space.

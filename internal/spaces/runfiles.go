@@ -37,12 +37,6 @@ const (
 // os.Root opened at the run's own folder: nothing a run plants can make
 // nbsandboxd read or write outside it.
 
-// Owned returns nil if owner owns the space, ErrNotFound otherwise.
-func (s *Service) Owned(ctx context.Context, owner, id string) error {
-	_, err := s.get(ctx, owner, id)
-	return err
-}
-
 // CreateRun stores the notebook snapshot and the parameters of a new run in
 // object storage and returns their index entries, which the store records
 // with the run's row. It runs at submission, so the run executes the

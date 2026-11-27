@@ -16,6 +16,11 @@ const (
 	OpUpdateSpace Op = "UpdateSpace"
 	OpDeleteSpace Op = "DeleteSpace"
 
+	OpListMembers   Op = "ListMembers"
+	OpPutMember     Op = "PutMember"
+	OpDeleteMember  Op = "DeleteMember"
+	OpTransferSpace Op = "TransferSpace"
+
 	OpUploadFiles  Op = "UploadFiles"
 	OpListFiles    Op = "ListFiles"
 	OpGetFile      Op = "GetFile"
@@ -111,6 +116,11 @@ var opScopes = map[Op]string{
 	OpGetSpace:    ScopeRead,
 	OpUpdateSpace: ScopeSpacesWrite,
 	OpDeleteSpace: ScopeSpacesWrite,
+
+	OpListMembers:   ScopeRead,
+	OpPutMember:     ScopeSpacesWrite,
+	OpDeleteMember:  ScopeSpacesWrite,
+	OpTransferSpace: ScopeSpacesWrite,
 
 	OpUploadFiles:  ScopeFilesWrite,
 	OpListFiles:    ScopeRead,

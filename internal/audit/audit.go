@@ -56,6 +56,7 @@ func New(cfg Config, db Store, log *slog.Logger, failures prometheus.Counter) *R
 var (
 	changes = map[auth.Op]bool{
 		auth.OpCreateSpace: true, auth.OpUpdateSpace: true, auth.OpDeleteSpace: true,
+		auth.OpPutMember: true, auth.OpDeleteMember: true, auth.OpTransferSpace: true,
 		auth.OpUploadFiles: true, auth.OpPutFile: true, auth.OpMoveFile: true, auth.OpDeleteFile: true, auth.OpCreateFolder: true,
 		auth.OpPublishFunction: true, auth.OpDeleteFunction: true, auth.OpInvokeFunction: true, auth.OpInvokeFunctionStream: true,
 		auth.OpCreateRun: true, auth.OpCancelRun: true, auth.OpDeleteRun: true, auth.OpPromoteArtifact: true,

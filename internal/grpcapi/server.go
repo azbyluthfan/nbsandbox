@@ -323,6 +323,7 @@ func (s *server) toErr(err error) error {
 		pe   *spaces.PathError
 		ie   *spaces.InvalidError
 		le   *spaces.LimitError
+		fe   *spaces.ForbiddenError
 		ve   *spaces.VersionError
 		cte  *runs.ContractError
 		sa   *runs.ErrStillActive
@@ -337,6 +338,8 @@ func (s *server) toErr(err error) error {
 		code = connect.CodeCanceled
 	case errors.Is(err, spaces.ErrNotFound), errors.Is(err, store.ErrNotFound):
 		return connect.NewError(connect.CodeNotFound, errors.New("not found"))
+	case errors.As(err, &fe):
+		code = connect.CodePermissionDenied
 	case errors.Is(err, spaces.ErrExists):
 		code = connect.CodeAlreadyExists
 	case errors.Is(err, spaces.ErrActiveRun), errors.Is(err, spaces.ErrNotEmpty), errors.As(err, &ve), errors.As(err, &sa),

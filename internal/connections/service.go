@@ -366,19 +366,25 @@ type SpaceView struct {
 }
 
 // ownSpace checks the space is owner's (whatever the transport checked).
-func (s *Service) ownSpace(ctx context.Context, owner, spaceID string) error {
-	if _, err := s.d.DB.GetSpace(ctx, owner, spaceID); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			return ErrNotFound
-		}
+// ownSpace checks the caller's role in the space: ErrNotFound without one,
+// a spaces.ForbiddenError if it is below need.
+func (s *Service) ownSpace(ctx context.Context, caller, spaceID string, need spaces.Role) error {
+	sp, err := s.d.DB.SpaceAccess(ctx, caller, spaceID)
+	if errors.Is(err, store.ErrNotFound) {
+		return ErrNotFound
+	}
+	if err != nil {
 		return err
+	}
+	if !spaces.Role(sp.Role).Allows(need) {
+		return &spaces.ForbiddenError{Need: need}
 	}
 	return nil
 }
 
 // Space returns what names mean in one of owner's spaces.
 func (s *Service) Space(ctx context.Context, owner, spaceID string) (SpaceView, error) {
-	if err := s.ownSpace(ctx, owner, spaceID); err != nil {
+	if err := s.ownSpace(ctx, owner, spaceID, spaces.RoleRead); err != nil {
 		return SpaceView{}, err
 	}
 	sc, err := s.d.DB.GetSpaceConnections(ctx, spaceID)
@@ -407,7 +413,7 @@ func (s *Service) Space(ctx context.Context, owner, spaceID string) (SpaceView, 
 // SetSpace replaces what names mean in one of owner's spaces. Every
 // environment must bind the same names; the connections must be owner's.
 func (s *Service) SetSpace(ctx context.Context, owner, spaceID string, in SpaceInput) (SpaceView, error) {
-	if err := s.ownSpace(ctx, owner, spaceID); err != nil {
+	if err := s.ownSpace(ctx, owner, spaceID, spaces.RoleOwner); err != nil {
 		return SpaceView{}, err
 	}
 	if len(in.Environments) > MaxEnvironments {

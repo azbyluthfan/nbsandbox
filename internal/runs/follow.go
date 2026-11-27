@@ -223,7 +223,7 @@ func (m *Manager) FollowEvents(ctx context.Context, owner, spaceID string, q Eve
 		if err := m.RunExists(ctx, owner, spaceID, q.RunID); err != nil {
 			return nil, err
 		}
-	} else if err := m.d.Spaces.Owned(ctx, owner, spaceID); err != nil {
+	} else if err := m.d.Spaces.Allowed(ctx, owner, spaceID, spaces.RoleRead); err != nil {
 		return nil, err
 	}
 	if q.Function != "" && !spaces.ValidFunctionName(q.Function) {

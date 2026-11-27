@@ -109,7 +109,7 @@ func (m *Manager) Publish(ctx context.Context, owner, spaceID, name string, req 
 	if err := badName(name); err != nil {
 		return VersionView{}, err
 	}
-	if err := m.d.Spaces.Owned(ctx, owner, spaceID); err != nil {
+	if err := m.d.Spaces.Allowed(ctx, owner, spaceID, spaces.RoleWrite); err != nil {
 		return VersionView{}, err
 	}
 	if len(req.Files) > spaces.MaxBundleFiles {
@@ -195,7 +195,7 @@ func (m *Manager) Invoke(ctx context.Context, owner, spaceID, name string, req I
 	if err := badName(name); err != nil {
 		return View{}, false, err
 	}
-	if err := m.d.Spaces.Owned(ctx, owner, spaceID); err != nil {
+	if err := m.d.Spaces.Allowed(ctx, owner, spaceID, spaces.RoleRead); err != nil {
 		return View{}, false, err
 	}
 	fv, err := m.d.DB.GetFunctionVersion(ctx, spaceID, name, req.Version)
@@ -232,7 +232,7 @@ func (m *Manager) Invoke(ctx context.Context, owner, spaceID, name string, req I
 
 // Functions lists a space's functions.
 func (m *Manager) Functions(ctx context.Context, owner, spaceID string) ([]FunctionView, error) {
-	if err := m.d.Spaces.Owned(ctx, owner, spaceID); err != nil {
+	if err := m.d.Spaces.Allowed(ctx, owner, spaceID, spaces.RoleRead); err != nil {
 		return nil, err
 	}
 	fs, err := m.d.DB.Functions(ctx, spaceID)
@@ -251,7 +251,7 @@ func (m *Manager) Function(ctx context.Context, owner, spaceID, name string) (Fu
 	if err := badName(name); err != nil {
 		return FunctionView{}, err
 	}
-	if err := m.d.Spaces.Owned(ctx, owner, spaceID); err != nil {
+	if err := m.d.Spaces.Allowed(ctx, owner, spaceID, spaces.RoleRead); err != nil {
 		return FunctionView{}, err
 	}
 	f, err := m.d.DB.GetFunction(ctx, spaceID, name)
@@ -278,7 +278,7 @@ func (m *Manager) FunctionVersion(ctx context.Context, owner, spaceID, name stri
 	if err := badName(name); err != nil {
 		return VersionView{}, err
 	}
-	if err := m.d.Spaces.Owned(ctx, owner, spaceID); err != nil {
+	if err := m.d.Spaces.Allowed(ctx, owner, spaceID, spaces.RoleRead); err != nil {
 		return VersionView{}, err
 	}
 	fv, err := m.d.DB.GetFunctionVersion(ctx, spaceID, name, version)
@@ -297,7 +297,7 @@ func (m *Manager) DeleteFunction(ctx context.Context, owner, spaceID, name strin
 	if err := badName(name); err != nil {
 		return err
 	}
-	if err := m.d.Spaces.Owned(ctx, owner, spaceID); err != nil {
+	if err := m.d.Spaces.Allowed(ctx, owner, spaceID, spaces.RoleWrite); err != nil {
 		return err
 	}
 	m.publishMu.Lock()

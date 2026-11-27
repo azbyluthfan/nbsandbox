@@ -135,7 +135,7 @@ func (a *API) listRuns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	f := runs.ListFilter{Status: q.Get("status")}
+	f := runs.ListFilter{Status: q.Get("status"), Owner: q.Get("owner")}
 	for name, dst := range map[string]**time.Time{"created_after": &f.CreatedAfter, "created_before": &f.CreatedBefore} {
 		if v := q.Get(name); v != "" {
 			t, err := time.Parse(time.RFC3339, v)

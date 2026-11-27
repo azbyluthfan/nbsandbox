@@ -44,7 +44,7 @@ type EventsQuery struct {
 // when the space records its next event. ErrEventsPruned means some events
 // after q.After were already deleted (older than runs.event_retention).
 func (m *Manager) Events(ctx context.Context, owner, spaceID string, q EventsQuery) ([]store.Event, <-chan struct{}, error) {
-	if err := m.d.Spaces.Owned(ctx, owner, spaceID); err != nil {
+	if err := m.d.Spaces.Allowed(ctx, owner, spaceID, spaces.RoleRead); err != nil {
 		return nil, nil, err
 	}
 	// Take the wake-up channel before reading, so an event recorded in
@@ -72,7 +72,7 @@ func (m *Manager) Wake(spaceID string) <-chan struct{} { return m.wake.Wait(spac
 
 // RunExists checks a run belongs to the space (for per-run streams).
 func (m *Manager) RunExists(ctx context.Context, owner, spaceID, runID string) error {
-	if err := m.d.Spaces.Owned(ctx, owner, spaceID); err != nil {
+	if err := m.d.Spaces.Allowed(ctx, owner, spaceID, spaces.RoleRead); err != nil {
 		return err
 	}
 	if _, err := m.d.DB.GetRun(ctx, spaceID, runID); err != nil {

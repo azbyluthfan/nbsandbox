@@ -95,7 +95,7 @@ func TestSpaceLifecycle(t *testing.T) {
 	if err := e.svc.Delete(ctx, "bob", sp.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("bob Delete: %v", err)
 	}
-	if list, _, _ := e.svc.List(ctx, "bob", "", 10); len(list) != 0 {
+	if list, _, _ := e.svc.List(ctx, "bob", "", "", 10); len(list) != 0 {
 		t.Fatalf("bob List: %v", list)
 	}
 
@@ -312,16 +312,16 @@ func TestPaging(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		_, _ = e.svc.Create(ctx, "alice", "")
 	}
-	first, next, err := e.svc.List(ctx, "alice", "", 2)
+	first, next, err := e.svc.List(ctx, "alice", "", "", 2)
 	if err != nil || len(first) != 2 || next == "" {
 		t.Fatalf("page 1: %d %q %v", len(first), next, err)
 	}
-	second, next2, _ := e.svc.List(ctx, "alice", next, 2)
+	second, next2, _ := e.svc.List(ctx, "alice", "", next, 2)
 	if len(second) != 1 || next2 != "" {
 		t.Fatalf("page 2: %d %q", len(second), next2)
 	}
 	var ie *InvalidError
-	if _, _, err := e.svc.List(ctx, "alice", "garbage!", 2); !errors.As(err, &ie) {
+	if _, _, err := e.svc.List(ctx, "alice", "", "garbage!", 2); !errors.As(err, &ie) {
 		t.Fatalf("bad cursor: %v", err)
 	}
 }

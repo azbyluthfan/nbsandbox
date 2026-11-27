@@ -65,6 +65,17 @@ const (
 	// SpaceServiceDeleteSpaceProcedure is the fully-qualified name of the SpaceService's DeleteSpace
 	// RPC.
 	SpaceServiceDeleteSpaceProcedure = "/nbsandbox.v1.SpaceService/DeleteSpace"
+	// SpaceServiceListMembersProcedure is the fully-qualified name of the SpaceService's ListMembers
+	// RPC.
+	SpaceServiceListMembersProcedure = "/nbsandbox.v1.SpaceService/ListMembers"
+	// SpaceServicePutMemberProcedure is the fully-qualified name of the SpaceService's PutMember RPC.
+	SpaceServicePutMemberProcedure = "/nbsandbox.v1.SpaceService/PutMember"
+	// SpaceServiceDeleteMemberProcedure is the fully-qualified name of the SpaceService's DeleteMember
+	// RPC.
+	SpaceServiceDeleteMemberProcedure = "/nbsandbox.v1.SpaceService/DeleteMember"
+	// SpaceServiceTransferSpaceProcedure is the fully-qualified name of the SpaceService's
+	// TransferSpace RPC.
+	SpaceServiceTransferSpaceProcedure = "/nbsandbox.v1.SpaceService/TransferSpace"
 	// SpaceServiceUploadFilesProcedure is the fully-qualified name of the SpaceService's UploadFiles
 	// RPC.
 	SpaceServiceUploadFilesProcedure = "/nbsandbox.v1.SpaceService/UploadFiles"
@@ -242,6 +253,13 @@ type SpaceServiceClient interface {
 	GetSpace(context.Context, *connect.Request[v1.GetSpaceRequest]) (*connect.Response[v1.Space], error)
 	UpdateSpace(context.Context, *connect.Request[v1.UpdateSpaceRequest]) (*connect.Response[v1.Space], error)
 	DeleteSpace(context.Context, *connect.Request[v1.DeleteSpaceRequest]) (*connect.Response[v1.DeleteSpaceResponse], error)
+	// Shared spaces: the roles a space grants (read, write, owner). Any role
+	// lists them; owners grant, change and revoke; anyone may leave; the
+	// creator hands the space over to another owner.
+	ListMembers(context.Context, *connect.Request[v1.ListMembersRequest]) (*connect.Response[v1.ListMembersResponse], error)
+	PutMember(context.Context, *connect.Request[v1.PutMemberRequest]) (*connect.Response[v1.Member], error)
+	DeleteMember(context.Context, *connect.Request[v1.DeleteMemberRequest]) (*connect.Response[v1.DeleteMemberResponse], error)
+	TransferSpace(context.Context, *connect.Request[v1.TransferSpaceRequest]) (*connect.Response[v1.Space], error)
 	// Uploads files: the first message names the space and folder, then for
 	// each file a header message (name) followed by its data in chunks.
 	UploadFiles(context.Context) *connect.ClientStreamForClient[v1.UploadFilesRequest, v1.UploadFilesResponse]
@@ -299,6 +317,30 @@ func NewSpaceServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+SpaceServiceDeleteSpaceProcedure,
 			connect.WithSchema(spaceServiceMethods.ByName("DeleteSpace")),
+			connect.WithClientOptions(opts...),
+		),
+		listMembers: connect.NewClient[v1.ListMembersRequest, v1.ListMembersResponse](
+			httpClient,
+			baseURL+SpaceServiceListMembersProcedure,
+			connect.WithSchema(spaceServiceMethods.ByName("ListMembers")),
+			connect.WithClientOptions(opts...),
+		),
+		putMember: connect.NewClient[v1.PutMemberRequest, v1.Member](
+			httpClient,
+			baseURL+SpaceServicePutMemberProcedure,
+			connect.WithSchema(spaceServiceMethods.ByName("PutMember")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteMember: connect.NewClient[v1.DeleteMemberRequest, v1.DeleteMemberResponse](
+			httpClient,
+			baseURL+SpaceServiceDeleteMemberProcedure,
+			connect.WithSchema(spaceServiceMethods.ByName("DeleteMember")),
+			connect.WithClientOptions(opts...),
+		),
+		transferSpace: connect.NewClient[v1.TransferSpaceRequest, v1.Space](
+			httpClient,
+			baseURL+SpaceServiceTransferSpaceProcedure,
+			connect.WithSchema(spaceServiceMethods.ByName("TransferSpace")),
 			connect.WithClientOptions(opts...),
 		),
 		uploadFiles: connect.NewClient[v1.UploadFilesRequest, v1.UploadFilesResponse](
@@ -365,6 +407,10 @@ type spaceServiceClient struct {
 	getSpace           *connect.Client[v1.GetSpaceRequest, v1.Space]
 	updateSpace        *connect.Client[v1.UpdateSpaceRequest, v1.Space]
 	deleteSpace        *connect.Client[v1.DeleteSpaceRequest, v1.DeleteSpaceResponse]
+	listMembers        *connect.Client[v1.ListMembersRequest, v1.ListMembersResponse]
+	putMember          *connect.Client[v1.PutMemberRequest, v1.Member]
+	deleteMember       *connect.Client[v1.DeleteMemberRequest, v1.DeleteMemberResponse]
+	transferSpace      *connect.Client[v1.TransferSpaceRequest, v1.Space]
 	uploadFiles        *connect.Client[v1.UploadFilesRequest, v1.UploadFilesResponse]
 	listFiles          *connect.Client[v1.ListFilesRequest, v1.ListFilesResponse]
 	getFile            *connect.Client[v1.GetFileRequest, v1.FileChunk]
@@ -399,6 +445,26 @@ func (c *spaceServiceClient) UpdateSpace(ctx context.Context, req *connect.Reque
 // DeleteSpace calls nbsandbox.v1.SpaceService.DeleteSpace.
 func (c *spaceServiceClient) DeleteSpace(ctx context.Context, req *connect.Request[v1.DeleteSpaceRequest]) (*connect.Response[v1.DeleteSpaceResponse], error) {
 	return c.deleteSpace.CallUnary(ctx, req)
+}
+
+// ListMembers calls nbsandbox.v1.SpaceService.ListMembers.
+func (c *spaceServiceClient) ListMembers(ctx context.Context, req *connect.Request[v1.ListMembersRequest]) (*connect.Response[v1.ListMembersResponse], error) {
+	return c.listMembers.CallUnary(ctx, req)
+}
+
+// PutMember calls nbsandbox.v1.SpaceService.PutMember.
+func (c *spaceServiceClient) PutMember(ctx context.Context, req *connect.Request[v1.PutMemberRequest]) (*connect.Response[v1.Member], error) {
+	return c.putMember.CallUnary(ctx, req)
+}
+
+// DeleteMember calls nbsandbox.v1.SpaceService.DeleteMember.
+func (c *spaceServiceClient) DeleteMember(ctx context.Context, req *connect.Request[v1.DeleteMemberRequest]) (*connect.Response[v1.DeleteMemberResponse], error) {
+	return c.deleteMember.CallUnary(ctx, req)
+}
+
+// TransferSpace calls nbsandbox.v1.SpaceService.TransferSpace.
+func (c *spaceServiceClient) TransferSpace(ctx context.Context, req *connect.Request[v1.TransferSpaceRequest]) (*connect.Response[v1.Space], error) {
+	return c.transferSpace.CallUnary(ctx, req)
 }
 
 // UploadFiles calls nbsandbox.v1.SpaceService.UploadFiles.
@@ -453,6 +519,13 @@ type SpaceServiceHandler interface {
 	GetSpace(context.Context, *connect.Request[v1.GetSpaceRequest]) (*connect.Response[v1.Space], error)
 	UpdateSpace(context.Context, *connect.Request[v1.UpdateSpaceRequest]) (*connect.Response[v1.Space], error)
 	DeleteSpace(context.Context, *connect.Request[v1.DeleteSpaceRequest]) (*connect.Response[v1.DeleteSpaceResponse], error)
+	// Shared spaces: the roles a space grants (read, write, owner). Any role
+	// lists them; owners grant, change and revoke; anyone may leave; the
+	// creator hands the space over to another owner.
+	ListMembers(context.Context, *connect.Request[v1.ListMembersRequest]) (*connect.Response[v1.ListMembersResponse], error)
+	PutMember(context.Context, *connect.Request[v1.PutMemberRequest]) (*connect.Response[v1.Member], error)
+	DeleteMember(context.Context, *connect.Request[v1.DeleteMemberRequest]) (*connect.Response[v1.DeleteMemberResponse], error)
+	TransferSpace(context.Context, *connect.Request[v1.TransferSpaceRequest]) (*connect.Response[v1.Space], error)
 	// Uploads files: the first message names the space and folder, then for
 	// each file a header message (name) followed by its data in chunks.
 	UploadFiles(context.Context, *connect.ClientStream[v1.UploadFilesRequest]) (*connect.Response[v1.UploadFilesResponse], error)
@@ -506,6 +579,30 @@ func NewSpaceServiceHandler(svc SpaceServiceHandler, opts ...connect.HandlerOpti
 		SpaceServiceDeleteSpaceProcedure,
 		svc.DeleteSpace,
 		connect.WithSchema(spaceServiceMethods.ByName("DeleteSpace")),
+		connect.WithHandlerOptions(opts...),
+	)
+	spaceServiceListMembersHandler := connect.NewUnaryHandler(
+		SpaceServiceListMembersProcedure,
+		svc.ListMembers,
+		connect.WithSchema(spaceServiceMethods.ByName("ListMembers")),
+		connect.WithHandlerOptions(opts...),
+	)
+	spaceServicePutMemberHandler := connect.NewUnaryHandler(
+		SpaceServicePutMemberProcedure,
+		svc.PutMember,
+		connect.WithSchema(spaceServiceMethods.ByName("PutMember")),
+		connect.WithHandlerOptions(opts...),
+	)
+	spaceServiceDeleteMemberHandler := connect.NewUnaryHandler(
+		SpaceServiceDeleteMemberProcedure,
+		svc.DeleteMember,
+		connect.WithSchema(spaceServiceMethods.ByName("DeleteMember")),
+		connect.WithHandlerOptions(opts...),
+	)
+	spaceServiceTransferSpaceHandler := connect.NewUnaryHandler(
+		SpaceServiceTransferSpaceProcedure,
+		svc.TransferSpace,
+		connect.WithSchema(spaceServiceMethods.ByName("TransferSpace")),
 		connect.WithHandlerOptions(opts...),
 	)
 	spaceServiceUploadFilesHandler := connect.NewClientStreamHandler(
@@ -574,6 +671,14 @@ func NewSpaceServiceHandler(svc SpaceServiceHandler, opts ...connect.HandlerOpti
 			spaceServiceUpdateSpaceHandler.ServeHTTP(w, r)
 		case SpaceServiceDeleteSpaceProcedure:
 			spaceServiceDeleteSpaceHandler.ServeHTTP(w, r)
+		case SpaceServiceListMembersProcedure:
+			spaceServiceListMembersHandler.ServeHTTP(w, r)
+		case SpaceServicePutMemberProcedure:
+			spaceServicePutMemberHandler.ServeHTTP(w, r)
+		case SpaceServiceDeleteMemberProcedure:
+			spaceServiceDeleteMemberHandler.ServeHTTP(w, r)
+		case SpaceServiceTransferSpaceProcedure:
+			spaceServiceTransferSpaceHandler.ServeHTTP(w, r)
 		case SpaceServiceUploadFilesProcedure:
 			spaceServiceUploadFilesHandler.ServeHTTP(w, r)
 		case SpaceServiceListFilesProcedure:
@@ -619,6 +724,22 @@ func (UnimplementedSpaceServiceHandler) UpdateSpace(context.Context, *connect.Re
 
 func (UnimplementedSpaceServiceHandler) DeleteSpace(context.Context, *connect.Request[v1.DeleteSpaceRequest]) (*connect.Response[v1.DeleteSpaceResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.SpaceService.DeleteSpace is not implemented"))
+}
+
+func (UnimplementedSpaceServiceHandler) ListMembers(context.Context, *connect.Request[v1.ListMembersRequest]) (*connect.Response[v1.ListMembersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.SpaceService.ListMembers is not implemented"))
+}
+
+func (UnimplementedSpaceServiceHandler) PutMember(context.Context, *connect.Request[v1.PutMemberRequest]) (*connect.Response[v1.Member], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.SpaceService.PutMember is not implemented"))
+}
+
+func (UnimplementedSpaceServiceHandler) DeleteMember(context.Context, *connect.Request[v1.DeleteMemberRequest]) (*connect.Response[v1.DeleteMemberResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.SpaceService.DeleteMember is not implemented"))
+}
+
+func (UnimplementedSpaceServiceHandler) TransferSpace(context.Context, *connect.Request[v1.TransferSpaceRequest]) (*connect.Response[v1.Space], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.SpaceService.TransferSpace is not implemented"))
 }
 
 func (UnimplementedSpaceServiceHandler) UploadFiles(context.Context, *connect.ClientStream[v1.UploadFilesRequest]) (*connect.Response[v1.UploadFilesResponse], error) {

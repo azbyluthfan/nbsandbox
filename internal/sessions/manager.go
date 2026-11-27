@@ -75,6 +75,8 @@ type DB interface {
 // Spaces is the space service the manager uses (*spaces.Service).
 type Spaces interface {
 	Get(ctx context.Context, owner, id string) (spaces.Space, error)
+	// Allowed checks the caller's role in the space (docs/plan-shared-spaces.md).
+	Allowed(ctx context.Context, caller, id string, need spaces.Role) error
 	Stat(ctx context.Context, owner, id, p string) (spaces.File, error)
 	Checkout(ctx context.Context, spaceID, id string) (string, error)
 	Sync(ctx context.Context, spaceID, id string) ([]store.Conflict, []string, error)
@@ -215,6 +217,9 @@ func (m *Manager) Open(ctx context.Context, owner, spaceID, notebook, mode, envi
 	if !strings.HasSuffix(notebook, ".ipynb") {
 		return store.Session{}, false, &InvalidError{Msg: "notebook must be a .ipynb file in the space"}
 	}
+	if err := m.d.Spaces.Allowed(ctx, owner, spaceID, spaces.RoleWrite); err != nil {
+		return store.Session{}, false, err
+	}
 	f, err := m.d.Spaces.Stat(ctx, owner, spaceID, notebook)
 	if err != nil {
 		return store.Session{}, false, err
@@ -260,12 +265,18 @@ func (m *Manager) Get(ctx context.Context, owner, spaceID, id string) (store.Ses
 	return s, nil
 }
 
-// List returns the open sessions of the owner's space.
+// List returns the caller's open sessions in the space; for an owner of
+// the space, everyone's (which they can end, not attach to).
 func (m *Manager) List(ctx context.Context, owner, spaceID string) ([]store.Session, error) {
-	if _, err := m.d.Spaces.Get(ctx, owner, spaceID); err != nil {
+	sp, err := m.d.Spaces.Get(ctx, owner, spaceID)
+	if err != nil {
 		return nil, err
 	}
-	return m.d.DB.OpenSessions(ctx, store.SessionFilter{SpaceID: spaceID, Owner: owner})
+	f := store.SessionFilter{SpaceID: spaceID, Owner: owner}
+	if sp.Role == spaces.RoleOwner {
+		f.Owner = ""
+	}
+	return m.d.DB.OpenSessions(ctx, f)
 }
 
 // All returns every open session, or those one worker holds ("": all;
@@ -274,10 +285,18 @@ func (m *Manager) All(ctx context.Context, worker string) ([]store.Session, erro
 	return m.d.DB.OpenSessions(ctx, store.SessionFilter{Worker: worker})
 }
 
-// End ends one of the owner's sessions. by is who ended it (recorded).
+// End ends one of the caller's sessions, or, for an owner of the space,
+// anyone's. by is who ended it (recorded).
 func (m *Manager) End(ctx context.Context, owner, spaceID, id, by string) (store.Session, error) {
 	s, err := m.Get(ctx, owner, spaceID, id)
-	if err != nil {
+	if errors.Is(err, store.ErrNotFound) {
+		if s, err = m.d.DB.GetSession(ctx, id); err != nil || s.SpaceID != spaceID {
+			return store.Session{}, store.ErrNotFound
+		}
+		if m.d.Spaces.Allowed(ctx, owner, spaceID, spaces.RoleOwner) != nil {
+			return store.Session{}, store.ErrNotFound // another member's session: theirs alone
+		}
+	} else if err != nil {
 		return store.Session{}, err
 	}
 	return m.end(ctx, s, "ended by "+by, by)
@@ -373,6 +392,9 @@ func (m *Manager) SyncFiles(ctx context.Context, owner, spaceID, id string) ([]s
 	s, err := m.Get(ctx, owner, spaceID, id)
 	if err != nil {
 		return nil, err
+	}
+	if err := m.d.Spaces.Allowed(ctx, owner, spaceID, spaces.RoleWrite); err != nil {
+		return nil, err // their role changed since they opened it
 	}
 	if s.Mode != store.SessionReadWrite {
 		return nil, &InvalidError{Msg: "a read-only session has no changes to write back"}

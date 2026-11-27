@@ -226,7 +226,7 @@ type ContractError = contract.Error
 // Submit validates and queues a run. Requests that
 // are rejected never consume a run slot.
 func (m *Manager) Submit(ctx context.Context, owner, spaceID string, req SubmitRequest) (View, bool, error) {
-	if err := m.d.Spaces.Owned(ctx, owner, spaceID); err != nil {
+	if err := m.d.Spaces.Allowed(ctx, owner, spaceID, spaces.RoleWrite); err != nil {
 		return View{}, false, err
 	}
 	nb, err := m.d.Spaces.ReadNotebook(ctx, spaceID, req.Notebook)
@@ -470,7 +470,7 @@ func (m *Manager) Cancel(ctx context.Context, owner, spaceID, runID, by, reason 
 	if len(reason) > MaxCancelReason {
 		return View{}, &spaces.InvalidError{Msg: fmt.Sprintf("reason is longer than %d bytes", MaxCancelReason)}
 	}
-	if err := m.d.Spaces.Owned(ctx, owner, spaceID); err != nil {
+	if err := m.d.Spaces.Allowed(ctx, owner, spaceID, spaces.RoleWrite); err != nil {
 		return View{}, err
 	}
 	r, err := m.d.DB.GetRun(ctx, spaceID, runID)
@@ -480,7 +480,27 @@ func (m *Manager) Cancel(ctx context.Context, owner, spaceID, runID, by, reason 
 	if err != nil {
 		return View{}, err
 	}
+	if err := m.ownRun(ctx, owner, r, "cancel"); err != nil {
+		return View{}, err
+	}
 	return m.cancel(ctx, r, by, reason)
+}
+
+// ownRun returns nil if caller may change run r: it is theirs, or they are
+// an owner of its space.
+func (m *Manager) ownRun(ctx context.Context, caller string, r store.Run, what string) error {
+	if r.Owner == caller {
+		return nil
+	}
+	if err := m.d.Spaces.Allowed(ctx, caller, r.SpaceID, spaces.RoleOwner); err != nil {
+		var f *spaces.ForbiddenError
+		if errors.As(err, &f) {
+			return &spaces.ForbiddenError{Need: spaces.RoleOwner,
+				Msg: fmt.Sprintf("only who started this run (%s), or an owner of the space, can %s it", r.Owner, what)}
+		}
+		return err
+	}
+	return nil
 }
 
 // cancel cancels the run r (whose owner the caller has checked).
@@ -590,7 +610,7 @@ const retentionLock = 7_310_003
 
 // Delete removes a finished run's outputs and record.
 func (m *Manager) Delete(ctx context.Context, owner, spaceID, runID string) error {
-	if err := m.d.Spaces.Owned(ctx, owner, spaceID); err != nil {
+	if err := m.d.Spaces.Allowed(ctx, owner, spaceID, spaces.RoleWrite); err != nil {
 		return err
 	}
 	r, err := m.d.DB.GetRun(ctx, spaceID, runID)
@@ -598,6 +618,9 @@ func (m *Manager) Delete(ctx context.Context, owner, spaceID, runID string) erro
 		return spaces.ErrNotFound
 	}
 	if err != nil {
+		return err
+	}
+	if err := m.ownRun(ctx, owner, r, "delete"); err != nil {
 		return err
 	}
 	if !r.Terminal() {
@@ -614,7 +637,7 @@ func (m *Manager) Delete(ctx context.Context, owner, spaceID, runID string) erro
 
 // OpenOutput opens output.ipynb, output.html, log.txt, or an artifact.
 func (m *Manager) OpenOutput(ctx context.Context, owner, spaceID, runID, rel string) (*os.File, os.FileInfo, error) {
-	if err := m.d.Spaces.Owned(ctx, owner, spaceID); err != nil {
+	if err := m.d.Spaces.Allowed(ctx, owner, spaceID, spaces.RoleRead); err != nil {
 		return nil, nil, err
 	}
 	r, err := m.d.DB.GetRun(ctx, spaceID, runID)
@@ -648,18 +671,22 @@ func (m *Manager) chunkedLog(ctx context.Context, runID string) (*os.File, os.Fi
 
 // PromoteArtifact copies one of a run's artifacts into the space's files.
 func (m *Manager) PromoteArtifact(ctx context.Context, owner, spaceID, runID, artifact, to string) (spaces.File, error) {
-	if err := m.d.Spaces.Owned(ctx, owner, spaceID); err != nil {
+	if err := m.d.Spaces.Allowed(ctx, owner, spaceID, spaces.RoleWrite); err != nil {
 		return spaces.File{}, err
 	}
-	if _, err := m.d.DB.GetRun(ctx, spaceID, runID); err != nil {
+	r, err := m.d.DB.GetRun(ctx, spaceID, runID)
+	if err != nil {
 		return spaces.File{}, spaces.ErrNotFound
+	}
+	if err := m.ownRun(ctx, owner, r, "copy files from"); err != nil {
+		return spaces.File{}, err
 	}
 	return m.d.Spaces.PromoteArtifact(ctx, owner, spaceID, runID, artifact, to)
 }
 
 // Artifacts lists a run's artifacts.
 func (m *Manager) Artifacts(ctx context.Context, owner, spaceID, runID string) ([]spaces.File, error) {
-	if err := m.d.Spaces.Owned(ctx, owner, spaceID); err != nil {
+	if err := m.d.Spaces.Allowed(ctx, owner, spaceID, spaces.RoleRead); err != nil {
 		return nil, err
 	}
 	if _, err := m.d.DB.GetRun(ctx, spaceID, runID); err != nil {
@@ -686,7 +713,7 @@ func (m *Manager) Holding() []string {
 // RunStatus returns a run's current status (for log streaming), after
 // checking the caller owns the space.
 func (m *Manager) RunStatus(ctx context.Context, owner, spaceID, runID string) (string, error) {
-	if err := m.d.Spaces.Owned(ctx, owner, spaceID); err != nil {
+	if err := m.d.Spaces.Allowed(ctx, owner, spaceID, spaces.RoleRead); err != nil {
 		return "", err
 	}
 	r, err := m.d.DB.GetRun(ctx, spaceID, runID)

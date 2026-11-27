@@ -22,7 +22,8 @@ import (
 )
 
 func toSpace(sp spaces.Space, withUsage bool) *pb.Space {
-	out := &pb.Space{Id: sp.ID, Name: sp.Name, CreatedAt: timestamppb.New(sp.CreatedAt), UpdatedAt: timestamppb.New(sp.UpdatedAt)}
+	out := &pb.Space{Id: sp.ID, Name: sp.Name, Owner: sp.Owner, Role: string(sp.Role),
+		CreatedAt: timestamppb.New(sp.CreatedAt), UpdatedAt: timestamppb.New(sp.UpdatedAt)}
 	if withUsage {
 		out.Usage = &pb.Usage{BytesUsed: sp.Usage.BytesUsed, QuotaBytes: sp.Usage.QuotaBytes, FileCount: sp.Usage.FileCount,
 			RunCount: int32(sp.Usage.RunCount)} //nolint:gosec // a count of runs
@@ -67,7 +68,7 @@ func (s *server) ListSpaces(ctx context.Context, req *connect.Request[pb.ListSpa
 	if err != nil {
 		return nil, err
 	}
-	list, next, err := s.d.Spaces.List(ctx, owner(ctx), cursor, limit)
+	list, next, err := s.d.Spaces.List(ctx, owner(ctx), spaces.Role(req.Msg.Role), cursor, limit)
 	if err != nil {
 		return nil, s.toErr(err)
 	}
@@ -349,4 +350,65 @@ func (s *server) BuildSpacePackages(ctx context.Context, req *connect.Request[pb
 		return nil, s.toErr(err)
 	}
 	return connect.NewResponse(out), nil
+}
+
+func toMember(m spaces.Member) *pb.Member {
+	out := &pb.Member{Principal: m.Principal, Role: string(m.Role), Creator: m.Creator, GrantedBy: m.GrantedBy}
+	if !m.GrantedAt.IsZero() {
+		out.GrantedAt = timestamppb.New(m.GrantedAt)
+	}
+	return out
+}
+
+func (s *server) ListMembers(ctx context.Context, req *connect.Request[pb.ListMembersRequest]) (*connect.Response[pb.ListMembersResponse], error) {
+	if err := validIDs(req.Msg.SpaceId); err != nil {
+		return nil, err
+	}
+	ms, err := s.d.Spaces.Members(ctx, owner(ctx), req.Msg.SpaceId)
+	if err != nil {
+		return nil, s.toErr(err)
+	}
+	out := &pb.ListMembersResponse{}
+	for _, m := range ms {
+		out.Items = append(out.Items, toMember(m))
+	}
+	return connect.NewResponse(out), nil
+}
+
+func (s *server) PutMember(ctx context.Context, req *connect.Request[pb.PutMemberRequest]) (*connect.Response[pb.Member], error) {
+	if err := validIDs(req.Msg.SpaceId); err != nil {
+		return nil, err
+	}
+	audit.SetSpace(ctx, req.Msg.SpaceId)
+	audit.SetDetail(ctx, req.Msg.Principal+" "+req.Msg.Role)
+	m, err := s.d.Spaces.PutMember(ctx, owner(ctx), req.Msg.SpaceId, req.Msg.Principal, spaces.Role(req.Msg.Role))
+	if err != nil {
+		return nil, s.toErr(err)
+	}
+	return connect.NewResponse(toMember(m)), nil
+}
+
+func (s *server) DeleteMember(ctx context.Context, req *connect.Request[pb.DeleteMemberRequest]) (*connect.Response[pb.DeleteMemberResponse], error) {
+	if err := validIDs(req.Msg.SpaceId); err != nil {
+		return nil, err
+	}
+	audit.SetSpace(ctx, req.Msg.SpaceId)
+	audit.SetDetail(ctx, req.Msg.Principal)
+	if err := s.d.Spaces.RemoveMember(ctx, owner(ctx), req.Msg.SpaceId, req.Msg.Principal); err != nil {
+		return nil, s.toErr(err)
+	}
+	return connect.NewResponse(&pb.DeleteMemberResponse{}), nil
+}
+
+func (s *server) TransferSpace(ctx context.Context, req *connect.Request[pb.TransferSpaceRequest]) (*connect.Response[pb.Space], error) {
+	if err := validIDs(req.Msg.SpaceId); err != nil {
+		return nil, err
+	}
+	audit.SetSpace(ctx, req.Msg.SpaceId)
+	audit.SetDetail(ctx, "to "+req.Msg.To)
+	sp, err := s.d.Spaces.Transfer(ctx, owner(ctx), req.Msg.SpaceId, req.Msg.To)
+	if err != nil {
+		return nil, s.toErr(err)
+	}
+	return connect.NewResponse(toSpace(sp, true)), nil
 }

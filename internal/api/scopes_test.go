@@ -18,6 +18,7 @@ import (
 
 	"github.com/azbyluthfan/nbsandbox/internal/auth"
 	"github.com/azbyluthfan/nbsandbox/internal/auth/authtest"
+	"github.com/azbyluthfan/nbsandbox/internal/spaces"
 )
 
 // Every authenticated route names a known scope, and api/openapi.yaml lists
@@ -92,7 +93,7 @@ func TestScopeMatrix(t *testing.T) {
 		t.Fatal(err)
 	}
 	sp := created.ID
-	if err := e.spaces.Owned(context.Background(), "test:ada", sp); err != nil {
+	if err := e.spaces.Allowed(context.Background(), "test:ada", sp, spaces.RoleOwner); err != nil {
 		t.Fatalf("the space must belong to the caller ID test:ada: %v", err)
 	}
 	// alice (basic auth) can't see it: different owner.
