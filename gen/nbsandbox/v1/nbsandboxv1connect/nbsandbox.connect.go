@@ -244,6 +244,12 @@ const (
 	// ConnectionServiceSetSpaceConnectionsProcedure is the fully-qualified name of the
 	// ConnectionService's SetSpaceConnections RPC.
 	ConnectionServiceSetSpaceConnectionsProcedure = "/nbsandbox.v1.ConnectionService/SetSpaceConnections"
+	// ConnectionServiceGetSpaceNamesProcedure is the fully-qualified name of the ConnectionService's
+	// GetSpaceNames RPC.
+	ConnectionServiceGetSpaceNamesProcedure = "/nbsandbox.v1.ConnectionService/GetSpaceNames"
+	// ConnectionServiceSetSpaceNamesProcedure is the fully-qualified name of the ConnectionService's
+	// SetSpaceNames RPC.
+	ConnectionServiceSetSpaceNamesProcedure = "/nbsandbox.v1.ConnectionService/SetSpaceNames"
 )
 
 // SpaceServiceClient is a client for the nbsandbox.v1.SpaceService service.
@@ -2224,9 +2230,15 @@ type ConnectionServiceClient interface {
 	UpdateConnection(context.Context, *connect.Request[v1.UpdateConnectionRequest]) (*connect.Response[v1.Connection], error)
 	// Refused (FAILED_PRECONDITION) while a space binds it.
 	DeleteConnection(context.Context, *connect.Request[v1.GetConnectionRequest]) (*connect.Response[v1.DeleteConnectionResponse], error)
+	// The caller's own bindings in a space, and what each environment still
+	// needs from them.
 	GetSpaceConnections(context.Context, *connect.Request[v1.GetSpaceConnectionsRequest]) (*connect.Response[v1.SpaceConnections], error)
-	// Replaces the space's environments and bindings at once.
+	// Replaces the caller's bindings; from an owner with default_environment
+	// (or while the space declares nothing), also the space's declarations.
 	SetSpaceConnections(context.Context, *connect.Request[v1.SetSpaceConnectionsRequest]) (*connect.Response[v1.SpaceConnections], error)
+	// What a space's owners declare: environments, and names with their types.
+	GetSpaceNames(context.Context, *connect.Request[v1.GetSpaceNamesRequest]) (*connect.Response[v1.SpaceNames], error)
+	SetSpaceNames(context.Context, *connect.Request[v1.SetSpaceNamesRequest]) (*connect.Response[v1.SpaceNames], error)
 }
 
 // NewConnectionServiceClient constructs a client for the nbsandbox.v1.ConnectionService service. By
@@ -2282,6 +2294,18 @@ func NewConnectionServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(connectionServiceMethods.ByName("SetSpaceConnections")),
 			connect.WithClientOptions(opts...),
 		),
+		getSpaceNames: connect.NewClient[v1.GetSpaceNamesRequest, v1.SpaceNames](
+			httpClient,
+			baseURL+ConnectionServiceGetSpaceNamesProcedure,
+			connect.WithSchema(connectionServiceMethods.ByName("GetSpaceNames")),
+			connect.WithClientOptions(opts...),
+		),
+		setSpaceNames: connect.NewClient[v1.SetSpaceNamesRequest, v1.SpaceNames](
+			httpClient,
+			baseURL+ConnectionServiceSetSpaceNamesProcedure,
+			connect.WithSchema(connectionServiceMethods.ByName("SetSpaceNames")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -2294,6 +2318,8 @@ type connectionServiceClient struct {
 	deleteConnection    *connect.Client[v1.GetConnectionRequest, v1.DeleteConnectionResponse]
 	getSpaceConnections *connect.Client[v1.GetSpaceConnectionsRequest, v1.SpaceConnections]
 	setSpaceConnections *connect.Client[v1.SetSpaceConnectionsRequest, v1.SpaceConnections]
+	getSpaceNames       *connect.Client[v1.GetSpaceNamesRequest, v1.SpaceNames]
+	setSpaceNames       *connect.Client[v1.SetSpaceNamesRequest, v1.SpaceNames]
 }
 
 // CreateConnection calls nbsandbox.v1.ConnectionService.CreateConnection.
@@ -2331,6 +2357,16 @@ func (c *connectionServiceClient) SetSpaceConnections(ctx context.Context, req *
 	return c.setSpaceConnections.CallUnary(ctx, req)
 }
 
+// GetSpaceNames calls nbsandbox.v1.ConnectionService.GetSpaceNames.
+func (c *connectionServiceClient) GetSpaceNames(ctx context.Context, req *connect.Request[v1.GetSpaceNamesRequest]) (*connect.Response[v1.SpaceNames], error) {
+	return c.getSpaceNames.CallUnary(ctx, req)
+}
+
+// SetSpaceNames calls nbsandbox.v1.ConnectionService.SetSpaceNames.
+func (c *connectionServiceClient) SetSpaceNames(ctx context.Context, req *connect.Request[v1.SetSpaceNamesRequest]) (*connect.Response[v1.SpaceNames], error) {
+	return c.setSpaceNames.CallUnary(ctx, req)
+}
+
 // ConnectionServiceHandler is an implementation of the nbsandbox.v1.ConnectionService service.
 type ConnectionServiceHandler interface {
 	CreateConnection(context.Context, *connect.Request[v1.CreateConnectionRequest]) (*connect.Response[v1.Connection], error)
@@ -2341,9 +2377,15 @@ type ConnectionServiceHandler interface {
 	UpdateConnection(context.Context, *connect.Request[v1.UpdateConnectionRequest]) (*connect.Response[v1.Connection], error)
 	// Refused (FAILED_PRECONDITION) while a space binds it.
 	DeleteConnection(context.Context, *connect.Request[v1.GetConnectionRequest]) (*connect.Response[v1.DeleteConnectionResponse], error)
+	// The caller's own bindings in a space, and what each environment still
+	// needs from them.
 	GetSpaceConnections(context.Context, *connect.Request[v1.GetSpaceConnectionsRequest]) (*connect.Response[v1.SpaceConnections], error)
-	// Replaces the space's environments and bindings at once.
+	// Replaces the caller's bindings; from an owner with default_environment
+	// (or while the space declares nothing), also the space's declarations.
 	SetSpaceConnections(context.Context, *connect.Request[v1.SetSpaceConnectionsRequest]) (*connect.Response[v1.SpaceConnections], error)
+	// What a space's owners declare: environments, and names with their types.
+	GetSpaceNames(context.Context, *connect.Request[v1.GetSpaceNamesRequest]) (*connect.Response[v1.SpaceNames], error)
+	SetSpaceNames(context.Context, *connect.Request[v1.SetSpaceNamesRequest]) (*connect.Response[v1.SpaceNames], error)
 }
 
 // NewConnectionServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -2395,6 +2437,18 @@ func NewConnectionServiceHandler(svc ConnectionServiceHandler, opts ...connect.H
 		connect.WithSchema(connectionServiceMethods.ByName("SetSpaceConnections")),
 		connect.WithHandlerOptions(opts...),
 	)
+	connectionServiceGetSpaceNamesHandler := connect.NewUnaryHandler(
+		ConnectionServiceGetSpaceNamesProcedure,
+		svc.GetSpaceNames,
+		connect.WithSchema(connectionServiceMethods.ByName("GetSpaceNames")),
+		connect.WithHandlerOptions(opts...),
+	)
+	connectionServiceSetSpaceNamesHandler := connect.NewUnaryHandler(
+		ConnectionServiceSetSpaceNamesProcedure,
+		svc.SetSpaceNames,
+		connect.WithSchema(connectionServiceMethods.ByName("SetSpaceNames")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/nbsandbox.v1.ConnectionService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ConnectionServiceCreateConnectionProcedure:
@@ -2411,6 +2465,10 @@ func NewConnectionServiceHandler(svc ConnectionServiceHandler, opts ...connect.H
 			connectionServiceGetSpaceConnectionsHandler.ServeHTTP(w, r)
 		case ConnectionServiceSetSpaceConnectionsProcedure:
 			connectionServiceSetSpaceConnectionsHandler.ServeHTTP(w, r)
+		case ConnectionServiceGetSpaceNamesProcedure:
+			connectionServiceGetSpaceNamesHandler.ServeHTTP(w, r)
+		case ConnectionServiceSetSpaceNamesProcedure:
+			connectionServiceSetSpaceNamesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -2446,4 +2504,12 @@ func (UnimplementedConnectionServiceHandler) GetSpaceConnections(context.Context
 
 func (UnimplementedConnectionServiceHandler) SetSpaceConnections(context.Context, *connect.Request[v1.SetSpaceConnectionsRequest]) (*connect.Response[v1.SpaceConnections], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.ConnectionService.SetSpaceConnections is not implemented"))
+}
+
+func (UnimplementedConnectionServiceHandler) GetSpaceNames(context.Context, *connect.Request[v1.GetSpaceNamesRequest]) (*connect.Response[v1.SpaceNames], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.ConnectionService.GetSpaceNames is not implemented"))
+}
+
+func (UnimplementedConnectionServiceHandler) SetSpaceNames(context.Context, *connect.Request[v1.SetSpaceNamesRequest]) (*connect.Response[v1.SpaceNames], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nbsandbox.v1.ConnectionService.SetSpaceNames is not implemented"))
 }

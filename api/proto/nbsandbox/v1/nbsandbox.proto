@@ -916,9 +916,15 @@ service ConnectionService {
   rpc UpdateConnection(UpdateConnectionRequest) returns (Connection);
   // Refused (FAILED_PRECONDITION) while a space binds it.
   rpc DeleteConnection(GetConnectionRequest) returns (DeleteConnectionResponse);
+  // The caller's own bindings in a space, and what each environment still
+  // needs from them.
   rpc GetSpaceConnections(GetSpaceConnectionsRequest) returns (SpaceConnections);
-  // Replaces the space's environments and bindings at once.
+  // Replaces the caller's bindings; from an owner with default_environment
+  // (or while the space declares nothing), also the space's declarations.
   rpc SetSpaceConnections(SetSpaceConnectionsRequest) returns (SpaceConnections);
+  // What a space's owners declare: environments, and names with their types.
+  rpc GetSpaceNames(GetSpaceNamesRequest) returns (SpaceNames);
+  rpc SetSpaceNames(SetSpaceNamesRequest) returns (SpaceNames);
 }
 
 // A secret: its value (stored by nbsandbox's secret provider), a reference
@@ -995,4 +1001,27 @@ message BoundEnvironment {
 message SpaceConnections {
   string default_environment = 1;
   map<string, BoundEnvironment> environments = 2;
+  map<string, NameList> missing = 3; // per environment: declared names the caller hasn't bound
+}
+message NameList {
+  repeated string names = 1;
+}
+message GetSpaceNamesRequest {
+  string space_id = 1;
+}
+message SetSpaceNamesRequest {
+  string space_id = 1;
+  string default_environment = 2;
+  repeated string environments = 3;
+  map<string, string> names = 4; // name -> connection type
+}
+message SpaceNames {
+  string default_environment = 1;
+  repeated string environments = 2;
+  map<string, string> names = 3;
+  // Which names each member has bound: principal -> environment -> names.
+  map<string, MemberBound> bound = 4;
+}
+message MemberBound {
+  map<string, NameList> environments = 1;
 }

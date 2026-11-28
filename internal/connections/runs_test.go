@@ -57,21 +57,21 @@ func TestResolveAndFetcher(t *testing.T) {
 	}
 
 	// Resolve: the default, a named environment, refusals.
-	env, names, err := s.Resolve(ctx, "s1", "")
+	env, names, err := s.Resolve(ctx, "alice", "s1", "", nil)
 	if err != nil || env != "dev" || len(names) != 4 {
 		t.Fatalf("default: %q %v %v", env, names, err)
 	}
-	if env, names, err = s.Resolve(ctx, "s1", "prod"); err != nil || env != "prod" || names["crm"] != prod.ID {
+	if env, names, err = s.Resolve(ctx, "alice", "s1", "prod", nil); err != nil || env != "prod" || names["crm"] != prod.ID {
 		t.Fatalf("prod: %q %v %v", env, names, err)
 	}
 	var inv *spaces.InvalidError
-	if _, _, err := s.Resolve(ctx, "s1", "staging"); !errors.As(err, &inv) || !strings.Contains(err.Error(), "dev, prod") {
+	if _, _, err := s.Resolve(ctx, "alice", "s1", "staging", nil); !errors.As(err, &inv) || !strings.Contains(err.Error(), "dev, prod") {
 		t.Fatalf("unknown environment: %v", err)
 	}
-	if env, names, err := s.Resolve(ctx, "s2", ""); err != nil || env != "" || names != nil {
+	if env, names, err := s.Resolve(ctx, "alice", "s2", "", nil); err != nil || env != "" || names != nil {
 		t.Fatalf("a space binding nothing: %q %v %v", env, names, err)
 	}
-	if _, _, err := s.Resolve(ctx, "s2", "prod"); !errors.As(err, &inv) {
+	if _, _, err := s.Resolve(ctx, "alice", "s2", "prod", nil); !errors.As(err, &inv) {
 		t.Fatalf("an environment where there are none: %v", err)
 	}
 

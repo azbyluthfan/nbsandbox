@@ -196,7 +196,7 @@ func (m *Manager) Wake() {
 // otherwise the session is read-only (Session.Mode says which).
 // DataAccess resolves a session's names and makes its fetcher.
 type DataAccess interface {
-	Resolve(ctx context.Context, spaceID, environment string) (string, map[string]string, error)
+	Resolve(ctx context.Context, caller, spaceID, environment string, only []string) (string, map[string]string, error)
 	Fetcher(ctx context.Context, id, owner string, names map[string]string, expires time.Time) (*isolation.Fetcher, error)
 }
 
@@ -234,7 +234,7 @@ func (m *Manager) Open(ctx context.Context, owner, spaceID, notebook, mode, envi
 	var names map[string]string
 	switch {
 	case m.d.Data != nil:
-		if env, names, err = m.d.Data.Resolve(ctx, spaceID, environment); err != nil {
+		if env, names, err = m.d.Data.Resolve(ctx, owner, spaceID, environment, nil); err != nil {
 			return store.Session{}, false, err
 		}
 	case environment != "":

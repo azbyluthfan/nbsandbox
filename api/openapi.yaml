@@ -752,7 +752,12 @@ paths:
     get:
       security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
       tags: [connections]
-      summary: What names mean in the space, per environment
+      summary: The caller's own bindings for the space's names, per environment
+      description: |
+        Each member binds their own connections to the names the space's
+        owners declare (docs/plan-shared-spaces.md); `missing` lists, per
+        environment, the declared names the caller hasn't bound (their runs
+        there are refused until they do).
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SpaceConnections" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -763,12 +768,17 @@ paths:
     put:
       security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.connections] }]
       tags: [connections]
-      summary: Replace the space's environments and bindings
+      summary: Replace the caller's bindings (and, for owners, declare the names)
       description: |
-        Each environment binds names (used in SQL: crm.orders) to the caller's
-        connections, by name or ID. Every environment must bind the same
-        names. default_environment is required with several environments.
-        An empty environments object unbinds everything.
+        Each environment binds names (used in SQL: crm.orders) to the
+        caller's own connections, by name or ID, of the type the name is
+        declared with. Any role may bind; names may stay unbound.
+
+        From an owner with default_environment (required with several
+        environments), or while the space declares nothing yet, this also
+        declares the space's environments and names from the bindings, as
+        before shared spaces: every environment must then bind the same
+        names. PUT /v1/spaces/{id}/names declares them without binding.
       requestBody:
         required: true
         content:
@@ -786,6 +796,46 @@ paths:
                     additionalProperties: { type: string }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SpaceConnections" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/spaces/{id}/names:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [connections]
+      summary: The space's declared environments and names, and which names each member has bound
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SpaceNames" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.connections] }]
+      tags: [connections]
+      summary: Declare the space's environments and names (owners)
+      description: |
+        Replaces the declarations. Members' bindings of an environment or a
+        name that goes, or of a name whose type changes, go with it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                default_environment: { type: string }
+                environments: { type: array, items: { type: string } }
+                names: { type: object, description: "name -> connection type", additionalProperties: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SpaceNames" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
@@ -1885,6 +1935,23 @@ components:
                 id: { type: string, format: uuid }
                 name: { type: string }
                 type: { type: string }
+        missing:
+          type: object
+          description: environment -> declared names the caller hasn't bound
+          additionalProperties: { type: array, items: { type: string } }
+    SpaceNames:
+      type: object
+      required: [default_environment, environments, names, bound]
+      properties:
+        default_environment: { type: string }
+        environments: { type: array, items: { type: string } }
+        names: { type: object, description: "name -> connection type", additionalProperties: { type: string } }
+        bound:
+          type: object
+          description: "principal -> environment -> the names they have bound (never to which connection)"
+          additionalProperties:
+            type: object
+            additionalProperties: { type: array, items: { type: string } }
     Session:
       type: object
       required: [id, space_id, notebook, mode, status, created_at]

@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,15 +26,17 @@ import (
 	"github.com/azbyluthfan/nbsandbox/internal/store"
 )
 
-// Resolve settles which connection each of a space's names means for a
-// run: in environment, or the space's default if "". A space that binds
-// nothing resolves to no environment and no names.
-func (s *Service) Resolve(ctx context.Context, spaceID, environment string) (string, map[string]string, error) {
-	sc, err := s.d.DB.GetSpaceConnections(ctx, spaceID)
+// Resolve settles which connection each of a space's names means for
+// caller's run, session or call: their own bindings, in environment, or
+// the space's default if "". A space that declares nothing resolves to no
+// environment and no names. Every declared name (or, with only, those) must
+// be bound by caller, or it is refused saying which to bind.
+func (s *Service) Resolve(ctx context.Context, caller, spaceID, environment string, only []string) (string, map[string]string, error) {
+	sn, err := s.d.DB.GetSpaceNames(ctx, spaceID)
 	if err != nil {
 		return "", nil, err
 	}
-	if len(sc.Environments) == 0 {
+	if len(sn.Environments) == 0 {
 		if environment != "" {
 			return "", nil, &spaces.InvalidError{Msg: fmt.Sprintf("environment %q: this space has no environments", environment)}
 		}
@@ -41,22 +44,31 @@ func (s *Service) Resolve(ctx context.Context, spaceID, environment string) (str
 	}
 	env := environment
 	if env == "" {
-		env = sc.Default
+		env = sn.Default
 	}
-	names, ok := sc.Environments[env]
-	if !ok {
-		envs := make([]string, 0, len(sc.Environments))
-		for e := range sc.Environments {
-			envs = append(envs, e)
-		}
-		sort.Strings(envs)
-		return "", nil, &spaces.InvalidError{Msg: fmt.Sprintf("environment %q: this space's environments are %s", env, strings.Join(envs, ", "))}
+	if !slices.Contains(sn.Environments, env) {
+		return "", nil, &spaces.InvalidError{Msg: fmt.Sprintf("environment %q: this space's environments are %s", env, strings.Join(sn.Environments, ", "))}
 	}
-	out := make(map[string]string, len(names))
-	for n, id := range names {
+	b, err := s.d.DB.GetBindings(ctx, spaceID, caller)
+	if err != nil {
+		return "", nil, err
+	}
+	if miss := missing(sn.Names, b[env], only); len(miss) > 0 {
+		return "", nil, &spaces.InvalidError{Msg: fmt.Sprintf(
+			"bind your own connections to %s in this space's environment %s first (PUT /v1/spaces/%s/connections, or the space's Connections section)",
+			strings.Join(miss, ", "), env, spaceID)}
+	}
+	out := make(map[string]string, len(b[env]))
+	for n, id := range b[env] {
 		out[n] = id
 	}
 	return env, out, nil
+}
+
+// Declared returns a space's declared names and their types.
+func (s *Service) Declared(ctx context.Context, spaceID string) (map[string]string, error) {
+	sn, err := s.d.DB.GetSpaceNames(ctx, spaceID)
+	return sn.Names, err
 }
 
 // Types returns each name's connection type (the owner's connections).

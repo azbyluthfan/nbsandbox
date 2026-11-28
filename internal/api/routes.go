@@ -71,6 +71,8 @@ func (a *API) routes() []Route {
 		{Method: "DELETE", Pattern: "/v1/connections/{connection_id}", Handler: a.deleteConnection, Auth: true, Op: auth.OpDeleteConnection, ConnectionScoped: true},
 		{Method: "GET", Pattern: "/v1/spaces/{id}/connections", Handler: a.getSpaceConnections, Auth: true, Op: auth.OpGetSpaceConnections, SpaceScoped: true},
 		{Method: "PUT", Pattern: "/v1/spaces/{id}/connections", Handler: a.setSpaceConnections, Auth: true, Op: auth.OpSetSpaceConnections, SpaceScoped: true},
+		{Method: "GET", Pattern: "/v1/spaces/{id}/names", Handler: a.getSpaceNames, Auth: true, Op: auth.OpGetSpaceNames, SpaceScoped: true},
+		{Method: "PUT", Pattern: "/v1/spaces/{id}/names", Handler: a.setSpaceNames, Auth: true, Op: auth.OpSetSpaceNames, SpaceScoped: true},
 
 		// The space's own packages (requirements.txt), built into a package set.
 		{Method: "GET", Pattern: "/v1/spaces/{id}/packages", Handler: a.getPackages, Auth: true, Op: auth.OpGetSpacePackages, SpaceScoped: true},

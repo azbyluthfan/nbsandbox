@@ -35,6 +35,7 @@ type upgradeState struct {
 	SessionID             string
 	Active                []upgradeRun // active when nbsandboxd stopped
 	BobSpace              string
+	Names, NamesConn      string // a space binding names before the upgrade, and its connection
 	Data                  string
 	Schema                int // the database's schema version before the upgrade
 }
@@ -189,6 +190,24 @@ func upgradeBefore(t *testing.T) upgradeState {
 
 	st.BobSpace = keptSpace(t, "bob", "upgrade-bob")
 
+	// Names bound before shared spaces (0.4.0 and later): they become the
+	// space's declarations and its creator's own bindings.
+	if st.Schema >= 13 {
+		r := jsonCall(t, "POST", "/v1/connections", "alice", map[string]any{"name": "upgrade-names-crm", "type": "postgresql",
+			"settings": map[string]any{"host": upgradeConnHost(), "database": "crm", "user": "reader"}, "secret": map[string]any{"value": "x-upgrade"}}, nil)
+		if r.Code != http.StatusCreated {
+			t.Fatalf("a connection before the upgrade: %d %s", r.Code, r.Body)
+		}
+		var c struct{ ID string }
+		r.json(t, &c)
+		st.Names, st.NamesConn = keptSpace(t, "alice", "upgrade-names"), c.ID
+		r = jsonCall(t, "PUT", "/v1/spaces/"+st.Names+"/connections", "alice", map[string]any{"default_environment": "dev",
+			"environments": map[string]map[string]string{"dev": {"crm": c.ID}, "prod": {"crm": c.ID}}}, nil)
+		if r.Code != http.StatusOK {
+			t.Fatalf("bind before the upgrade: %d %s", r.Code, r.Body)
+		}
+	}
+
 	// Runs active when nbsandboxd stops: two long ones take the run slots
 	// (2 in the dev stack, 2 workers of one on kind), a quick one waits
 	// behind them.
@@ -308,6 +327,27 @@ func upgradeAfter(t *testing.T, st upgradeState) {
 		default:
 			problems = append(problems, fmt.Sprintf("run %s was %s before the stop", a.ID, a.Status))
 		}
+	}
+
+	// Names bound before the upgrade are the space's declarations and its
+	// creator's bindings now.
+	if st.Names != "" {
+		var names struct {
+			Default      string            `json:"default_environment"`
+			Environments []string          `json:"environments"`
+			Names        map[string]string `json:"names"`
+		}
+		r := call(t, "GET", "/v1/spaces/"+st.Names+"/names", "alice", nil, nil)
+		r.json(t, &names)
+		check(r.Code == http.StatusOK && names.Default == "dev" && strings.Join(names.Environments, ",") == "dev,prod" && names.Names["crm"] == "postgresql",
+			"names declared from the old bindings: %d %s", r.Code, r.Body)
+		r = call(t, "GET", "/v1/spaces/"+st.Names+"/connections", "alice", nil, nil)
+		check(r.Code == http.StatusOK && bytes.Count(r.Body, []byte(st.NamesConn)) == 2 && !bytes.Contains(r.Body, []byte(`"missing"`)),
+			"the creator's bindings from the old ones: %d %s", r.Code, r.Body)
+		t.Cleanup(func() {
+			jsonCall(t, "PUT", "/v1/spaces/"+st.Names+"/names", "alice", map[string]any{"environments": []string{}}, nil)
+			call(t, "DELETE", "/v1/connections/"+st.NamesConn, "alice", nil, nil)
+		})
 	}
 
 	// What the new migrations added works on the old spaces: a connection,

@@ -36,6 +36,8 @@ const (
 	OpDeleteConnection    Op = "DeleteConnection"
 	OpGetSpaceConnections Op = "GetSpaceConnections"
 	OpSetSpaceConnections Op = "SetSpaceConnections"
+	OpGetSpaceNames       Op = "GetSpaceNames"
+	OpSetSpaceNames       Op = "SetSpaceNames"
 
 	OpGetSpacePackages   Op = "GetSpacePackages"
 	OpBuildSpacePackages Op = "BuildSpacePackages"
@@ -195,6 +197,8 @@ var opScopes = map[Op]string{
 	OpDeleteConnection:    ScopeConnections,
 	OpGetSpaceConnections: ScopeRead,
 	OpSetSpaceConnections: ScopeConnections,
+	OpGetSpaceNames:       ScopeRead,
+	OpSetSpaceNames:       ScopeConnections,
 
 	OpFollowRunResult:      ScopeRead,
 	OpInvokeFunctionStream: ScopeFunctionsInvoke,

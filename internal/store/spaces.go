@@ -103,15 +103,24 @@ func (db *DB) PutSpaceMember(ctx context.Context, id string, m Member) error {
 }
 
 // DeleteSpaceMember revokes principal's role; ErrNotFound if it had none.
+// Their bindings for the space's names go with it.
 func (db *DB) DeleteSpaceMember(ctx context.Context, id, principal string) error {
-	res, err := db.w.ExecContext(ctx, "DELETE FROM space_members WHERE space_id = ? AND principal = ?", id, principal)
+	tx, err := db.w.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.ExecContext(ctx, "DELETE FROM space_members WHERE space_id = ? AND principal = ?", id, principal)
 	if err != nil {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	return nil
+	if _, err := tx.ExecContext(ctx, "DELETE FROM space_bindings WHERE space_id = ? AND principal = ?", id, principal); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // TransferSpace makes to (one of its owners) the space's creator and

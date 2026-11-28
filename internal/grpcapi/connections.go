@@ -82,7 +82,58 @@ func toSpaceConnections(v connections.SpaceView) *pb.SpaceConnections {
 		}
 		out.Environments[env] = be
 	}
+	for env, names := range v.Missing {
+		if out.Missing == nil {
+			out.Missing = map[string]*pb.NameList{}
+		}
+		out.Missing[env] = &pb.NameList{Names: names}
+	}
 	return out
+}
+
+func toSpaceNames(v connections.NamesView) *pb.SpaceNames {
+	out := &pb.SpaceNames{DefaultEnvironment: v.Default, Environments: v.Environments, Names: v.Names, Bound: map[string]*pb.MemberBound{}}
+	for p, envs := range v.Bound {
+		mb := &pb.MemberBound{Environments: map[string]*pb.NameList{}}
+		for env, names := range envs {
+			mb.Environments[env] = &pb.NameList{Names: names}
+		}
+		out.Bound[p] = mb
+	}
+	return out
+}
+
+// GetSpaceNames implements ConnectionService.
+func (s *server) GetSpaceNames(ctx context.Context, req *connect.Request[pb.GetSpaceNamesRequest]) (*connect.Response[pb.SpaceNames], error) {
+	if err := s.connectionsOn(); err != nil {
+		return nil, err
+	}
+	if err := validIDs(req.Msg.SpaceId); err != nil {
+		return nil, err
+	}
+	v, err := s.d.Connections.Names(ctx, owner(ctx), req.Msg.SpaceId)
+	if err != nil {
+		return nil, s.connectionErr(err)
+	}
+	return connect.NewResponse(toSpaceNames(v)), nil
+}
+
+// SetSpaceNames implements ConnectionService.
+func (s *server) SetSpaceNames(ctx context.Context, req *connect.Request[pb.SetSpaceNamesRequest]) (*connect.Response[pb.SpaceNames], error) {
+	if err := s.connectionsOn(); err != nil {
+		return nil, err
+	}
+	m := req.Msg
+	if err := validIDs(m.SpaceId); err != nil {
+		return nil, err
+	}
+	audit.SetSpace(ctx, m.SpaceId)
+	v, err := s.d.Connections.SetNames(ctx, owner(ctx), m.SpaceId,
+		connections.NamesInput{Default: m.DefaultEnvironment, Environments: m.Environments, Names: m.Names})
+	if err != nil {
+		return nil, s.connectionErr(err)
+	}
+	return connect.NewResponse(toSpaceNames(v)), nil
 }
 
 // CreateConnection implements ConnectionService.

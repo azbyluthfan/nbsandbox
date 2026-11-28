@@ -68,7 +68,7 @@ var (
 		// Connections: who created, changed, deleted or bound them; never
 		// their secrets.
 		auth.OpCreateConnection: true, auth.OpUpdateConnection: true, auth.OpDeleteConnection: true,
-		auth.OpSetSpaceConnections: true,
+		auth.OpSetSpaceConnections: true, auth.OpSetSpaceNames: true,
 	}
 	downloads = map[auth.Op]bool{
 		auth.OpGetFile: true, auth.OpGetRunNotebook: true, auth.OpGetRunHTML: true, auth.OpGetArtifact: true, auth.OpGetRunLog: true,

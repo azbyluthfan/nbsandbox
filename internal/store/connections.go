@@ -148,18 +148,18 @@ func (db *DB) ConnectionUses(ctx context.Context, id string) ([]ConnectionUse, e
 	return out, rows.Err()
 }
 
-// SpaceConnections is what names mean in a space: its environments, the
-// default one, and each environment's bindings (name -> connection ID).
-type SpaceConnections struct {
+// SpaceNames is what a space's owners declare: its environments, the
+// default one, and its names with their types (docs/plan-shared-spaces.md).
+type SpaceNames struct {
 	Default      string
-	Environments map[string]map[string]string
+	Environments []string          // sorted
+	Names        map[string]string // name -> connection type
 }
 
-// GetSpaceConnections returns a space's environments and bindings (none:
-// an empty SpaceConnections).
-func (db *DB) GetSpaceConnections(ctx context.Context, spaceID string) (SpaceConnections, error) {
-	out := SpaceConnections{Environments: map[string]map[string]string{}}
-	rows, err := db.r.QueryContext(ctx, "SELECT name, is_default FROM space_environments WHERE space_id = ?", spaceID)
+// GetSpaceNames returns a space's declarations (none: empty).
+func (db *DB) GetSpaceNames(ctx context.Context, spaceID string) (SpaceNames, error) {
+	out := SpaceNames{Names: map[string]string{}}
+	rows, err := db.r.QueryContext(ctx, "SELECT name, is_default FROM space_environments WHERE space_id = ? ORDER BY name", spaceID)
 	if err != nil {
 		return out, err
 	}
@@ -170,7 +170,7 @@ func (db *DB) GetSpaceConnections(ctx context.Context, spaceID string) (SpaceCon
 		if err := rows.Scan(&name, &def); err != nil {
 			return out, err
 		}
-		out.Environments[name] = map[string]string{}
+		out.Environments = append(out.Environments, name)
 		if def {
 			out.Default = name
 		}
@@ -178,40 +178,132 @@ func (db *DB) GetSpaceConnections(ctx context.Context, spaceID string) (SpaceCon
 	if err := rows.Err(); err != nil {
 		return out, err
 	}
-	brows, err := db.r.QueryContext(ctx, "SELECT environment, name, connection_id FROM space_bindings WHERE space_id = ?", spaceID)
+	nrows, err := db.r.QueryContext(ctx, "SELECT name, type FROM space_names WHERE space_id = ?", spaceID)
 	if err != nil {
 		return out, err
 	}
-	defer func() { _ = brows.Close() }()
-	for brows.Next() {
-		var env, name, conn string
-		if err := brows.Scan(&env, &name, &conn); err != nil {
+	defer func() { _ = nrows.Close() }()
+	for nrows.Next() {
+		var name, typ string
+		if err := nrows.Scan(&name, &typ); err != nil {
 			return out, err
 		}
-		if out.Environments[env] != nil {
-			out.Environments[env][name] = conn
-		}
+		out.Names[name] = typ
 	}
-	return out, brows.Err()
+	return out, nrows.Err()
 }
 
-// SetSpaceConnections replaces a space's environments and bindings at once
-// (the caller has checked them); ErrNotFound if a connection is gone.
-func (db *DB) SetSpaceConnections(ctx context.Context, spaceID string, sc SpaceConnections) error {
+// SetSpaceNames replaces a space's declarations (the caller has checked
+// them). Members' bindings stay where they still fit: those of an
+// environment or a name that goes, or of a name whose type changes, go.
+func (db *DB) SetSpaceNames(ctx context.Context, spaceID string, sn SpaceNames) error {
 	tx, err := db.w.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, "DELETE FROM space_environments WHERE space_id = ?", spaceID); err != nil {
+	envs := append([]string{}, sn.Environments...) // never nil: ANY(NULL) would match nothing
+	if _, err := tx.ExecContext(ctx, "DELETE FROM space_environments WHERE space_id = ? AND NOT (name = ANY(?::text[]))", spaceID, envs); err != nil {
 		return err
 	}
-	for env, binds := range sc.Environments {
-		if _, err := tx.ExecContext(ctx, "INSERT INTO space_environments (space_id, name, is_default) VALUES (?, ?, ?)", spaceID, env, env == sc.Default); err != nil {
+	for _, env := range envs {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO space_environments (space_id, name, is_default) VALUES (?, ?, false)
+			ON CONFLICT (space_id, name) DO NOTHING`, spaceID, env); err != nil {
 			return err
 		}
+	}
+	// One default at a time (a unique index): clear, then set.
+	if _, err := tx.ExecContext(ctx, "UPDATE space_environments SET is_default = false WHERE space_id = ?", spaceID); err != nil {
+		return err
+	}
+	if sn.Default != "" {
+		if _, err := tx.ExecContext(ctx, "UPDATE space_environments SET is_default = true WHERE space_id = ? AND name = ?", spaceID, sn.Default); err != nil {
+			return err
+		}
+	}
+	names := make([]string, 0, len(sn.Names))
+	for n := range sn.Names {
+		names = append(names, n)
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM space_names WHERE space_id = ? AND NOT (name = ANY(?::text[]))", spaceID, names); err != nil {
+		return err
+	}
+	for name, typ := range sn.Names {
+		// A type that changes drops the name's bindings (to connections of the old type).
+		if _, err := tx.ExecContext(ctx, "DELETE FROM space_names WHERE space_id = ? AND name = ? AND type <> ?", spaceID, name, typ); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO space_names (space_id, name, type) VALUES (?, ?, ?)
+			ON CONFLICT (space_id, name) DO NOTHING`, spaceID, name, typ); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// Bindings are one member's connections for a space's names: environment
+// -> name -> connection ID.
+type Bindings map[string]map[string]string
+
+// GetBindings returns principal's bindings in a space.
+func (db *DB) GetBindings(ctx context.Context, spaceID, principal string) (Bindings, error) {
+	out := Bindings{}
+	rows, err := db.r.QueryContext(ctx, "SELECT environment, name, connection_id FROM space_bindings WHERE space_id = ? AND principal = ?", spaceID, principal)
+	if err != nil {
+		return out, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var env, name, conn string
+		if err := rows.Scan(&env, &name, &conn); err != nil {
+			return out, err
+		}
+		if out[env] == nil {
+			out[env] = map[string]string{}
+		}
+		out[env][name] = conn
+	}
+	return out, rows.Err()
+}
+
+// BoundNames returns which names each member has bound, per environment
+// (never to which connection): principal -> environment -> names.
+func (db *DB) BoundNames(ctx context.Context, spaceID string) (map[string]map[string][]string, error) {
+	out := map[string]map[string][]string{}
+	rows, err := db.r.QueryContext(ctx, "SELECT principal, environment, name FROM space_bindings WHERE space_id = ? ORDER BY principal, environment, name", spaceID)
+	if err != nil {
+		return out, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var p, env, name string
+		if err := rows.Scan(&p, &env, &name); err != nil {
+			return out, err
+		}
+		if out[p] == nil {
+			out[p] = map[string][]string{}
+		}
+		out[p][env] = append(out[p][env], name)
+	}
+	return out, rows.Err()
+}
+
+// SetBindings replaces principal's bindings in a space (the caller has
+// checked them against the declarations); ErrNotFound if a connection,
+// environment or name is gone meanwhile.
+func (db *DB) SetBindings(ctx context.Context, spaceID, principal string, b Bindings) error {
+	tx, err := db.w.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, "DELETE FROM space_bindings WHERE space_id = ? AND principal = ?", spaceID, principal); err != nil {
+		return err
+	}
+	for env, binds := range b {
 		for name, conn := range binds {
-			_, err := tx.ExecContext(ctx, "INSERT INTO space_bindings (space_id, environment, name, connection_id) VALUES (?, ?, ?, ?)", spaceID, env, name, conn)
+			_, err := tx.ExecContext(ctx, "INSERT INTO space_bindings (space_id, principal, environment, name, connection_id) VALUES (?, ?, ?, ?, ?)",
+				spaceID, principal, env, name, conn)
 			var pe *pgconn.PgError
 			if errors.As(err, &pe) && pe.Code == "23503" {
 				return ErrNotFound

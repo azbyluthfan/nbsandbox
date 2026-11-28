@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -180,7 +181,9 @@ func TestSpaceBindings(t *testing.T) {
 	}
 	for name, bad := range map[string]SpaceInput{
 		"different names":       {Default: "dev", Environments: map[string]map[string]string{"dev": {"crm": "crm-dev"}, "prod": {"billing": "crm-prod"}}},
-		"no default":            {Environments: map[string]map[string]string{"dev": {"crm": "crm-dev"}, "prod": {"crm": "crm-prod"}}},
+		"a default not listed":  {Default: "qa", Environments: map[string]map[string]string{"dev": {"crm": "crm-dev"}, "prod": {"crm": "crm-prod"}}},
+		"an undeclared env":     {Environments: map[string]map[string]string{"staging": {"crm": "crm-dev"}}},
+		"an undeclared name":    {Environments: map[string]map[string]string{"dev": {"lake": "crm-dev"}}},
 		"another's connection":  {Environments: map[string]map[string]string{"dev": {"crm": bobs.ID}}},
 		"an unknown connection": {Environments: map[string]map[string]string{"dev": {"crm": "nope"}}},
 		"a bad name":            {Environments: map[string]map[string]string{"dev": {"crm-x": "crm-dev"}}},
@@ -199,11 +202,13 @@ func TestSpaceBindings(t *testing.T) {
 	if cur, _ := s.Space(ctx, "alice", "s1"); len(cur.Environments) != 2 {
 		t.Fatalf("a refused change changed something: %+v", cur)
 	}
-	// One environment: it's the default. None: everything unbound.
-	if got, err := s.SetSpace(ctx, "alice", "s1", SpaceInput{Environments: map[string]map[string]string{"main": {"crm": "crm-dev"}}}); err != nil || got.Default != "main" {
+	// Declaring again replaces the environments (prod goes, with its
+	// bindings). Without default_environment, only the caller's bindings
+	// change: none left, crm is missing.
+	if got, err := s.SetSpace(ctx, "alice", "s1", SpaceInput{Default: "main", Environments: map[string]map[string]string{"main": {"crm": "crm-dev"}}}); err != nil || got.Default != "main" || len(got.Environments) != 1 {
 		t.Fatalf("one environment: %+v %v", got, err)
 	}
-	if got, err := s.SetSpace(ctx, "alice", "s1", SpaceInput{}); err != nil || len(got.Environments) != 0 {
+	if got, err := s.SetSpace(ctx, "alice", "s1", SpaceInput{}); err != nil || len(got.Environments["main"]) != 0 || fmt.Sprint(got.Missing["main"]) != "[crm]" {
 		t.Fatalf("cleared: %+v %v", got, err)
 	}
 	if err := s.Delete(ctx, "alice", prod.ID); err != nil {
