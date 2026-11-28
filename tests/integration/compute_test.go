@@ -126,15 +126,19 @@ time.sleep(5)`, steps))})
 	var u usage
 	r.json(t, &u)
 	n := len(u.Samples)
-	grew := n >= minSamples && u.Samples[n-1].MemoryBytes > u.Samples[0].MemoryBytes+100<<20 && u.Samples[n-1].MemoryBytes < u.Limits.MemoryBytes
+	// The peak, not the last sample: the last can come after the kernel
+	// has exited and let its memory go, while the run's outputs are saved.
+	var peak int64
 	busy := false
 	for _, s := range u.Samples {
 		busy = busy || s.CPUs > 0.01
+		peak = max(peak, s.MemoryBytes)
 	}
+	grew := n >= minSamples && peak > u.Samples[0].MemoryBytes+100<<20 && peak < u.Limits.MemoryBytes
 	other := call(t, "GET", "/v1/spaces/"+sp+"/runs/"+run.ID+"/usage", "bob", nil, nil).Code
 
-	got := fmt.Sprintf("%d samples, memory %d → %d MiB (limit %d MiB), CPU seen: %v; its worker's totals while it ran: %v; another user: %d",
-		n, first(u.Samples).MemoryBytes>>20, last(u.Samples).MemoryBytes>>20, u.Limits.MemoryBytes>>20, busy, sampled, other)
+	got := fmt.Sprintf("%d samples, memory %d MiB at first, %d MiB at its peak, %d MiB last (limit %d MiB), CPU seen: %v; its worker's totals while it ran: %v; another user: %d",
+		n, first(u.Samples).MemoryBytes>>20, peak>>20, last(u.Samples).MemoryBytes>>20, u.Limits.MemoryBytes>>20, busy, sampled, other)
 	ok := grew && busy && sampled && other == http.StatusNotFound
 	finding(t, "compute-run-usage", "a notebook that grows by 6 MiB every half second and computes; read its usage during and after",
 		"samples every few seconds follow its memory up to below its limit and show its CPU; its worker's totals include it while it runs; another user gets 404", got, ok)
