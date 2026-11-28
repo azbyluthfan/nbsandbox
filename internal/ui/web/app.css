@@ -667,3 +667,10 @@ table.bindings th.env code { font-size: 13px; color: var(--text); }
   background: var(--info-soft); color: var(--text); border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 12px; }
 .space-connections .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 table.connections td { vertical-align: middle; }
+
+/* A shared space's members (docs/plan-shared-spaces.md). */
+.members .scroll-x { overflow-x: auto; }
+.badge-role { font-size: 12px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 1px 8px; }
+.members .grant { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; padding: 0 12px 12px; }
+.members .grant input { flex: 1 1 16rem; min-width: 0; }
+.members p.small { padding: 0 12px 12px; margin: 0; }

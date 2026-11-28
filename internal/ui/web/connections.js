@@ -231,47 +231,58 @@ function editDialog(api, c, done) {
 // ---------- a space's names ----------
 
 /**
- * The space's names per environment, editable: a table with a row per
- * name and a column per environment, each cell one of the user's
- * connections. Every environment binds every name.
+ * The space's names per environment: a table with a row per name and a
+ * column per environment. Owners declare the names, their types and the
+ * environments (docs/plan-shared-spaces.md); every member, owners too,
+ * chooses which of their own connections each name means, and sees what
+ * their runs still need.
  */
-export function spaceConnectionsSection(api, space, onConnections) {
+export function spaceConnectionsSection(api, space, role, onConnections) {
+  const owner = role === "owner";
   const section = el("section", { class: "section space-connections", hidden: true });
-  let model; // {default, envs: [names], names: [names], cells: {env: {name: connId}}}
+  let model; // {default, envs: [names], names: {name: type}, cells: {env: {name: connId}}}
   let conns = [];
   const draw = () => {
+    const names = Object.keys(model.names).sort();
     const opts = (env, name) => el("select", { "aria-label": `${name} in ${env}`, onchange: (e) => { model.cells[env][name] = e.target.value; draw(); } },
       el("option", { value: "" }, "—"),
-      conns.map((c) => el("option", { value: c.id, selected: model.cells[env][name] === c.id }, `${c.name} (${(TYPES[c.type] || { label: c.type }).label})`)));
+      conns.filter((c) => c.type === model.names[name]).map((c) => el("option", { value: c.id, selected: model.cells[env][name] === c.id }, c.name)));
+    const typeCell = (name) => owner
+      ? el("select", { "aria-label": `${name}'s type`, onchange: (e) => {
+        model.names[name] = e.target.value;
+        for (const env of model.envs) delete model.cells[env][name]; // connections of the old type
+        draw();
+      } }, Object.entries(TYPES).map(([k, t]) => el("option", { value: k, selected: model.names[name] === k }, t.label)))
+      : el("span", { class: "muted" }, (TYPES[model.names[name]] || { label: model.names[name] }).label);
     // Rows are names, columns environments: say so, and show the
     // environments as the lowercase names they are (the table's headings
     // are uppercase), with which one is the default.
     const table = el("table", { class: "list bindings" },
       el("thead", {},
-        el("tr", {}, el("th", {}), el("th", { colspan: model.envs.length, class: "group" }, "Environments"), el("th", {})),
-        el("tr", {}, el("th", {}, "Name"), model.envs.map((env) => el("th", { class: "env" },
-        el("label", { title: "Runs, sessions and function calls use the default environment unless they choose another" },
-          el("input", { type: "radio", name: "default-env", checked: env === model.default,
-            onchange: () => { model.default = env; draw(); } }),
-          el("code", {}, env), env === model.default ? el("span", { class: "default-env" }, "default") : null),
-        el("button", { type: "button", class: "ghost small", title: `Remove ${env}`, onclick: () => {
-          model.envs = model.envs.filter((e) => e !== env);
-          delete model.cells[env];
-          if (model.default === env) model.default = model.envs[0] || "";
-          draw();
-        } }, icon("x")))), el("th", {}))),
-      el("tbody", {}, model.names.map((name) => el("tr", {}, el("td", {}, el("code", {}, name)),
+        el("tr", {}, el("th", {}), el("th", {}), el("th", { colspan: model.envs.length, class: "group" }, "Environments"), el("th", {})),
+        el("tr", {}, el("th", {}, "Name"), el("th", {}, "Type"), model.envs.map((env) => el("th", { class: "env" },
+          el("label", { title: "Runs, sessions and function calls use the default environment unless they choose another" },
+            owner ? el("input", { type: "radio", name: "default-env", checked: env === model.default,
+              onchange: () => { model.default = env; draw(); } }) : null,
+            el("code", {}, env), env === model.default ? el("span", { class: "default-env" }, "default") : null),
+          owner ? el("button", { type: "button", class: "ghost small", title: `Remove ${env}`, onclick: () => {
+            model.envs = model.envs.filter((e) => e !== env);
+            delete model.cells[env];
+            if (model.default === env) model.default = model.envs[0] || "";
+            draw();
+          } }, icon("x")) : null)), el("th", {}))),
+      el("tbody", {}, names.map((name) => el("tr", {}, el("td", {}, el("code", {}, name)), el("td", {}, typeCell(name)),
         model.envs.map((env) => el("td", {}, opts(env, name))),
-        el("td", {}, el("button", { type: "button", class: "ghost small", title: `Remove ${name}`, onclick: () => {
-          model.names = model.names.filter((n) => n !== name);
+        el("td", {}, owner ? el("button", { type: "button", class: "ghost small", title: `Remove ${name}`, onclick: () => {
+          delete model.names[name];
           for (const env of model.envs) delete model.cells[env][name];
           draw();
-        } }, icon("trash")))))));
+        } }, icon("trash")) : null)))));
     const add = (what) => {
       const v = (prompt(what === "name" ? "A name notebooks will use (lowercase, e.g. crm):" : "An environment (lowercase, e.g. prod):") || "").trim();
       if (!v) return;
       if (!NAME.test(v)) return toast("Lowercase letters, digits and _; starting with a letter.");
-      if (what === "name" && !model.names.includes(v)) model.names.push(v);
+      if (what === "name" && !model.names[v]) model.names[v] = conns[0] ? conns[0].type : "postgresql";
       if (what === "env" && !model.envs.includes(v)) {
         model.envs.push(v);
         model.cells[v] = {};
@@ -279,18 +290,21 @@ export function spaceConnectionsSection(api, space, onConnections) {
       }
       draw();
     };
-    // Every environment binds every name: Save once each cell has a
-    // connection (the server refuses less), saying what's missing. An empty
-    // table saves too: it unbinds everything.
-    const missing = model.envs.flatMap((env) => model.names.filter((n) => !model.cells[env][n]).map((n) => `${n} in ${env}`));
-    const why = !conns.length ? "" : missing.length ? `Choose a connection for ${missing.slice(0, 3).join(", ")}${missing.length > 3 ? ", …" : ""}.` : "";
-    const save = el("button", { type: "button", disabled: missing.length > 0 || (!conns.length && model.names.length > 0) }, icon("save"), "Save");
+    // What this caller's runs still need: a run needs every name bound in
+    // the environment it uses. Saving with gaps is allowed.
+    const missing = model.envs.flatMap((env) => names.filter((n) => !model.cells[env][n]).map((n) => `${n} in ${env}`));
+    const why = missing.length ? `Your runs need a connection for ${missing.slice(0, 3).join(", ")}${missing.length > 3 ? ", …" : ""}.` : "";
+    const save = el("button", { type: "button" }, icon("save"), "Save");
     save.addEventListener("click", async () => {
       const environments = {};
-      for (const env of model.envs) environments[env] = { ...model.cells[env] };
+      for (const env of model.envs) {
+        environments[env] = {};
+        for (const [n, id] of Object.entries(model.cells[env])) if (id && model.names[n]) environments[env][n] = id;
+      }
       save.disabled = true;
       try {
-        await api.setSpaceConnections(space, { default_environment: model.default, environments });
+        if (owner) await api.setSpaceNames(space, { default_environment: model.default, environments: model.envs, names: model.names });
+        await api.setSpaceConnections(space, { environments });
         toast("Saved.", "info");
         load();
       } catch (e) {
@@ -299,33 +313,35 @@ export function spaceConnectionsSection(api, space, onConnections) {
         save.disabled = false;
       }
     });
+    const empty = owner
+      ? "Add a name notebooks query (crm, lake, events), its type and an environment (dev, prod), then choose which of your connections each name means there."
+      : "This space declares no names yet: its owners add them.";
     clear(section).append(
       el("div", { class: "section-head" }, el("h2", {}, "Connections"),
-        el("span", { class: "muted" }, "names notebooks query, per environment")),
+        el("span", { class: "muted" }, owner ? "names notebooks use, per environment; each member chooses their own connections"
+          : "names notebooks use: choose your own connection for each")),
       el("div", { class: "card" },
-        conns.length ? null : el("div", { class: "notice" },
-          el("span", {}, "You have no connections yet. Add one (a database or a bucket), then choose it here."),
+        conns.length || !names.length ? null : el("div", { class: "notice" },
+          el("span", {}, "You have no connections yet. Add one (a database, a bucket or an API), then choose it here."),
           el("button", { type: "button", onclick: onConnections }, icon("plus"), "Add a connection")),
-        model.names.length && model.envs.length ? el("div", { class: "scroll-x" }, table) : el("p", { class: "muted" },
-          "Add a name notebooks query (crm, lake) and an environment (dev, prod), then choose which of your connections each name means there."),
+        names.length && model.envs.length ? el("div", { class: "scroll-x" }, table) : el("p", { class: "muted" }, empty),
         el("div", { class: "actions" },
-          el("button", { type: "button", class: "ghost", onclick: () => add("name") }, icon("plus"), "Name"),
-          el("button", { type: "button", class: "ghost", onclick: () => add("env") }, icon("plus"), "Environment"),
-          save,
+          owner ? el("button", { type: "button", class: "ghost", onclick: () => add("name") }, icon("plus"), "Name") : null,
+          owner ? el("button", { type: "button", class: "ghost", onclick: () => add("env") }, icon("plus"), "Environment") : null,
+          owner || names.length ? save : null,
           why ? el("span", { class: "muted small" }, why) : null)));
   };
   const load = async () => {
     try {
-      const [sc, list] = await Promise.all([api.spaceConnections(space), api.connections()]);
+      const [sn, sc, list] = await Promise.all([api.spaceNames(space), api.spaceConnections(space), api.connections()]);
       conns = list;
-      const envs = Object.keys(sc.environments || {}).sort();
-      const names = [...new Set(envs.flatMap((e) => Object.keys(sc.environments[e])))].sort();
+      const envs = [...(sn.environments || [])];
       const cells = {};
       for (const env of envs) {
         cells[env] = {};
-        for (const [n, b] of Object.entries(sc.environments[env])) cells[env][n] = b.id;
+        for (const [n, b] of Object.entries((sc.environments || {})[env] || {})) cells[env][n] = b.id;
       }
-      model = { default: sc.default_environment || envs[0] || "", envs, names, cells };
+      model = { default: sn.default_environment || envs[0] || "", envs, names: { ...(sn.names || {}) }, cells };
       section.hidden = false;
       draw();
     } catch (e) {

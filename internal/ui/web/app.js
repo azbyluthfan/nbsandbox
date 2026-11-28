@@ -30,6 +30,7 @@ import { loadCompletions } from "./complete.js";
 import { sessionBar } from "./sessionbar.js";
 import { showCompute } from "./compute.js";
 import { connectionsOn, showConnections, spaceConnectionsSection, environmentPicker, chosenEnvironment } from "./connections.js";
+import { membersSection, allows } from "./members.js";
 
 const $ = (id) => document.getElementById(id);
 const NEW_SPACE = "__new__";
@@ -311,13 +312,16 @@ function renderTree() {
   const tools = clear($("explorer-tools"));
   const box = clear($("file-tree"));
   if (!state.space) return;
-  tools.append(
-    el("button", { type: "button", class: "icon-button", title: "New file", "aria-label": "New file", onclick: () => newFile(currentFolder()) }, icon("plus")),
-    el("button", { type: "button", class: "icon-button", title: "New folder", "aria-label": "New folder", onclick: () => newFolder(currentFolder()) }, icon("folder")),
-    uploadButton(() => currentFolder(), true),
-  );
+  const canWrite = allows(roleHere(), "write");
+  if (canWrite) {
+    tools.append(
+      el("button", { type: "button", class: "icon-button", title: "New file", "aria-label": "New file", onclick: () => newFile(currentFolder()) }, icon("plus")),
+      el("button", { type: "button", class: "icon-button", title: "New folder", "aria-label": "New folder", onclick: () => newFolder(currentFolder()) }, icon("folder")),
+      uploadButton(() => currentFolder(), true),
+    );
+  }
   const sel = selected();
-  if (state.files.length === 0) box.append(el("p", { class: "muted" }, "No files yet. Drop files here."));
+  if (state.files.length === 0) box.append(el("p", { class: "muted" }, canWrite ? "No files yet. Drop files here." : "No files yet."));
   const render = (node) => {
     const ul = el("ul");
     for (const [, child] of [...node.dirs].sort((a, b) => a[0].localeCompare(b[0]))) {
@@ -359,6 +363,17 @@ function currentFolder() {
   return "";
 }
 
+/** The caller's role in the open space (docs/plan-shared-spaces.md). */
+function roleHere() {
+  const sp = state.spaces.find((s) => s.id === state.space);
+  return (sp && sp.role) || "owner";
+}
+
+/** Who started a run, when it isn't the caller. */
+function byWhom(r) {
+  return r.owner && r.owner !== state.user ? `by ${r.owner}` : "";
+}
+
 function runTitle(r) {
   return r.function ? `${r.function} v${r.version}` : r.notebook;
 }
@@ -379,7 +394,7 @@ function renderRuns() {
       : r.status === "queued" && r.queue_position ? `position ${r.queue_position} in the queue` : duration(r);
     list.append(el("li", {}, el("button", { type: "button", onclick: () => go(state.user, state.space, "r", r.id), title: r.id },
       badge(r.status), el("span", { class: "nb" }, runTitle(r)), el("span", { class: "when" }, timeAgo(r.created_at)),
-      el("span", { class: "sub" }, [r.id.slice(0, 8), detail, r.read_only_space ? "read-only" : ""].filter(Boolean).join(" · ")))));
+      el("span", { class: "sub" }, [r.id.slice(0, 8), detail, byWhom(r), r.read_only_space ? "read-only" : ""].filter(Boolean).join(" · ")))));
   }
 }
 
@@ -591,13 +606,15 @@ function showSpaces() {
     el("div", { class: "section" }, el("div", { class: "cards" },
       state.spaces.map((s) => el("button", { type: "button", class: "card space-card", onclick: () => go(state.user, s.id) },
         el("span", { class: "title" }, icon("box"), s.name || s.id.slice(0, 8)),
-        el("span", { class: "muted" }, `created ${timeAgo(s.created_at)}`))),
+        el("span", { class: "muted" }, s.owner && s.owner !== state.user
+          ? `shared by ${s.owner} · you can ${s.role === "read" ? "read" : s.role === "write" ? "read and write" : "manage it"}`
+          : `created ${timeAgo(s.created_at)}`))),
       el("button", { type: "button", class: "card space-card new", onclick: createSpace }, icon("plus"), "New space"),
     )),
     state.connectionsOn ? el("div", { class: "section" }, el("button", { type: "button", class: "card space-card",
       onclick: () => go(state.user, "~connections") },
     el("span", { class: "title" }, icon("table"), "Connections"),
-    el("span", { class: "muted" }, "your databases and object storage, for notebooks to query"))) : null,
+    el("span", { class: "muted" }, "your databases, object storage and APIs, for notebooks to use"))) : null,
     el("div", { class: "section" }, el("button", { type: "button", class: "card space-card", onclick: () => go(state.user, "~compute") },
       el("span", { class: "title" }, icon("activity"), "Compute"),
       el("span", { class: "muted" }, "the workers that run notebooks, and how busy each is"))),
@@ -670,6 +687,7 @@ function filesTable(dir) {
 }
 
 function createActions(dir) {
+  if (!allows(roleHere(), "write")) return el("span", { class: "muted" }, "read only: you can open files and runs");
   return el("div", { class: "quick-actions" },
     el("button", { type: "button", onclick: () => newNotebook(dir) }, icon("plus"), "New notebook"),
     uploadButton(() => dir),
@@ -773,12 +791,13 @@ function showOverview() {
   else {
     nbSection.append(el("div", { class: "card empty-state" }, icon("notebook"), el("h2", {}, "No notebooks yet"),
       el("p", {}, "Create one here, or upload notebooks and the data files they read. Notebooks run as Python 3, without network access."),
-      el("div", { class: "quick-actions" },
-        el("button", { type: "button", onclick: () => newNotebook("") }, icon("plus"), "New notebook"), uploadButton(() => ""))));
+      allows(roleHere(), "write") ? el("div", { class: "quick-actions" },
+        el("button", { type: "button", onclick: () => newNotebook("") }, icon("plus"), "New notebook"), uploadButton(() => "")) : null));
   }
   page.append(nbSection);
   page.append(packagesSection(state.space));
-  if (state.connectionsOn) page.append(spaceConnectionsSection(state.api, state.space, () => go(state.user, "~connections")));
+  if (state.connectionsOn) page.append(spaceConnectionsSection(state.api, state.space, roleHere(), () => go(state.user, "~connections")));
+  page.append(membersSection(state.api, state.space, state.user, roleHere(), (left) => (left ? go(state.user) : reload())));
 
   if (state.runs.length) {
     const recent = state.runs.slice(0, 6);
@@ -786,11 +805,13 @@ function showOverview() {
       el("div", { class: "section-head" }, el("h2", {}, "Recent runs"), el("span", { class: "spacer" }),
         state.runs.length > recent.length ? el("button", { type: "button", class: "link", onclick: () => openDrawer("runs", false) }, `All ${state.runs.length}`) : null),
       el("div", { class: "card table-card" }, el("table", { class: "list" },
-        el("thead", {}, el("tr", {}, el("th", {}, "Status"), el("th", {}, "Notebook or function"), el("th", { class: "hide-narrow" }, "Duration"), el("th", {}, "Started"))),
+        el("thead", {}, el("tr", {}, el("th", {}, "Status"), el("th", {}, "Notebook or function"), el("th", { class: "hide-narrow" }, "By"),
+          el("th", { class: "hide-narrow" }, "Duration"), el("th", {}, "Started"))),
         el("tbody", {}, recent.map((r) => {
           const tr = el("tr", { class: "clickable", title: r.id },
             el("td", {}, badge(r.status)),
             el("td", {}, el("div", { class: "name-cell" }, icon(r.function ? "function" : "notebook"), el("span", {}, runTitle(r)))),
+            el("td", { class: "muted hide-narrow" }, r.owner === state.user ? "you" : r.owner || ""),
             el("td", { class: "num hide-narrow" }, duration(r)),
             el("td", { class: "when" }, timeAgo(r.created_at)));
           tr.addEventListener("click", () => go(state.user, state.space, "r", r.id));
@@ -884,6 +905,11 @@ function runForm(path) {
     startRun(path, parameters, readOnly.checked, button);
   });
   const last = lastRunOf(path);
+  if (!allows(roleHere(), "write")) {
+    return el("div", { class: "run-form" }, el("span", { class: "muted" }, "You can read this space: running needs the write role."),
+      last ? el("button", { type: "button", class: "ghost small", title: "Open the last run", onclick: () => go(state.user, state.space, "r", last.id) },
+        "Last run", badge(last.status)) : null);
+  }
   return el("div", { class: "run-form" }, button, params,
     el("label", { title: "The run can't change the space's files, and may run beside other runs" }, readOnly, "Read-only"),
     state.connectionsOn ? environmentPicker(state.api, state.space) : null,

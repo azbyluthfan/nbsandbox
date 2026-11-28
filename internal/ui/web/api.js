@@ -245,6 +245,32 @@ export class Api {
     return this.request("PUT", `/spaces/${enc(space)}/connections`, body);
   }
 
+  // A space's declared names (docs/plan-shared-spaces.md).
+  spaceNames(space) {
+    return this.request("GET", `/spaces/${enc(space)}/names`);
+  }
+
+  setSpaceNames(space, body) {
+    return this.request("PUT", `/spaces/${enc(space)}/names`, body);
+  }
+
+  // A shared space's members.
+  async members(space) {
+    return (await this.request("GET", `/spaces/${enc(space)}/members`)).items;
+  }
+
+  putMember(space, principal, role) {
+    return this.request("PUT", `/spaces/${enc(space)}/members/${enc(principal)}`, { role });
+  }
+
+  deleteMember(space, principal) {
+    return this.request("DELETE", `/spaces/${enc(space)}/members/${enc(principal)}`);
+  }
+
+  transfer(space, to) {
+    return this.request("POST", `/spaces/${enc(space)}/transfer`, { to });
+  }
+
   deleteFunction(space, name) {
     return this.request("DELETE", `/spaces/${enc(space)}/functions/${enc(name)}`);
   }
