@@ -18,7 +18,7 @@ Run Jupyter notebooks headless, each in its own isolated sandbox, with live logs
 
 Every run executes in a **fresh, locked-down container or Pod**. Code in one space can't see another space's files, processes or memory, can't reach the network, and can't use up another run's resources. An automated test suite checks each of these and writes a report: Docker ([report](docs/isolation-report.md)), Linux with Docker Engine with `runc` and gVisor side by side ([report](docs/isolation-report-linux.md)), and Kubernetes ([report](docs/isolation-report-kubernetes.md)).
 
-> **Status:** v0.4, pre-1.0: the API is versioned (`/v1`) and follows the compatibility policy in [docs/api.md](docs/api.md), but expect changes between minor versions. See [Limitations](#limitations).
+> **Status:** v0.5, pre-1.0: the API is versioned (`/v1`) and follows the compatibility policy in [docs/api.md](docs/api.md), but expect changes between minor versions. See [Limitations](#limitations).
 
 **See it working:** [docs/tour.md](docs/tour.md) walks through the web editor and the API step by step, with a screenshot or the real output of each step.
 
@@ -96,8 +96,8 @@ Stop with `make down`. `make report` runs the isolation suite on your machine an
 Read [docs/security/threat-model.md](docs/security/threat-model.md) before deploying. In short:
 - **Users are trusted** not to attack the platform on purpose. Runs are hardened and tested, but with `runc` they share the host's kernel. For less trusted users, run notebooks under gVisor ([docs/gvisor.md](docs/gvisor.md)) or another sandbox RuntimeClass on Kubernetes.
 - **Python notebooks only.** Runs use the Python 3 kernel; a notebook written for another kernel (R, Julia, …) is refused when you run or publish it.
-- **No network in runs.** Notebooks can't `pip install`, and reach outside data only through their connections ([docs/connections.md](docs/connections.md)): no HTTP APIs from notebook code yet. A space's `requirements.txt` can add packages (wheels from the package index, built once into a set the space's runs import) when the operator turns it on, on Docker for now ([docs/packages.md](docs/packages.md)); otherwise build a runner image with the packages you need.
-- **Authentication:** bearer tokens from any OpenID Connect provider, or basic auth from a users file, with revocation, a limit on failed sign-ins, and a web UI sign-in. Not yet: sharing a space between users.
+- **No network in runs.** Notebooks can't `pip install`, and reach outside data only through their connections ([docs/connections.md](docs/connections.md)): databases, object storage, and HTTP APIs called through the run's fetcher, which adds the credential. A space's `requirements.txt` can add packages (wheels from the package index, built once into a set the space's runs import) when the operator turns it on, on Docker for now ([docs/packages.md](docs/packages.md)); otherwise build a runner image with the packages you need.
+- **Authentication:** bearer tokens from any OpenID Connect provider, or basic auth from a users file, with revocation, a limit on failed sign-ins, and a web UI sign-in. Spaces can be shared by caller ID ([docs/sharing.md](docs/sharing.md)); not yet with an identity provider's groups.
 - **No widgets or `input()` in sessions:** an interactive session's kernel can't ask for input, and ipywidgets and other JavaScript outputs show as text.
 - **Custom packages on Docker only** for now; Kubernetes is next.
 - **Reference platforms:** the isolation reports that count are Linux with Docker Engine and your own Kubernetes cluster. Docker Desktop and kind work for development.
@@ -111,6 +111,8 @@ Read [docs/security/threat-model.md](docs/security/threat-model.md) before deplo
 | [docs/functions.md](docs/functions.md) | Calling a notebook from your service: contracts, publishing, invoking, streamed output |
 | [docs/sessions.md](docs/sessions.md) | Interactive sessions: a notebook's live kernel, in the editor or through the API |
 | [docs/packages.md](docs/packages.md) | A space's own Python packages (`requirements.txt`) |
+| [docs/connections.md](docs/connections.md) | Reading data where it lives: databases, object storage and HTTP APIs, by names a space gives them |
+| [docs/sharing.md](docs/sharing.md) | Sharing a space: roles, and each member's own connections |
 | [docs/api.md](docs/api.md) and [api/openapi.yaml](api/openapi.yaml) | The REST and gRPC APIs and their compatibility policy |
 | [docs/mcp.md](docs/mcp.md) | AI agents: the MCP server, its tools and how to connect Claude |
 | [docs/auth.md](docs/auth.md) | Authentication: tokens from your identity provider, scopes, quotas, administration |

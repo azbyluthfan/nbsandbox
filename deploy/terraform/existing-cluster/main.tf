@@ -57,12 +57,12 @@ variable "s3_secret_key" {
 
 variable "nbsandbox_image" {
   type    = string
-  default = "ghcr.io/azbyluthfan/nbsandboxd:0.4.0"
+  default = "ghcr.io/azbyluthfan/nbsandboxd:0.5.0"
 }
 
 variable "runner_image" {
   type    = string
-  default = "ghcr.io/azbyluthfan/nbsandbox-runner:0.4.0"
+  default = "ghcr.io/azbyluthfan/nbsandbox-runner:0.5.0"
 }
 
 variable "runtime_class" {

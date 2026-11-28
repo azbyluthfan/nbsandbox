@@ -28,6 +28,12 @@ A role goes to a **caller ID**, exactly as nbsandbox records callers: a username
 - **Files** are saved with the version the editor read (`If-Match`), so two members can't overwrite each other's changes unnoticed.
 - **Leaving** or being removed doesn't stop runs already started. Your bindings in the space go with you.
 
+## What sharing trusts
+
+- **Every member sees every run's output,** including what a run read with its starter's own connections. Share a space only with people who may see the data its members' runs read, or keep sensitive work in a space of your own.
+- **`write` lets a member change the notebooks others run** with their own connections: a changed notebook could send what your run reads to its output. Grant `write` only to people you'd trust with the data your runs in that space read; `read` can't change anything.
+- Published function versions can't change once published, so calling one runs exactly what was published, whoever publishes next.
+
 ## Through the API
 
 ```sh

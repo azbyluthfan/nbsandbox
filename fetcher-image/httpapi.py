@@ -346,7 +346,9 @@ class Handler(BaseHTTPRequestHandler):
             self._discard_body()
             return self._fail(403, f"the path leaves {name!r}'s URL")
         headers = []
-        drop = HOP | {"host", TOKEN_HEADER.lower(), api.token_header.lower()}
+        # The body's framing is the fetcher's to set (one Content-Length, or
+        # chunked): never the notebook's, which could disagree with it.
+        drop = HOP | {"host", "content-length", TOKEN_HEADER.lower(), api.token_header.lower()}
         for k in self.headers.get("Connection", "").split(","):
             drop.add(k.strip().lower())
         for k, v in self.headers.items():

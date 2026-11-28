@@ -78,7 +78,7 @@ A session ([sessions.md](sessions.md)) is a Pod like a run's, in the runs namesp
 
 ## Reading external data
 
-A run whose space binds connections ([connections.md](connections.md)) gets a **fetcher Pod** beside its run Pod, labelled `nbsandbox.fetcher` and `nbsandbox.role: fetcher`: the run Pod's hardening, the connections' Secrets mounted, no DNS. Two NetworkPolicies of the run's own let its runner reach its fetcher's port 8815 and nothing else in; a chart policy lets fetchers reach the egress gateway (a Deployment in the release namespace), the only way out. The worker creates the fetcher first, then the run Pod with the fetcher's address. Turn it on with `connections.enabled` and `connections.gateway.keySecret`.
+A run whose space binds connections ([connections.md](connections.md)) gets a **fetcher Pod** beside its run Pod, labelled `nbsandbox.fetcher` and `nbsandbox.role: fetcher`: the run Pod's hardening, the connections' Secrets mounted, no DNS. Two NetworkPolicies of the run's own let its runner reach its fetcher's ports (8815 for queries, 8816 for HTTP APIs) and nothing else in; a chart policy lets fetchers reach the egress gateway (a Deployment in the release namespace), the only way out. The worker creates the fetcher first, then the run Pod with the fetcher's address. Turn it on with `connections.enabled` and `connections.gateway.keySecret`.
 
 ## Usage while runs run
 
@@ -93,7 +93,7 @@ kubectl create namespace nbsandbox
 kubectl -n nbsandbox create secret generic nbsandbox-db --from-literal=database-url='postgres://…?sslmode=require'
 # For interactive sessions (sessions.secretName: nbsandbox-sessions in my-values.yaml):
 kubectl -n nbsandbox create secret generic nbsandbox-sessions --from-literal=secret="$(openssl rand -hex 32)"
-helm upgrade --install nbsandbox oci://ghcr.io/azbyluthfan/charts/nbsandbox --version 0.4.0 -n nbsandbox -f my-values.yaml
+helm upgrade --install nbsandbox oci://ghcr.io/azbyluthfan/charts/nbsandbox --version 0.5.0 -n nbsandbox -f my-values.yaml
 ```
 
 Releases publish the chart signed, on GHCR ([releasing.md](releasing.md) shows how to verify it); from a checkout, use `deploy/helm/nbsandbox` instead of the `oci://` address.

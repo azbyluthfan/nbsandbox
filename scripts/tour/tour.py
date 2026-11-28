@@ -219,10 +219,10 @@ def compute(page):
     time.sleep(6)  # a refresh with the run's usage
     shot(page, "19-compute")
 
-    # 20. The space's members: shared with bob.
+    # 20. The space's members: shared with carol.
     page.goto(f"{BASE}/#/{USER}/{SPACE}")
     members = page.locator(".members")
-    expect(members.get_by_text("bob")).to_be_visible(timeout=15_000)
+    expect(members.get_by_text("carol")).to_be_visible(timeout=15_000)
     members.scroll_into_view_if_needed()
     shot(page, "20-members")
 

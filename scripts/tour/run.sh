@@ -26,8 +26,10 @@ curl -fsS -u "$AUTH" -F file=@examples/notebooks/sales_report.ipynb -F file=@exa
 curl -fsS -u "$AUTH" -F file=@examples/notebooks/data/sales.csv "$API/v1/spaces/$space/files?folder=data" >/dev/null
 curl -fsS -u "$AUTH" -F file=@examples/notebooks/compute_demo.ipynb "$API/v1/spaces/$space/files" >/dev/null
 echo "space $space"
-# Shared with bob, for the Members screenshot (20).
-curl -fsS -u "$AUTH" -X PUT -H 'Content-Type: application/json' -d '{"role":"write"}' "$API/v1/spaces/$space/members/bob" >/dev/null
+# Shared with carol, for the Members screenshot (20); bob stays without a
+# role, for the API part's "another user sees nothing".
+curl -fsS -u "$AUTH" -X PUT -H 'Content-Type: application/json' -d '{"role":"write"}' "$API/v1/spaces/$space/members/carol" >/dev/null
+curl -fsS -u "$AUTH" -X DELETE "$API/v1/spaces/$space/members/bob" >/dev/null 2>&1 || true
 
 # With connections on: a database named crm in two environments, and an
 # HTTP API named events, in a space of its own (a space that binds names

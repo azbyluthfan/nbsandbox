@@ -12,7 +12,7 @@ The web UI ships with nbsandboxd. With `make up` it runs on http://127.0.0.1:809
 
 ![The list of spaces](images/tour/01-spaces.png)
 
-A **space** holds notebooks, data files and runs. It belongs to one user (here `alice`, picked at the top right); another user can't see it, list it or guess its contents.
+A **space** holds notebooks, data files and runs. It belongs to the user who made it (here `alice`, picked at the top right); nobody else can see it, list it or guess its contents unless she shares it ([step 20](#20-sharing-a-space)).
 
 ### 2. A space
 
@@ -124,7 +124,7 @@ A run's page names the worker it runs on and charts its memory (against its limi
 
 ### 20. Sharing a space
 
-![A space's Members section: alice, its creator, and bob with write; a field to grant someone a role](images/tour/20-members.png)
+![A space's Members section: alice, its creator, and carol with write; a field to grant someone a role](images/tour/20-members.png)
 
 A space's **Members** lists who works in it. Its owners grant others `read`, `write` or `owner`, by caller ID; everyone sees every run in the space, and each member reads data with their own connections under the space's names ([sharing.md](sharing.md)).
 
@@ -176,7 +176,7 @@ curl -s -u $A -H 'Content-Type: application/json' -H 'Idempotency-Key: tour-1' \
 ```
 
 ```json
-{"id":"e768c889-c007-4fb9-9fcc-fe97f08ade16","space_id":"f87d8e2a-6c51-48be-bcf8-1abd7a157da6","notebook":"sales_report.ipynb","notebook_sha256":"7f4525dd0ddc1bb22b766ab97aa48c8db0d0c371a654fc3de10338570c8b3f83","read_only_space":false,"parameters":{"months":3,"region":"jakarta"},"status":"queued","retryable":false,"queue_position":1,"created_at":"2026-11-08T05:46:46.494Z"}
+{"id":"e768c889-c007-4fb9-9fcc-fe97f08ade16","space_id":"f87d8e2a-6c51-48be-bcf8-1abd7a157da6","notebook":"sales_report.ipynb","notebook_sha256":"7f4525dd0ddc1bb22b766ab97aa48c8db0d0c371a654fc3de10338570c8b3f83","read_only_space":false,"owner":"alice","parameters":{"months":3,"region":"jakarta"},"status":"queued","retryable":false,"queue_position":1,"created_at":"2026-11-08T05:46:46.494Z"}
 ```
 
 The `Idempotency-Key` makes a retry safe: the same key returns the same run instead of starting a second one.
@@ -329,7 +329,7 @@ HTTP 404
 {"error":{"code":"not_found","message":"not found"}}
 ```
 
-Another user's space doesn't exist as far as bob is concerned: `404`, never `403`, so its existence isn't revealed either.
+A space bob has no role in doesn't exist as far as he is concerned: `404`, never `403`, so its existence isn't revealed either.
 
 ## Next
 

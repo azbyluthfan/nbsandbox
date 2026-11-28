@@ -19,7 +19,7 @@ Status: **reviewed for v0.3.0** (2026-11-21: interactive sessions added; 2026-11
 |---|---|---|
 | A trusted user, by mistake | trusted | notebook reads the wrong files, runs away with memory or CPU, prints forever |
 | Notebook code (the user's own, or code the user copied from elsewhere) | **untrusted at run time** | tries to read other spaces, escape the container, reach the network or Docker, exhaust resources |
-| Another authenticated user | trusted, but must not see other users' spaces | guesses space or run IDs through the API |
+| Another authenticated user | trusted, but must not see other users' spaces unless granted a role, nor do more there than their role allows | guesses space or run IDs through the API; uses a role beyond what it allows |
 | Someone on the network without credentials | untrusted | brute-forces credentials, abuses the API |
 | A compromised nbsandboxd | out of scope for v1 | can create any container through the proxy |
 
@@ -30,7 +30,7 @@ client ──HTTPS──▶ Caddy ──▶ nbsandboxd ──▶ socket proxy �
       network → service   user → other users' data   nbsandboxd → Docker     notebook → everything else
 ```
 - **Network → service:** TLS and basic auth.
-- **User → another user's data:** ownership checks in nbsandboxd.
+- **User → another user's data:** a role check in nbsandboxd on every space request (none: `404`; too low: `403`).
 - **nbsandboxd → Docker:** the proxy's allowlist of Docker API calls.
 - **Notebook → everything else:** the run container's settings (no network, read-only image, no capabilities, uid 1000, limits).
 
@@ -72,13 +72,21 @@ A reading run has a network of its own, shared only with its fetcher ([connectio
 | The fetcher reaches places its run doesn't need | Its only way out is the gateway, which allows the endpoints in the run's signed token, resolves names itself, and refuses loopback and link-local addresses whatever the token says | gateway unit tests; `connections-direct_*` |
 | A connection points somewhere it shouldn't (the metadata service, nbsandbox's own database) | `connections.allowed`, checked when a connection is created and when a run starts; loopback and link-local refused always; the gateway alone on its own network on Docker | unit tests (`internal/connections`, `internal/gateway`) |
 | Someone on the network between the gateway and a source reads the data or a password | `tls: verify` checks the database's certificate and name (Postgres through libpq's `hostaddr`, MySQL through a host alias to the fetcher's forwarder); HTTPS object storage is always checked. Not the default for databases (`prefer`: encrypted when offered, unchecked), and not possible for SQL Server yet (its DuckDB extension, 0.2.5, checks no certificate) | `TestConnectionsTLS` (`make test-connections`, `make test-k8s`): verified sources read; another authority, another name, or `off` against a TLS-only server fail the run |
+| Notebook calls an HTTP API beyond its connection (other paths, other hosts, after a redirect) | The fetcher forwards only paths under the connection's URL (checked after percent-decoding and `..`; encoded slashes refused), to its host through the gateway; it follows no redirect and sends the credential to nothing else; the run reaches only its fetcher | `connections-http_outside_path`, `…http_direct`, `…http_unbound`; `fetcher-image/tests/test_httpapi.py` |
+| An HTTP API's credential reaches the run | The fetcher sets it on the way out and strips the run's token; it never appears in the run's environment, files or log; the API's own answers come back as they are | `connections-http_credentials`, `TestConnectionsHTTP` (the run's log searched) |
+| Something on the run's network calls the fetcher's HTTP port without the run | Each request needs the run's token (in `X-Nbsandbox-Token` or the connection's own auth header), compared in constant time; the port is on the run's own network or per-run policy only | `connections-http_no_token`, `connections-cross-run` |
+| An HTTPS API's traffic is read or changed on the way | Certificates checked against the system's authorities, or the connection's `ca` | `connections-http_tls_system`, `…http_tls_other` |
 | nbsandboxd leaks a credential | It never returns one; with Kubernetes Secrets and Vault it never reads one (the fetcher mounts or reads it); with the built-in store (development) it decrypts it only into the fetcher's configuration | unit tests (`internal/secrets`: no value read from Vault) |
 
-### User → another user's data
+### User → another user's data, and members of shared spaces
 
 | Threat | Mitigation | Checked by |
 |---|---|---|
 | User reaches another user's space through the API | Ownership check on every route; not-yours = 404 | `TestAuthorizationMatrix` (generated from the route table), `cross-user-api` |
+| A member of a shared space does more than their role allows (writes as a reader, runs as a reader, changes members as a writer) | One role check (caller, space → role) behind every space route, REST and gRPC; each operation's minimum role in the service, not the UI; `403` naming the role | `TestSharedSpace` (each role against each kind of endpoint), `TestRoles`, `TestMembersRPC`, `shared-read-writes` |
+| A member reads with another member's credentials, or uses another's connection | Runs, sessions and function calls resolve names with their caller's own bindings only; a binding must be to the caller's own connection of the declared type; the fetcher is made from the run's starter's connections | `TestNamesPerMember`, `connections-shared_unbound`, `connections-shared_others_connection` |
+| A member watches or drives another member's session, or cancels their run | Sessions are their opener's (`404` to others; owners can end them, not attach); cancelling, deleting or copying from a run needs to have started it, or the owner role | `shared-others-session`, `shared-others-run` |
+| A revoked member keeps access | The role is read on every request; revoking removes their bindings too | `shared-revoked` |
 | User escapes the space with file paths | Lexical checks plus `os.Root`; fuzzing | path traversal and symlink tests, `FuzzValidatePath` |
 | Malformed input breaks parsing (request parameters, notebooks, output, run events, tar streams from Pods, credentials, sizes) | Strict parsing; size caps on every read; fuzzing (it found trailing data after the parameters object being accepted, and sizes such as `NaN GiB` parsing; both fixed) | `FuzzNormalizeParameters`, `FuzzScanners`, `FuzzLineWriter`, `FuzzReadTar`, `FuzzParseRunEvent`, `FuzzFromNotebook`, `FuzzValidateNotebook`, `FuzzParseBasic`, `FuzzResumePoint`, `FuzzValidKey`, `FuzzParseSize`, `FuzzVerify` |
 | Costly input: huge or deeply nested parameters, outputs or contract schemas | Parameters ≤ `runs.max_parameters` (1 MiB) and 32 levels; outputs ≤ `runs.max_output` (1 MiB); schemas ≤ 256 KiB; schemas may not load anything (no remote or file `$ref`); request bodies capped | contract and parameter unit tests |
@@ -130,4 +138,5 @@ A reading run has a network of its own, shared only with its fetcher ([connectio
 
 - **Kernel exploits.** No test attempts a kernel escape; protection relies on seccomp and, optionally, gVisor.
 - **A compromised nbsandboxd** (out of scope; see the proxy limitation above).
-- **Injected mode** (a credential given to notebook code, with one endpoint open) isn't built, so there is nothing to test yet; reading runs reach only their fetcher.
+- **Injected mode** (a credential given to notebook code, with one endpoint open) isn't built, so there is nothing to test yet; reading runs reach only their fetcher, HTTP APIs included.
+- **OIDC groups as principals** of shared spaces aren't built: roles go to caller IDs only.

@@ -13,6 +13,8 @@ Small, complete clients showing what an application does to run notebooks in nbs
 | [go/runnotebook](go/runnotebook/main.go) (standard library) | the result stream (`GET …/result` as Server-Sent Events) | reading SSE without a library; items of a streamed output as they arrive (`-stream`), resuming with `Last-Event-ID` |
 | [go/grpcclient](go/grpcclient/main.go) (gRPC, the generated client) | `FollowRunResult` | uploading in chunks over a client stream; `-stream` as above |
 
+[python/shared_space.py](python/shared_space.py) (`requests`) shows two people in one space ([docs/sharing.md](../docs/sharing.md)): the owner shares it with a member (write), the member finds it among theirs and runs a notebook, the owner sees that run and lowers the member to read (who can then look but not run), and the member leaves.
+
 One more works with a notebook's live kernel instead of runs, as the web editor does ([docs/sessions.md](../docs/sessions.md)): [python/interactive_session.py](python/interactive_session.py) (`requests`, `websocket-client`) opens the notebook's session, connects to its WebSocket (Jupyter messages as JSON), runs cells whose variables stay between them, asks the kernel for a DataFrame's columns and a function's docs, stops a long cell, saves a file the kernel wrote to the space, and ends the session.
 
 The notebooks:
@@ -21,6 +23,8 @@ The notebooks:
 - [notebooks/sales_by_month.ipynb](notebooks/sales_by_month.ipynb) takes the same input but streams its output: one item per month (`nbsandbox.emit`), half a second apart, as a chart would draw them. Its contract declares `{"mode": "stream", "item": …}`; the result's `output` is the list of the items.
 - [notebooks/sales_dashboard.ipynb](notebooks/sales_dashboard.ipynb) draws charts with matplotlib from 26 weeks of a made-up chain of stores in Java (`data/orders.csv`, `data/stores.csv`): weekly revenue per province with 4-week averages, revenue by month and category (stacked), each store's revenue and growth, and each category's weekly units. Every chart is shown in the notebook (and `output.html`) and kept as a PNG artifact; the totals come back as JSON. Inputs: `provinces` (a subset of the six) and `weeks`.
 - [notebooks/sales_map.ipynb](notebooks/sales_map.ipynb) draws a map of the same stores with matplotlib alone (runs have no network, so no map tiles): Java's provinces shaded by `metric` (`revenue`, `units` or `growth`), each store a bubble sized by revenue and coloured by growth, with labels, a scale bar and a north arrow. It keeps `map.png` and `provinces.geojson` (the provinces with their figures, for QGIS or any GIS tool) as artifacts.
+
+- [notebooks/github_api.ipynb](notebooks/github_api.ipynb) calls GitHub's public API from notebook code, through the run's fetcher ([docs/connections.md](../docs/connections.md#7-call-an-http-api)): a repository's stars and latest releases, for `repo`. It needs connections on, `api.github.com` allowed, and a space binding the name `github` to an `http` connection (see below); a GitHub token as the connection's secret raises the API's rate limit, and the notebook never sees it.
 
 - [notebooks/compute_demo.ipynb](notebooks/compute_demo.ipynb) runs for about two minutes in three phases (memory growing to about 480 MiB, a busy CPU, 160 MiB written to the space and removed), so a run's usage charts and the web UI's **Compute** page have something to show. Start it in several spaces at once to see runs spread over the workers, and queue when they're all busy.
 
@@ -43,6 +47,10 @@ python examples/python/interactive_session.py
 ```
 
 ```bash
+NBSANDBOX_MEMBER=bob NBSANDBOX_MEMBER_PASSWORD=bob-dev-password python examples/python/shared_space.py
+```
+
+```bash
 go run ./examples/go/runnotebook -region surabaya
 ```
 
@@ -60,6 +68,18 @@ scripts/nbsandbox.sh runs start "$ID" sales_map.ipynb '{"metric": "growth"}'
 go run ./examples/go/grpcclient -stream
 ```
 
+The GitHub notebook needs connections on, with GitHub allowed (`NBSANDBOX_CONNECTIONS_ENABLED=true NBSANDBOX_CONNECTIONS_ALLOWED=api.github.com make up`), a connection, and a space that names it `github`:
+
+```bash
+A=alice:alice-dev-password U=http://127.0.0.1:8080
+curl -su $A -H 'Content-Type: application/json' $U/v1/connections \
+  -d '{"name": "github", "type": "http", "settings": {"url": "https://api.github.com/"}}'   # add "secret": {"value": "<token>"} for a higher rate limit
+curl -su $A -X PUT -H 'Content-Type: application/json' $U/v1/spaces/$ID/connections \
+  -d '{"default_environment": "main", "environments": {"main": {"github": "github"}}}'
+curl -su $A -F file=@examples/notebooks/github_api.ipynb $U/v1/spaces/$ID/files
+scripts/nbsandbox.sh runs start "$ID" github_api.ipynb '{"repo": "jupyter/notebook"}'
+```
+
 With tokens instead (see [docs/auth.md](../docs/auth.md)):
 
 - `NBSANDBOX_TOKEN=<token issued for nbsandbox>`: used as is.
@@ -67,7 +87,7 @@ With tokens instead (see [docs/auth.md](../docs/auth.md)):
 
 The token needs the scopes for what the example does: `nbsandbox.spaces.write`, `nbsandbox.files.write`, `nbsandbox.runs` and `nbsandbox.read`, plus `nbsandbox.functions.publish` and `nbsandbox.functions.invoke` for the function part. A backend that only calls existing functions needs just `nbsandbox.functions.invoke nbsandbox.read`.
 
-Each run creates a new space named `example <date time>`; delete it in the web UI or with `DELETE /v1/spaces/{id}` when done.
+Each client run creates a new space named `example <date time>` (the shared-space example deletes its own); delete it in the web UI or with `DELETE /v1/spaces/{id}` when done.
 
 ## From an AI agent
 
