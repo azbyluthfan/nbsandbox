@@ -3,8 +3,9 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Retakes the screenshots of docs/tour.md (make tour). Needs the dev stack
-# (make up): creates a fresh "sales analysis" space for alice (TOUR_USER) with the
-# example notebooks, then drives the web UI in a headless browser
+# (make up): gives alice (TOUR_USER) a "sales analysis" space with the example
+# notebooks (an earlier tour's, its old runs removed, or a new one: space.py),
+# then drives the web UI in a headless browser
 # (Playwright, in a container on the stack's network). TOUR_ONLY=sessions
 # retakes only the live session's screenshots (13-15); it needs one free
 # session for the user (sessions.per_user). TOUR_ONLY=compute retakes only
@@ -18,9 +19,8 @@ AUTH=$TOUR_USER:$TOUR_USER-dev-password
 OUT=docs/images/tour
 PLAYWRIGHT=mcr.microsoft.com/playwright/python:v1.49.0-noble
 
-space=$(curl -fsS -u "$AUTH" -H 'Content-Type: application/json' -d '{"name":"sales analysis"}' "$API/v1/spaces" |
-	sed -n 's/.*"id":"\([0-9a-f-]*\)".*/\1/p')
-[ -n "$space" ] || { echo "could not create a space (is make up running?)" >&2; exit 1; }
+space=$(python3 scripts/tour/space.py "$API" "$AUTH" "sales analysis") ||
+	{ echo "could not get a space (is make up running?)" >&2; exit 1; }
 curl -fsS -u "$AUTH" -F file=@examples/notebooks/sales_report.ipynb -F file=@examples/notebooks/sales_by_month.ipynb \
 	"$API/v1/spaces/$space/files" >/dev/null
 curl -fsS -u "$AUTH" -F file=@examples/notebooks/data/sales.csv "$API/v1/spaces/$space/files?folder=data" >/dev/null
@@ -47,8 +47,7 @@ if [ -n "$conn" ] && [ -z "$api" ]; then
 		"$API/v1/connections" 2>/dev/null | sed -n 's/^{"id":"\([0-9a-f-]*\)".*/\1/p') || true
 fi
 if [ -n "$conn" ]; then
-	conn_space=$(curl -fsS -u "$AUTH" -H 'Content-Type: application/json' -d '{"name":"crm reports"}' "$API/v1/spaces" |
-		sed -n 's/.*"id":"\([0-9a-f-]*\)".*/\1/p')
+	conn_space=$(python3 scripts/tour/space.py "$API" "$AUTH" "crm reports")
 	events=""
 	[ -n "$api" ] && events=",\"events\":\"$api\""
 	curl -fsS -u "$AUTH" -X PUT -H 'Content-Type: application/json' \
