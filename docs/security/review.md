@@ -2,6 +2,27 @@
 
 **2026-11-08, before the first v0.x release.** What was checked, what was found, and what was done about each finding. Repeat it before each release (the commands are at the end). The [threat model](threat-model.md) describes what nbsandbox protects against; this page is the evidence that it was checked.
 
+## The review for v0.5.0 (2026-11-28)
+
+Two new surfaces: HTTP APIs called by notebook code through the run's fetcher, which adds the credential; and shared spaces, where several callers work in one space with roles, each reading data with their own connections.
+
+| Area | Result |
+|---|---|
+| Go | `govulncheck`: none reached by our code (the same one in a required module, not called). No new dependency: `go.mod` is as at 0.4.0 |
+| Python packages | `pip-audit`: none, in the runner's and the fetcher's packages. The fetcher's HTTP proxy uses only the standard library: its requirements are as at 0.4.0 |
+| Container images | Trivy, HIGH and CRITICAL with a fix: nbsandboxd 0, runner 0, builder 0, fetcher 0 (the accepted CVE-2025-47273 still listed in `.trivyignore`). The runner, builder and fetcher each have 53 HIGH without a published fix, in the Debian packages of their shared Python base, as at 0.4.0 |
+| Secrets in the source tree | `gitleaks`: eighteen, all known test or development values: the sixteen from 0.4.0, and two new fake API tokens in the HTTP connection tests (`tests/integration/connections_http_test.go`, `tests/integration/testdata/api_source.py`) |
+| An HTTP API's credential | Stays in the fetcher: set on each forwarded request, never in the run's environment, files or log, and never sent anywhere but the connection's host (no redirect is followed). The run's token stands in for it and is stripped before forwarding (`connections-http_credentials`, the run's log searched in `TestConnectionsHTTP`) |
+| What a notebook can make the fetcher call | Only the connection's scheme, host and port, and paths under its path, checked after percent-decoding and `..` (encoded slashes refused); any method, as the credential's own permissions in the API are the real limit, which the docs and the form say. The request line is built by `http.client`, which refuses control characters. Hop-by-hop, `Proxy-*`, `Host` and the token headers are dropped; WebSocket upgrades refused; at most 32 requests at a time per run (`fetcher-image/tests/test_httpapi.py`, `connections-http_outside_path`, `…http_unbound`) |
+| **Found and fixed: two `Content-Length` headers** | The fetcher forwarded the notebook's own `Content-Length` beside the one it sets for the body it sends, so an API received the header twice (with the same value). Duplicate framing headers are what request smuggling relies on, where a front end and a back end disagree. The fetcher now sets the body's framing alone (`test_bodies_stream_both_ways` checks one header) |
+| OAuth 2.0 client credentials | The token URL is the connection's, reached through the gateway and checked against `connections.allowed` like the API; the access token is kept in the fetcher's memory only, and renewed once on a `401` |
+| TLS to APIs | Checked against the system's authorities, or the connection's `ca`; plain `http://` allowed (the form and docs warn) (`connections-http_tls_system`, `…http_tls_other`) |
+| Roles in shared spaces | One check (caller, space → role) behind every space route, REST, gRPC and the web UI's: none is `404` as before, too low a role `403`; each operation's minimum role is enforced in the services, not by hiding buttons. Tested per role and kind of endpoint (`TestSharedSpace`, `TestRoles`, `TestMembersRPC`) and in the isolation report (`shared-no-role`, `…read-writes`, `…others-run`, `…others-session`, `…revoked`) |
+| Each member's own credentials | A run, session or function call resolves names with its caller's bindings only, each to the caller's own connection of the declared type; a member can't bind another's connection (`TestNamesPerMember`, `connections-shared_unbound`, `connections-shared_others_connection`) |
+| Sessions in shared spaces | Their opener's: another member gets `404`; owners can end one, not attach to it. One open session per notebook per caller now, so two members never share a kernel (`shared-others-session`) |
+| **Accepted: what sharing trusts** | Every member sees every run's output, including what it read with its starter's connections; and `write` lets a member change notebooks others then run with their own connections. Both follow from the design (a shared workspace); [sharing.md](../sharing.md#what-sharing-trusts) says so for users. Function versions are immutable, so callers run what was published |
+| Principals | Caller IDs, not checked against a directory (there is none): a grant to a mistyped ID gives no one access. Validated for length and control characters; audited with who granted it |
+
 ## The review for v0.4.0 (2026-11-26)
 
 Reading data outside nbsandbox is the new surface: users' credentials, a fetcher beside each reading run, an egress gateway. And the compute view: the workers, and each run's usage.

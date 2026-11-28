@@ -27,7 +27,7 @@ nb() { curl -sS -u "$NBSANDBOX_USER:$NBSANDBOX_PASSWORD" "$@"; }
 [scripts/nbsandbox.sh](../scripts/nbsandbox.sh) wraps the same calls as commands (`nbsandbox.sh files upload …`); the [user guide](user-guide.md) uses it.
 
 - **Authentication:** every `/v1` endpoint needs a bearer access token from the configured identity provider, or HTTP basic auth (users from `users.yaml`, for development). `/healthz` and `/readyz` need none. Missing, wrong or expired credentials get `401`; a token without the endpoint's scope gets `403`. Spaces belong to the caller's ID. See [auth.md](auth.md).
-- **Ownership:** you see only your own spaces. Another user's space answers `404`, exactly like one that doesn't exist, whatever the request contains.
+- **Access:** you see your own spaces and those shared with you ([sharing.md](sharing.md)). A space where you have no role answers `404`, exactly like one that doesn't exist, whatever the request contains; one where your role is too low answers `403`.
 - **IDs:** spaces and runs are lowercase UUIDs; anything else in their place is `400`. File paths are relative to the space and may contain `/`; `..`, absolute paths and names starting with `.nbsandbox` are refused.
 - **Request bodies:** JSON with `Content-Type: application/json`, except uploads (`multipart/form-data`) and file saves (the raw file). Unknown fields are refused with `400`, so typos don't pass silently.
 - **Errors:** always `{"error": {"code": "…", "message": "…"}}`. Act on `code` and the status; `message` is for people. Some errors add fields: `problems` (where parameters broke the contract), `current_version` (on file saves), `status` (asking for the result of a run that hasn't finished). See [9. Errors and retries](#9-errors-and-retries).

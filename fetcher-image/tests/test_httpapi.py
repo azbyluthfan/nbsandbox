@@ -88,6 +88,7 @@ class FakeAPI(BaseHTTPRequestHandler):
         if self.path.startswith("/v2/empty"):
             return self._send(204, b"")
         echo = {"method": self.command, "path": self.path, "auth": self.headers.get("Authorization"),
+                "lengths": self.headers.get_all("Content-Length") or [],
                 "key": self.headers.get("X-API-Key"), "token": self.headers.get("X-Nbsandbox-Token"),
                 "host": self.headers.get("Host"), "body": body.decode(errors="replace")}
         self._send(200, json.dumps(echo).encode())
@@ -237,7 +238,9 @@ class HTTPAPITest(unittest.TestCase):
         big = b"x" * (3 << 20)
         r, data = self.call("POST", "/events/upload", body=big, headers={"Content-Type": "application/octet-stream"})
         self.assertEqual(r.status, 200)
-        self.assertEqual(len(json.loads(data)["body"]), len(big))
+        got = json.loads(data)
+        self.assertEqual(len(got["body"]), len(big))
+        self.assertEqual(got["lengths"], [str(len(big))])  # one Content-Length: the fetcher's
 
         def chunks():
             yield b"part1-"

@@ -24,12 +24,12 @@ compose() { sudo docker compose -f deploy/docker-compose.yml --env-file deploy/.
 ## Audit log
 
 nbsandboxd records who did what, when, and how it ended:
-- **every change:** spaces, files, folders, functions, invocations, runs, promoted artifacts;
+- **every change:** spaces, files, folders, functions, invocations, runs, promoted artifacts, connections and a space's names, and a shared space's members (grants, changes, revocations, hand-overs);
 - **every download:** files, and a run's notebook, HTML, artifacts and log (`audit.downloads`);
 - **every administrative operation,** reading the audit log included;
 - **web UI sign-ins and sign-outs.**
 
-Refused attempts are recorded too (a `403`, or a `404` on someone else's space), so probing shows up. Listings and live streams are not recorded. Neither are requests without valid credentials: the service log has those, with the reason.
+Refused attempts are recorded too (a `403`, including a role too low in a shared space, or a `404` on a space the caller has no role in), so probing shows up. Listings and live streams are not recorded. Neither are requests without valid credentials: the service log has those, with the reason.
 
 Each row has the time, the caller ID, how they signed in (`basic` or `oidc`), the token's application, the transport (`rest`, `grpc` or `ui`), the operation, the space, what it acted on (a path, a run, `function@version`), a detail (a created run's notebook, a move's destination, a new owner), the HTTP status (gRPC codes mapped), and the client's address.
 
@@ -91,7 +91,7 @@ Each release is tested as an upgrade from the one before it, with sessions open 
 2. **Back up first** (see above).
 3. **Optional: drain**, so no run is interrupted: no queued run starts, running ones finish, and new runs still queue. No interactive session starts either; open ones keep running through the upgrade and are re-attached ([sessions.md](sessions.md#for-operators)). Wait until `running_runs` is 0. The drain is stored in the database, so it holds across the restart; resume afterwards (step 7). A long drain may set off the queue-backlog alert.
    ```bash
-   curl -su root -X PUT "https://$HOST/v1/admin/drain" -H 'Content-Type: application/json' -d '{"draining":true,"reason":"upgrade to 0.4.0"}'
+   curl -su root -X PUT "https://$HOST/v1/admin/drain" -H 'Content-Type: application/json' -d '{"draining":true,"reason":"upgrade to 0.5.0"}'
    curl -su root "https://$HOST/v1/admin/drain"     # {"draining":true, ..., "queued_runs":3,"running_runs":0}
    ```
 4. Check out the new release and update `NBSANDBOX_IMAGE` and `NBSANDBOX_RUNNER_IMAGE` in `deploy/.env`.
@@ -113,6 +113,7 @@ With connections on ([connections.md](connections.md#for-operators)):
 - **The keys can't be rotated in place yet.** A new gateway key must go to nbsandboxd and the gateway together; runs and sessions reading at the time lose their fetcher's access (drain first). A new master key makes the stored secrets unreadable: users enter their connections' secrets again (or move to the `kubernetes` or `vault` provider, which keeps no key here).
 - **The fetcher image** (`connections.fetcher_image`) is updated like the runner image: pin the release's, and new reading runs use it.
 - **The gateway** keeps no state: restarting it is safe (fetchers' queries work again once it's back). Its log records each tunnel and request it allows or refuses (run, endpoint, bytes, duration); a refusal says why. It has no metrics of its own yet.
+- **HTTP APIs:** each fetcher logs the requests it forwards (name, method, path without the query string, status, bytes, time) to its run's log, never bodies or credentials. An `oauth2` connection's token URL must be allowed (`connections.allowed`) as well as its API.
 - **nbsandboxd warns** at startup when given the repository's development keys, which are public.
 - **On Kubernetes,** the usage charts need metrics-server ([kubernetes.md](kubernetes.md#usage-while-runs-run)).
 
@@ -188,7 +189,7 @@ sudo docker ps -a --filter label=nbsandbox.run
 Restarting nbsandboxd reconciles them. Never remove containers of runs that are still active.
 
 ### Users
-With basic auth, edit `/etc/nbsandbox/users.yaml` to add a user or change a password (hashes from `nbsandboxd hash-password`) and restart nbsandboxd: `compose restart nbsandboxd`. With an identity provider there is nothing to do here: access follows the provider ([auth.md](auth.md)). Either way, removing someone doesn't delete their spaces: an administrator can give them to someone else or delete them (`/v1/admin/spaces`).
+With basic auth, edit `/etc/nbsandbox/users.yaml` to add a user or change a password (hashes from `nbsandboxd hash-password`) and restart nbsandboxd: `compose restart nbsandboxd`. With an identity provider there is nothing to do here: access follows the provider ([auth.md](auth.md)). Either way, removing someone doesn't delete their spaces: an administrator can give them to someone else or delete them (`/v1/admin/spaces`). Their roles in spaces others share stay until an owner revokes them; their bindings there go with the role. Owners of a shared space can hand it over themselves before they leave ([sharing.md](sharing.md)).
 
 ### TLS
 With Let's Encrypt, Caddy renews certificates automatically; its state lives in the `caddy-data` volume. To change the host name, edit `NBSANDBOX_DOMAIN` and `compose up -d caddy`.

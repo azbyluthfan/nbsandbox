@@ -127,6 +127,8 @@ quotas:
 
 Creating a space past the cap is `413` with code `payload_too_large` and a message naming the cap. The cap holds even when one owner creates many spaces at once.
 
+In a shared space ([sharing.md](sharing.md)), the owner here is the space's creator: its files count toward their `max_space`, and it counts toward their `max_spaces`. Runs and sessions count toward whoever starts them. A token's scopes still apply in spaces shared with its caller: a role allows what the scopes do, within the space.
+
 ### Administration
 
 An operator holding `nbsandbox.admin` (an app role on a service account, or a basic user with `admin: true`) can:

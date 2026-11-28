@@ -4,6 +4,8 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-28
+
 ### Upgrading from 0.4.0
 
 - **Database migrations 19 and 20** run at startup: roles in shared spaces; names per member. A space's bindings become its declared names (each name with its connection's type) and its creator's own bindings: nothing changes for a space nobody else is in.
@@ -11,13 +13,26 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 - **Sessions:** one open session per notebook per caller (was per notebook), so members of a shared space each get their own.
 - **Fetchers serve a second port, 8816,** for HTTP APIs. Helm's per-run NetworkPolicies include it; nothing to configure.
 - **An `oauth2` HTTP connection's token URL** is reached through the gateway too: its host must be in `connections.allowed`.
+- **Runs** in REST and gRPC answers now always carry `owner` (who started them), not only in administrators' lists.
 
 ### Added
 
 - **HTTP APIs in notebooks:** an `http` connection's API is called by the notebook's own code, with any HTTP client, through its run's fetcher, which adds the credential: `nbsandbox.http("events").get("orders")`, or `nbsandbox.connection("events")` (a base URL and the run's token) for other clients and SDKs. JSON, uploads and server-sent events stream both ways. The credential never enters the run ([connections.md](docs/connections.md#7-call-an-http-api)).
 - **HTTP connections take `auth`:** `header` (the default, as before), `basic`, `oauth2` (client credentials: the fetcher gets and renews the access token) or `none`; and `ca` for an HTTPS API with a private authority. A connection allows paths under its `url` only.
 - **The isolation report** has seven rows for HTTP APIs, and the soak's reading space calls one.
-- **Shared spaces:** a space's creator grants other callers (users or apps, by caller ID) `read`, `write` or `owner` (`/v1/spaces/{id}/members`, gRPC, the web UI's Members section); no role is `404`, a role too low `403`. Every member sees every run, with who started it (`owner`, `?owner=`); sessions stay their opener's. Owners declare the space's names, their types and environments (`/v1/spaces/{id}/names`); each member binds their own connections, and runs, sessions and function calls read with their caller's ([sharing.md](docs/sharing.md)). The creator can hand the space over. Audited.
+- **Shared spaces:** a space's creator grants other callers (users or apps, by caller ID) `read`, `write` or `owner` (`/v1/spaces/{id}/members`, gRPC, the web UI's Members section); no role is `404`, a role too low `403`. Every member sees every run, with who started it (`owner`, `?owner=`); sessions stay their opener's. Owners declare the space's names, their types and environments (`/v1/spaces/{id}/names`); each member binds their own connections, and runs, sessions and function calls read with their caller's ([sharing.md](docs/sharing.md)). The creator can hand the space over. Audited. The isolation report has a Shared spaces section, and the soak a second member.
+- **Examples:** [python/shared_space.py](examples/python/shared_space.py) (two people in one space) and [notebooks/github_api.ipynb](examples/notebooks/github_api.ipynb) (an HTTP API from notebook code).
+- **The tour** reuses its spaces instead of creating new ones each time, and shows a space's members (step 20).
+
+### Fixed
+
+- **The fetcher's HTTP proxy** no longer forwards the notebook's own `Content-Length` beside its own (found in the security review; [review](docs/security/review.md)).
+
+### Not yet
+
+- **Azure Blob storage** connections can be created and bound, but nothing reads them yet.
+- **SQL Server connections can't be verified** (`tls: verify` is refused), as in 0.4.0.
+- **Shared spaces' principals are caller IDs only;** an identity provider's groups come later. **Injected credentials** (a raw credential given to notebook code) wait for a client that needs one.
 
 ## [0.4.0] - 2026-11-26
 

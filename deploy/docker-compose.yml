@@ -94,7 +94,7 @@ services:
     restart: unless-stopped
 
   nbsandboxd:
-    image: ${NBSANDBOX_IMAGE:-ghcr.io/azbyluthfan/nbsandboxd:0.4.0}
+    image: ${NBSANDBOX_IMAGE:-ghcr.io/azbyluthfan/nbsandboxd:0.5.0}
     build:
       context: ..
       dockerfile: deploy/nbsandboxd.Dockerfile
@@ -111,11 +111,11 @@ services:
       NBSANDBOX_S3_CREATE_BUCKET: "true"
       NBSANDBOX_USERS_FILE: /etc/nbsandbox/users.yaml
       NBSANDBOX_DOCKER_HOST: tcp://socket-proxy:2375
-      NBSANDBOX_RUNNER_IMAGE: ${NBSANDBOX_RUNNER_IMAGE:-ghcr.io/azbyluthfan/nbsandbox-runner:0.4.0}
+      NBSANDBOX_RUNNER_IMAGE: ${NBSANDBOX_RUNNER_IMAGE:-ghcr.io/azbyluthfan/nbsandbox-runner:0.5.0}
       # A space's own packages (docs/packages.md): off unless set to true.
       # Builds run in the builder image, on Docker's bridge network.
       NBSANDBOX_PACKAGES_ENABLED: ${NBSANDBOX_PACKAGES_ENABLED:-false}
-      NBSANDBOX_PACKAGES_BUILDER_IMAGE: ${NBSANDBOX_PACKAGES_BUILDER_IMAGE:-ghcr.io/azbyluthfan/nbsandbox-runner-builder:0.4.0}
+      NBSANDBOX_PACKAGES_BUILDER_IMAGE: ${NBSANDBOX_PACKAGES_BUILDER_IMAGE:-ghcr.io/azbyluthfan/nbsandbox-runner-builder:0.5.0}
       NBSANDBOX_PACKAGES_INDEX_URL: ${NBSANDBOX_PACKAGES_INDEX_URL:-https://pypi.org/simple}
       NBSANDBOX_PACKAGES_ALLOWED: ${NBSANDBOX_PACKAGES_ALLOWED:-}
       NBSANDBOX_LOG_LEVEL: ${NBSANDBOX_LOG_LEVEL:-info}
@@ -139,7 +139,7 @@ services:
       NBSANDBOX_CONNECTIONS_MASTER_KEY: ${NBSANDBOX_CONNECTIONS_MASTER_KEY:-}
       NBSANDBOX_CONNECTIONS_ALLOWED: ${NBSANDBOX_CONNECTIONS_ALLOWED:-}
       NBSANDBOX_GATEWAY_KEY: ${NBSANDBOX_GATEWAY_KEY:-}
-      NBSANDBOX_FETCHER_IMAGE: ${NBSANDBOX_FETCHER_IMAGE:-ghcr.io/azbyluthfan/nbsandbox-fetcher:0.4.0}
+      NBSANDBOX_FETCHER_IMAGE: ${NBSANDBOX_FETCHER_IMAGE:-ghcr.io/azbyluthfan/nbsandbox-fetcher:0.5.0}
     volumes:
       # Same absolute path inside and outside: Docker resolves the run
       # containers' bind mounts on the host.
@@ -191,7 +191,7 @@ services:
   # find it (connections.gateway.address).
   gateway:
     profiles: [connections]
-    image: ${NBSANDBOX_IMAGE:-ghcr.io/azbyluthfan/nbsandboxd:0.4.0}
+    image: ${NBSANDBOX_IMAGE:-ghcr.io/azbyluthfan/nbsandboxd:0.5.0}
     container_name: nbsandbox-gateway
     command: ["gateway"]
     user: "1000:1000"

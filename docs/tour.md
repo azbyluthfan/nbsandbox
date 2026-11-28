@@ -12,7 +12,7 @@ The web UI ships with nbsandboxd. With `make up` it runs on http://127.0.0.1:809
 
 ![The list of spaces](images/tour/01-spaces.png)
 
-A **space** holds notebooks, data files and runs. It belongs to one user (here `alice`, picked at the top right); another user can't see it, list it or guess its contents.
+A **space** holds notebooks, data files and runs. It belongs to the user who made it (here `alice`, picked at the top right); nobody else can see it, list it or guess its contents unless she shares it ([step 20](#20-sharing-a-space)).
 
 ### 2. A space
 
@@ -124,7 +124,7 @@ A run's page names the worker it runs on and charts its memory (against its limi
 
 ### 20. Sharing a space
 
-![A space's Members section: alice, its creator, and bob with write; a field to grant someone a role](images/tour/20-members.png)
+![A space's Members section: alice, its creator, and carol with write; a field to grant someone a role](images/tour/20-members.png)
 
 A space's **Members** lists who works in it. Its owners grant others `read`, `write` or `owner`, by caller ID; everyone sees every run in the space, and each member reads data with their own connections under the space's names ([sharing.md](sharing.md)).
 
@@ -329,7 +329,7 @@ HTTP 404
 {"error":{"code":"not_found","message":"not found"}}
 ```
 
-Another user's space doesn't exist as far as bob is concerned: `404`, never `403`, so its existence isn't revealed either.
+A space bob has no role in doesn't exist as far as he is concerned: `404`, never `403`, so its existence isn't revealed either.
 
 ## Next
 
