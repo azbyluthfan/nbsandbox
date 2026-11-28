@@ -35,7 +35,8 @@ The kernel sees the space's files at `/space` (its working directory), as a run 
   - What the kernel writes in `/space` is written to the space: when you **Save files**, every 5 minutes, and when the session ends.
   - While it is open, the session holds the space's write lock, as a writing run does: no writing run starts in the space (`409`). Read-only runs (function calls, runs marked read-only) still can.
   - A file changed in the space meanwhile (saved in the editor, uploaded) keeps that change. The session's version is kept beside it, as for a run.
-- **Read-only session:** `/space` can't be written. You get one when you ask for it (`"mode": "read-only"`), or when something else writes the space: a writing run, or another notebook's read-write session. The bar shows the mode.
+- **Read-only session:** `/space` can't be written. You get one when you ask for it (`"mode": "read-only"`), or when something else writes the space: a writing run, or another read-write session (another notebook's, or another member's). The bar shows the mode.
+- **In a shared space** ([sharing.md](sharing.md)), sessions are their opener's: two members opening the same notebook each get their own kernel. Owners see who has one open and can end it, not attach to it.
 
 The editor saves the notebook file itself through the API, as before. A session doesn't need it saved: it runs the cells you send it.
 

@@ -35,15 +35,139 @@ func (db *DB) GetSpace(ctx context.Context, owner, id string) (Space, error) {
 	return sp, nil
 }
 
+// Roles in a space, lowest first.
+const (
+	RoleRead  = "read"
+	RoleWrite = "write"
+	RoleOwner = "owner"
+)
+
+// roleOf is the SQL for caller's role in the space s, with space_members m
+// joined for caller: its creator is an owner.
+const roleOf = "CASE WHEN s.owner = ? THEN 'owner' ELSE m.role END"
+
+// SpaceAccess returns the space and caller's role in it; ErrNotFound if it
+// is missing or caller has no role (the two look the same).
+func (db *DB) SpaceAccess(ctx context.Context, caller, id string) (Space, error) {
+	var sp Space
+	var created, updated int64
+	err := db.r.QueryRowContext(ctx, `
+		SELECT s.id, s.owner, s.name, s.created_at, s.updated_at, `+roleOf+`
+		FROM spaces s LEFT JOIN space_members m ON m.space_id = s.id AND m.principal = ?
+		WHERE s.id = ? AND (s.owner = ? OR m.principal IS NOT NULL)`, caller, caller, id, caller).
+		Scan(&sp.ID, &sp.Owner, &sp.Name, &created, &updated, &sp.Role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Space{}, ErrNotFound
+	}
+	if err != nil {
+		return Space{}, err
+	}
+	sp.CreatedAt, sp.UpdatedAt = time.UnixMilli(created), time.UnixMilli(updated)
+	return sp, nil
+}
+
+// Member is a role a space grants.
+type Member struct {
+	Principal, Role, GrantedBy string
+	GrantedAt                  time.Time
+}
+
+// SpaceMembers returns a space's grants, by principal (not its creator).
+func (db *DB) SpaceMembers(ctx context.Context, id string) ([]Member, error) {
+	rows, err := db.r.QueryContext(ctx,
+		"SELECT principal, role, granted_by, granted_at FROM space_members WHERE space_id = ? ORDER BY principal", id)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Member
+	for rows.Next() {
+		var m Member
+		var at int64
+		if err := rows.Scan(&m.Principal, &m.Role, &m.GrantedBy, &at); err != nil {
+			return nil, err
+		}
+		m.GrantedAt = time.UnixMilli(at)
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// PutSpaceMember grants principal a role in a space, or changes it.
+func (db *DB) PutSpaceMember(ctx context.Context, id string, m Member) error {
+	_, err := db.w.ExecContext(ctx, `
+		INSERT INTO space_members(space_id, principal, role, granted_by, granted_at) VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT (space_id, principal) DO UPDATE SET role = EXCLUDED.role, granted_by = EXCLUDED.granted_by, granted_at = EXCLUDED.granted_at`,
+		id, m.Principal, m.Role, m.GrantedBy, m.GrantedAt.UnixMilli())
+	return err
+}
+
+// DeleteSpaceMember revokes principal's role; ErrNotFound if it had none.
+// Their bindings for the space's names go with it.
+func (db *DB) DeleteSpaceMember(ctx context.Context, id, principal string) error {
+	tx, err := db.w.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.ExecContext(ctx, "DELETE FROM space_members WHERE space_id = ? AND principal = ?", id, principal)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM space_bindings WHERE space_id = ? AND principal = ?", id, principal); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// TransferSpace makes to (one of its owners) the space's creator and
+// account; from, the creator until now, stays an owner. ErrNotFound if from
+// is no longer its creator.
+func (db *DB) TransferSpace(ctx context.Context, id, from, to string, now time.Time) error {
+	tx, err := db.w.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.ExecContext(ctx, "UPDATE spaces SET owner = ?, updated_at = ? WHERE id = ? AND owner = ?", to, now.UnixMilli(), id, from)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM space_members WHERE space_id = ? AND principal = ?", id, to); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO space_members(space_id, principal, role, granted_by, granted_at) VALUES (?, ?, 'owner', ?, ?)
+		ON CONFLICT (space_id, principal) DO UPDATE SET role = 'owner'`, id, from, from, now.UnixMilli()); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // SpacePage is one page of ListSpaces.
 type SpacePage struct {
 	Items      []Space
 	NextCursor string // "" when there are no more
 }
 
-// ListSpaces returns owner's spaces, newest first, with stable cursor paging.
-func (db *DB) ListSpaces(ctx context.Context, owner, cursor string, limit int) (SpacePage, error) {
-	return db.listSpaces(ctx, &owner, cursor, limit)
+// ListSpaces returns the spaces caller has a role in (role, if not "",
+// only those where it is that role), newest first, with stable cursor
+// paging; each with caller's role.
+func (db *DB) ListSpaces(ctx context.Context, caller, role, cursor string, limit int) (SpacePage, error) {
+	q := `SELECT s.id, s.owner, s.name, s.created_at, s.updated_at, ` + roleOf + `
+		FROM spaces s LEFT JOIN space_members m ON m.space_id = s.id AND m.principal = ?
+		WHERE (s.owner = ? OR m.principal IS NOT NULL)`
+	args := []any{caller, caller, caller}
+	if role != "" {
+		q += " AND " + roleOf + " = ?"
+		args = append(args, caller, role)
+	}
+	return db.spacePage(ctx, q, "s.", args, cursor, limit, true)
 }
 
 // ListAllSpaces is ListSpaces for an administrator: every owner's spaces,
@@ -62,15 +186,22 @@ func (db *DB) listSpaces(ctx context.Context, owner *string, cursor string, limi
 		q += " AND owner = ?"
 		args = append(args, *owner)
 	}
+	return db.spacePage(ctx, q, "", args, cursor, limit, false)
+}
+
+// spacePage runs a space query (columns id, owner, name, created_at,
+// updated_at, and the role if withRole; col prefixes them in conditions)
+// newest first, from cursor.
+func (db *DB) spacePage(ctx context.Context, q, col string, args []any, cursor string, limit int, withRole bool) (SpacePage, error) {
 	if cursor != "" {
 		at, id, err := decodeCursor(cursor)
 		if err != nil {
 			return SpacePage{}, err
 		}
-		q += " AND (created_at < ? OR (created_at = ? AND id < ?))"
+		q += " AND (" + col + "created_at < ? OR (" + col + "created_at = ? AND " + col + "id < ?))"
 		args = append(args, at, at, id)
 	}
-	q += " ORDER BY created_at DESC, id DESC LIMIT ?"
+	q += " ORDER BY " + col + "created_at DESC, " + col + "id DESC LIMIT ?"
 	args = append(args, limit+1)
 
 	rows, err := db.r.QueryContext(ctx, q, args...)
@@ -82,7 +213,11 @@ func (db *DB) listSpaces(ctx context.Context, owner *string, cursor string, limi
 	for rows.Next() {
 		var sp Space
 		var created, updated int64
-		if err := rows.Scan(&sp.ID, &sp.Owner, &sp.Name, &created, &updated); err != nil {
+		dest := []any{&sp.ID, &sp.Owner, &sp.Name, &created, &updated}
+		if withRole {
+			dest = append(dest, &sp.Role)
+		}
+		if err := rows.Scan(dest...); err != nil {
 			return SpacePage{}, err
 		}
 		sp.CreatedAt, sp.UpdatedAt = time.UnixMilli(created), time.UnixMilli(updated)
@@ -233,5 +368,7 @@ func (db *DB) SetSpaceOwner(ctx context.Context, id, owner string, now time.Time
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	return nil
+	// The creator holds no grant of its own.
+	_, err = db.w.ExecContext(ctx, "DELETE FROM space_members WHERE space_id = ? AND principal = ?", id, owner)
+	return err
 }

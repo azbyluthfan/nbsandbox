@@ -41,10 +41,10 @@ func TestRunFiles(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t, 1<<20, 10<<20)
 	sp, _ := e.svc.Create(ctx, "alice", "")
-	if err := e.svc.Owned(ctx, "alice", sp.ID); err != nil {
+	if err := e.svc.Allowed(ctx, "alice", sp.ID, RoleOwner); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.svc.Owned(ctx, "bob", sp.ID); !errors.Is(err, ErrNotFound) {
+	if err := e.svc.Allowed(ctx, "bob", sp.ID, RoleRead); !errors.Is(err, ErrNotFound) {
 		t.Fatal("bob owns alice's space")
 	}
 	if _, err := e.svc.CreateRun(ctx, "../x", []byte(validNB), nil); err == nil {

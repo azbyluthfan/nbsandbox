@@ -7,6 +7,7 @@ package integration
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
@@ -20,6 +21,8 @@ import (
 // a space that reads runs beside the others, in turn:
 //   - a run reading a database and object storage, and streaming, and
 //     calling an HTTP API through its fetcher (JSON and server-sent events);
+//     every other one started by bob, a member of the space with write, who
+//     reads with his own connections (docs/sharing.md);
 //   - a run whose environment has a wrong password (refused at start);
 //   - a call of a published function that reads;
 //   - a session that reads, then ends.
@@ -43,6 +46,30 @@ func soakReadSpace(t *testing.T) string {
 	apiSource(t)
 	events := connection(t, "events", "http", map[string]any{"url": apiURL("token-api/")}, apiToken)
 	sp := readerSpaceWith(t, codeNotebook(soakReadNotebook), map[string]string{"events": events})
+	// bob, a member with write, with his own connections for the same names.
+	if r := jsonCall(t, "PUT", "/v1/spaces/"+sp+"/members/bob", "alice", map[string]string{"role": "write"}, nil); r.Code != http.StatusOK {
+		t.Fatalf("grant bob: %d %s", r.Code, r.Body)
+	}
+	bobs := map[string]string{}
+	for name, c := range map[string]struct {
+		typ      string
+		settings map[string]any
+		secret   string
+	}{"crm": {"postgresql", pgSettings(), readerPass}, "lake": {"s3", s3Settings(), s3Secret}, "events": {"http", map[string]any{"url": apiURL("token-api/")}, apiToken}} {
+		r := jsonCall(t, "POST", "/v1/connections", "bob", map[string]any{"name": fmt.Sprintf("soak-bob-%s-%d", name, time.Now().UnixNano()),
+			"type": c.typ, "settings": c.settings, "secret": map[string]any{"value": c.secret}}, nil)
+		if r.Code != http.StatusCreated {
+			t.Fatalf("bob's %s: %d %s", name, r.Code, r.Body)
+		}
+		var v struct{ ID string }
+		r.json(t, &v)
+		bobs[name] = v.ID
+		t.Cleanup(func() { call(t, "DELETE", "/v1/connections/"+v.ID, "bob", nil, nil) })
+	}
+	if r := jsonCall(t, "PUT", "/v1/spaces/"+sp+"/connections", "bob", map[string]any{"environments": map[string]any{"dev": bobs}}, nil); r.Code != http.StatusOK {
+		t.Fatalf("bob binds: %d %s", r.Code, r.Body)
+	}
+	t.Cleanup(func() { call(t, "DELETE", "/v1/spaces/"+sp+"/members/bob", "alice", nil, nil) }) // before his connections go
 	if r := jsonCall(t, "POST", "/v1/spaces/"+sp+"/functions/totals/versions", "alice", map[string]any{"notebook": "read.ipynb"}, nil); r.Code != http.StatusCreated {
 		t.Fatalf("publish: %d %s", r.Code, r.Body)
 	}
@@ -61,11 +88,15 @@ func soakRead(t *testing.T, sp string, n int) {
 		out, _ := json.Marshal(v)
 		return string(out)
 	}
+	who := "alice" // every other reading run and function call is bob's
+	if (n/4)%2 == 1 {
+		who = "bob"
+	}
 	switch n % 4 {
 	case 0: // a reading run
-		run := startRun(t, "alice", sp, "read.ipynb", nil)
-		if res := runResult(t, "alice", sp, run.ID); res.Status != "succeeded" || compact(res.Output) != compact([]byte(want)) {
-			t.Errorf("reading run %d: %s %s", n, res.Status, res.Output)
+		run := startRun(t, who, sp, "read.ipynb", nil)
+		if res := runResult(t, who, sp, run.ID); res.Status != "succeeded" || compact(res.Output) != compact([]byte(want)) {
+			t.Errorf("reading run %d (%s): %s %s", n, who, res.Status, res.Output)
 		}
 	case 1: // refused at start: the fetcher can't attach with a wrong password
 		r := jsonCall(t, "POST", "/v1/spaces/"+sp+"/runs", "alice", map[string]any{"notebook": "read.ipynb", "environment": "prod"}, nil)
@@ -79,11 +110,11 @@ func soakRead(t *testing.T, sp string, n int) {
 			t.Errorf("prod run %d: %+v", n, got)
 		}
 	case 2: // a function call
-		r := jsonCall(t, "POST", "/v1/spaces/"+sp+"/functions/totals/invoke?wait=50s", "alice", map[string]any{"environment": "dev"}, nil)
+		r := jsonCall(t, "POST", "/v1/spaces/"+sp+"/functions/totals/invoke?wait=50s", who, map[string]any{"environment": "dev"}, nil)
 		var res callerResult
 		_ = json.Unmarshal(r.Body, &res)
 		if res.Status != "succeeded" || compact(res.Output) != compact([]byte(want)) {
-			t.Errorf("function call %d: %d %s", n, r.Code, r.Body)
+			t.Errorf("function call %d (%s): %d %s", n, who, r.Code, r.Body)
 		}
 	case 3: // a reading session
 		r := jsonCall(t, "POST", "/v1/spaces/"+sp+"/sessions", "alice", map[string]string{"notebook": "read.ipynb", "environment": "dev", "mode": "read-only"}, nil)

@@ -61,7 +61,10 @@ EOF
 docker pull -q "$FROM_IMAGE" >/dev/null
 
 echo "== $FROM ($FROM_IMAGE): make the data"
-up_old up -d --no-build --wait
+# Connections on (from 0.4.0; earlier releases ignore the settings), so
+# names bound before the upgrade are upgraded too.
+NBSANDBOX_CONNECTIONS_ENABLED=true NBSANDBOX_CONNECTIONS_ALLOWED=db.example.com \
+	up_old up -d --no-build --wait
 NBSANDBOX_UPGRADE=before NBSANDBOX_UPGRADE_STATE="$work/state.json" \
 	"$GO" test -C "$root" -tags integration -count=1 -timeout 10m -run '^TestUpgrade$' ${TESTFLAGS:-} ./tests/integration/
 

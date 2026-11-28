@@ -59,18 +59,25 @@ func TestSpaceBindings(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	empty, err := db.GetSpaceConnections(ctx, "s1")
-	if err != nil || len(empty.Environments) != 0 || empty.Default != "" {
+	empty, err := db.GetSpaceNames(ctx, "s1")
+	if err != nil || len(empty.Environments) != 0 || empty.Default != "" || len(empty.Names) != 0 {
 		t.Fatalf("before: %+v %v", empty, err)
 	}
-	sc := SpaceConnections{Default: "dev", Environments: map[string]map[string]string{
-		"dev": {"crm": "dev"}, "prod": {"crm": "prod"}}}
-	if err := db.SetSpaceConnections(ctx, "s1", sc); err != nil {
+	if err := db.SetSpaceNames(ctx, "s1", SpaceNames{Default: "dev", Environments: []string{"dev", "prod"}, Names: map[string]string{"crm": "postgresql"}}); err != nil {
 		t.Fatal(err)
 	}
-	got, err := db.GetSpaceConnections(ctx, "s1")
-	if err != nil || got.Default != "dev" || got.Environments["prod"]["crm"] != "prod" || len(got.Environments) != 2 {
+	if err := db.SetBindings(ctx, "s1", "alice", Bindings{"dev": {"crm": "dev"}, "prod": {"crm": "prod"}}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := db.GetSpaceNames(ctx, "s1")
+	if err != nil || got.Default != "dev" || len(got.Environments) != 2 || got.Names["crm"] != "postgresql" {
 		t.Fatalf("after: %+v %v", got, err)
+	}
+	if b, err := db.GetBindings(ctx, "s1", "alice"); err != nil || b["prod"]["crm"] != "prod" {
+		t.Fatalf("bindings: %+v %v", b, err)
+	}
+	if b, _ := db.GetBindings(ctx, "s1", "bob"); len(b) != 0 {
+		t.Fatalf("bob's bindings: %+v", b)
 	}
 	if uses, err := db.ConnectionUses(ctx, "prod"); err != nil || len(uses) != 1 || uses[0].Environment != "prod" || uses[0].Name != "crm" {
 		t.Fatalf("uses: %+v %v", uses, err)
@@ -79,20 +86,37 @@ func TestSpaceBindings(t *testing.T) {
 	if err := db.DeleteConnection(ctx, "alice", "prod"); !errors.Is(err, ErrConnectionInUse) {
 		t.Fatalf("delete while bound: %v", err)
 	}
-	// Replacing drops what's no longer there: prod is free again.
-	if err := db.SetSpaceConnections(ctx, "s1", SpaceConnections{Default: "dev", Environments: map[string]map[string]string{"dev": {"crm": "dev"}}}); err != nil {
+	// Dropping an environment drops its bindings: prod is free again; dev's stay.
+	if err := db.SetSpaceNames(ctx, "s1", SpaceNames{Default: "dev", Environments: []string{"dev"}, Names: map[string]string{"crm": "postgresql"}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.DeleteConnection(ctx, "alice", "prod"); err != nil {
 		t.Fatalf("delete once unbound: %v", err)
 	}
-	// A binding to a connection that doesn't exist is refused, and nothing changes.
-	bad := SpaceConnections{Default: "dev", Environments: map[string]map[string]string{"dev": {"crm": "gone"}}}
-	if err := db.SetSpaceConnections(ctx, "s1", bad); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("missing connection: %v", err)
+	if b, _ := db.GetBindings(ctx, "s1", "alice"); b["dev"]["crm"] != "dev" {
+		t.Fatalf("dev's binding went: %+v", b)
 	}
-	if got, _ := db.GetSpaceConnections(ctx, "s1"); got.Environments["dev"]["crm"] != "dev" {
-		t.Fatalf("a refused change changed something: %+v", got)
+	// A binding to a connection that doesn't exist, or a name not declared, is refused, and nothing changes.
+	for _, bad := range []Bindings{{"dev": {"crm": "gone"}}, {"dev": {"lake": "dev"}}} {
+		if err := db.SetBindings(ctx, "s1", "alice", bad); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("%v: %v", bad, err)
+		}
+	}
+	if b, _ := db.GetBindings(ctx, "s1", "alice"); b["dev"]["crm"] != "dev" {
+		t.Fatalf("a refused change changed something: %+v", b)
+	}
+	// A name whose type changes loses its bindings.
+	if err := db.SetSpaceNames(ctx, "s1", SpaceNames{Default: "dev", Environments: []string{"dev"}, Names: map[string]string{"crm": "mysql"}}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := db.GetBindings(ctx, "s1", "alice"); len(b["dev"]) != 0 {
+		t.Fatalf("a binding of the old type stayed: %+v", b)
+	}
+	if err := db.SetSpaceNames(ctx, "s1", SpaceNames{Default: "dev", Environments: []string{"dev"}, Names: map[string]string{"crm": "postgresql"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetBindings(ctx, "s1", "alice", Bindings{"dev": {"crm": "dev"}}); err != nil {
+		t.Fatal(err)
 	}
 	// Deleting the space removes its environments and bindings, freeing its connections.
 	if err := db.DeleteSpace(ctx, "alice", "s1"); err != nil {

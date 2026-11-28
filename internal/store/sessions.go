@@ -67,7 +67,7 @@ func scanSession(sc interface{ Scan(...any) error }) (Session, error) {
 	return s, nil
 }
 
-// OpenSession returns the notebook's open session (created false), or
+// OpenSession returns the caller's open session on the notebook (created false), or
 // records a new one waiting for a worker (status starting). A read-write
 // session is given only while nothing else can write the space (no queued or
 // running writing run, no other read-write session); otherwise the new
@@ -83,7 +83,7 @@ func (db *DB) OpenSession(ctx context.Context, s Session, perUser int) (Session,
 		return Session{}, false, err
 	}
 	existing, err := scanSession(tx.QueryRowContext(ctx, "SELECT "+sessionCols+
-		" FROM sessions WHERE space_id = ? AND notebook = ? AND status <> 'ended'", s.SpaceID, s.Notebook))
+		" FROM sessions WHERE space_id = ? AND notebook = ? AND owner = ? AND status <> 'ended'", s.SpaceID, s.Notebook, s.Owner))
 	switch {
 	case err == nil:
 		return existing, false, tx.Commit()

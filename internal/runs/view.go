@@ -175,7 +175,9 @@ type View struct {
 	Function       string `json:"function,omitempty"`
 	Version        int    `json:"version,omitempty"`
 	ReadOnlySpace  bool   `json:"read_only_space"`
-	Client         string `json:"client,omitempty"` // the application that started it on its user's behalf
+	// Owner is who started it (in a shared space, any member with write).
+	Owner  string `json:"owner"`
+	Client string `json:"client,omitempty"` // the application that started it on its user's behalf
 	// Environment is the space environment the run read its names in.
 	Environment string `json:"environment,omitempty"`
 	// Worker is the worker that holds or held it ("" before one took it).
@@ -203,7 +205,7 @@ type View struct {
 func (m *Manager) view(ctx context.Context, r store.Run, withResult bool) View {
 	v := View{
 		ID: r.ID, SpaceID: r.SpaceID, Notebook: r.Notebook, NotebookSHA256: r.NotebookSHA256,
-		Function: r.Function, Version: r.Version, ReadOnlySpace: !r.WritesSpace, Client: r.ClientApp, Environment: r.Environment,
+		Function: r.Function, Version: r.Version, ReadOnlySpace: !r.WritesSpace, Owner: r.Owner, Client: r.ClientApp, Environment: r.Environment,
 		Worker:     r.Worker,
 		Parameters: json.RawMessage(r.ParametersJSON),
 		Status:     r.Status, ErrorKind: r.ErrorKind, Fault: r.Fault, Retryable: Retryable(r.Status), Message: r.Message,
@@ -236,7 +238,7 @@ func (m *Manager) view(ctx context.Context, r store.Run, withResult bool) View {
 
 // Get returns one run with its result.
 func (m *Manager) Get(ctx context.Context, owner, spaceID, runID string) (View, error) {
-	if err := m.d.Spaces.Owned(ctx, owner, spaceID); err != nil {
+	if err := m.d.Spaces.Allowed(ctx, owner, spaceID, spaces.RoleRead); err != nil {
 		return View{}, err
 	}
 	r, err := m.d.DB.GetRun(ctx, spaceID, runID)
@@ -252,6 +254,7 @@ func (m *Manager) Get(ctx context.Context, owner, spaceID, runID string) (View, 
 // ListFilter narrows a run listing; zero fields match everything.
 type ListFilter struct {
 	Status        string     // one of the statuses (KnownStatus)
+	Owner         string     // only runs this caller started
 	Function      string     // only invocations of this function
 	CreatedAfter  *time.Time // exclusive
 	CreatedBefore *time.Time // exclusive
@@ -274,10 +277,10 @@ func (m *Manager) List(ctx context.Context, owner, spaceID string, f ListFilter,
 	if f.Function != "" && !spaces.ValidFunctionName(f.Function) {
 		return nil, "", &spaces.InvalidError{Msg: "function is not a valid function name"}
 	}
-	if err := m.d.Spaces.Owned(ctx, owner, spaceID); err != nil {
+	if err := m.d.Spaces.Allowed(ctx, owner, spaceID, spaces.RoleRead); err != nil {
 		return nil, "", err
 	}
-	page, err := m.d.DB.ListRuns(ctx, spaceID, store.RunFilter{Status: f.Status, Function: f.Function, CreatedAfter: f.CreatedAfter, CreatedBefore: f.CreatedBefore}, cursor, limit)
+	page, err := m.d.DB.ListRuns(ctx, spaceID, store.RunFilter{Status: f.Status, Owner: f.Owner, Function: f.Function, CreatedAfter: f.CreatedAfter, CreatedBefore: f.CreatedBefore}, cursor, limit)
 	if errors.Is(err, store.ErrBadCursor) {
 		return nil, "", &spaces.InvalidError{Msg: "invalid cursor"}
 	}
@@ -328,7 +331,7 @@ type UsageSample struct {
 
 // Usage returns one of the owner's runs' samples.
 func (m *Manager) Usage(ctx context.Context, owner, spaceID, runID string) (UsageView, error) {
-	if err := m.d.Spaces.Owned(ctx, owner, spaceID); err != nil {
+	if err := m.d.Spaces.Allowed(ctx, owner, spaceID, spaces.RoleRead); err != nil {
 		return UsageView{}, err
 	}
 	if _, err := m.d.DB.GetRun(ctx, spaceID, runID); errors.Is(err, store.ErrNotFound) {

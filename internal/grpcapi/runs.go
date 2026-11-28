@@ -133,7 +133,7 @@ func (s *server) ListRuns(ctx context.Context, req *connect.Request[pb.ListRunsR
 	if err != nil {
 		return nil, err
 	}
-	f := runs.ListFilter{Status: m.Status}
+	f := runs.ListFilter{Status: m.Status, Owner: m.Owner}
 	for _, t := range []struct {
 		ts  *timestamppb.Timestamp
 		dst **time.Time

@@ -54,7 +54,7 @@ func (s *Service) WriteFile(ctx context.Context, owner, id string, req WriteRequ
 	if err := ValidatePath(req.Path); err != nil {
 		return File{}, err
 	}
-	if _, err := s.get(ctx, owner, id); err != nil {
+	if _, err := s.access(ctx, owner, id, RoleWrite); err != nil {
 		return File{}, err
 	}
 	cur, err := s.db.GetFile(ctx, id, req.Path)
@@ -117,7 +117,7 @@ func (s *Service) Stat(ctx context.Context, owner, id, p string) (File, error) {
 	if err := ValidatePath(p); err != nil {
 		return File{}, err
 	}
-	if _, err := s.get(ctx, owner, id); err != nil {
+	if _, err := s.access(ctx, owner, id, RoleRead); err != nil {
 		return File{}, err
 	}
 	row, err := s.db.GetFile(ctx, id, p)
@@ -132,7 +132,7 @@ func (s *Service) CreateFolder(ctx context.Context, owner, id, p string) (File, 
 	if err := ValidatePath(p); err != nil {
 		return File{}, err
 	}
-	if _, err := s.get(ctx, owner, id); err != nil {
+	if _, err := s.access(ctx, owner, id, RoleWrite); err != nil {
 		return File{}, err
 	}
 	if err := s.db.CreateFolder(ctx, id, p, s.now()); err != nil {
@@ -157,7 +157,7 @@ func (s *Service) Move(ctx context.Context, owner, id, from, to, ifMatch string)
 	if strings.HasPrefix(to, from+"/") {
 		return File{}, invalid("can't move %s into itself", from)
 	}
-	if _, err := s.get(ctx, owner, id); err != nil {
+	if _, err := s.access(ctx, owner, id, RoleWrite); err != nil {
 		return File{}, err
 	}
 	var ifSHA *string
@@ -178,7 +178,7 @@ func (s *Service) DeletePath(ctx context.Context, owner, id, p string, recursive
 	if err := ValidatePath(p); err != nil {
 		return err
 	}
-	if _, err := s.get(ctx, owner, id); err != nil {
+	if _, err := s.access(ctx, owner, id, RoleWrite); err != nil {
 		return err
 	}
 	if err := s.db.DeletePath(ctx, id, p, recursive); err != nil {

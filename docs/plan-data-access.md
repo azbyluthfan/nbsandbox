@@ -1,6 +1,6 @@
 # Plan: data outside nbsandbox
 
-**Status (2026-11-25):** phase 1 of the [order of work](#order-of-work) is built, in milestones M0 to M5: connections, secret providers (Kubernetes Secrets, Vault/OpenBao, a built-in store for development), names and environments, mediated reads (PostgreSQL, MySQL, SQL Server, S3-compatible storage) for runs, sessions and functions, the egress gateway, on Docker and Kubernetes, the web UI, and the isolation rows. User and operator documentation: [connections.md](connections.md). Phase 2, HTTP APIs through the fetcher, is designed ([below](#http-apis-through-the-fetcher), 2026-11-27). The later phases are on the [ROADMAP](../ROADMAP.md).
+**Status (2026-11-25):** phase 1 of the [order of work](#order-of-work) is built, in milestones M0 to M5: connections, secret providers (Kubernetes Secrets, Vault/OpenBao, a built-in store for development), names and environments, mediated reads (PostgreSQL, MySQL, SQL Server, S3-compatible storage) for runs, sessions and functions, the egress gateway, on Docker and Kubernetes, the web UI, and the isolation rows. User and operator documentation: [connections.md](connections.md). Phase 2, HTTP APIs through the fetcher, is built ([below](#http-apis-through-the-fetcher), H1 to H4, 2026-11-27). The later phases are on the [ROADMAP](../ROADMAP.md).
 
 ## Today
 
@@ -83,7 +83,7 @@ Every run records its environment and which connection each name meant.
 ### Functions and shared spaces: the caller's connections
 
 - **A function call resolves names with the caller's own connections.** The publisher declares the names a function needs and what they must be (`crm: postgresql, tables orders, customers`). A caller without a matching connection gets a clear error before anything runs. Each run records whose connections it used. Nothing is pinned to the publisher's credentials, so nothing breaks when the publisher leaves.
-- **Shared spaces** (on the ROADMAP; no organisations): each member runs the space's notebooks with **their own connections** under the space's names.
+- **Shared spaces** (no organisations; [plan-shared-spaces.md](plan-shared-spaces.md)): each member runs the space's notebooks with **their own connections** under the space's names, which the space's owners declare.
 
 ### Two modes: mediated and injected
 

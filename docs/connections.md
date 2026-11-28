@@ -65,7 +65,7 @@ Only `verify` stops someone on the network between nbsandbox and the database fr
 
 ### 2. Bind names in a space
 
-A space binds names to connections, in one or more **environments**: the same names in each, so the same notebook reads development or production data without edits.
+A space binds names to connections, in one or more **environments**: the same names in each, so the same notebook reads development or production data without edits. In a shared space, owners declare the names and each member binds their own connections to them ([sharing.md](sharing.md#data-each-members-own-connections)).
 
 ```sh
 curl -u alice:… -X PUT https://nbsandbox.example/v1/spaces/$SPACE/connections -H 'Content-Type: application/json' -d '{
@@ -77,7 +77,7 @@ curl -u alice:… -X PUT https://nbsandbox.example/v1/spaces/$SPACE/connections 
 }'
 ```
 
-Names are lowercase SQL identifiers (`crm`, `sales_lake`). A connection a space binds can't be deleted until it's unbound.
+Names are lowercase SQL identifiers (`crm`, `sales_lake`). Sending `default_environment` declares the space's names from your bindings (owners); without it, you bind your own connections to names already declared, and `missing` says which you haven't. A connection a space binds can't be deleted until it's unbound.
 
 ### 3. Query in a notebook
 
@@ -126,9 +126,9 @@ curl -u alice:… -X POST https://nbsandbox.example/v1/spaces/$SPACE/sessions -H
 
 ### 6. In a published function
 
-A version records the names its space bound when it was published, and their types: `"connections": {"crm": "postgresql"}` on the version. A call names the environment (`"environment"` on `…/invoke`, the space's default otherwise), which must bind every one of those names to a connection of the same type; otherwise the call is refused (`400`) before anything runs, saying which names are missing. The run reads only the names its version declared.
+A version records the names its space declared when it was published, and their types: `"connections": {"crm": "postgresql"}` on the version. A call names the environment (`"environment"` on `…/invoke`, the space's default otherwise), where the **caller's own bindings** must give every one of those names a connection of the same type; otherwise the call is refused (`400`) before anything runs, saying which names are missing. The run reads only the names its version declared.
 
-Functions are called by their space's owner today, so they read the space's own bindings. With shared spaces, each caller's own connections will stand behind the same names.
+Anyone with a role in the space can call its functions ([sharing.md](sharing.md)), each with their own connections behind the same names.
 
 ### 7. Call an HTTP API
 

@@ -14,7 +14,9 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/azbyluthfan/nbsandbox/internal/secrets"
@@ -344,9 +346,11 @@ func (s *Service) Delete(ctx context.Context, owner, id string) error {
 	return nil
 }
 
-// SpaceInput is what names mean in a space: the default environment, and
-// each environment's bindings (name -> one of the caller's connections, by
-// its name or ID). It replaces everything the space had.
+// SpaceInput is a caller's bindings in a space: each environment's names
+// -> one of the caller's connections (by name or ID). With Default set (an
+// owner only), it also declares the space's environments and names from
+// them, as before shared spaces: every environment must then bind the same
+// names.
 type SpaceInput struct {
 	Default      string
 	Environments map[string]map[string]string
@@ -359,29 +363,140 @@ type Bound struct {
 	Type string `json:"type"`
 }
 
-// SpaceView is a space's environments and bindings.
+// SpaceView is the space's environments with the caller's bindings, and
+// the declared names each environment still needs from them.
 type SpaceView struct {
 	Default      string                      `json:"default_environment"`
 	Environments map[string]map[string]Bound `json:"environments"`
+	Missing      map[string][]string         `json:"missing,omitempty"`
 }
 
-// ownSpace checks the space is owner's (whatever the transport checked).
-func (s *Service) ownSpace(ctx context.Context, owner, spaceID string) error {
-	if _, err := s.d.DB.GetSpace(ctx, owner, spaceID); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			return ErrNotFound
-		}
+// NamesInput is what a space's owners declare: environments, the default,
+// and each name's connection type.
+type NamesInput struct {
+	Default      string
+	Environments []string
+	Names        map[string]string
+}
+
+// NamesView is a space's declarations, and which names each member has
+// bound (principal -> environment -> names; never to which connection).
+type NamesView struct {
+	Default      string                         `json:"default_environment"`
+	Environments []string                       `json:"environments"`
+	Names        map[string]string              `json:"names"`
+	Bound        map[string]map[string][]string `json:"bound"`
+}
+
+// ownSpace checks the caller's role in the space: ErrNotFound without one,
+// a spaces.ForbiddenError if it is below need.
+func (s *Service) ownSpace(ctx context.Context, caller, spaceID string, need spaces.Role) error {
+	sp, err := s.d.DB.SpaceAccess(ctx, caller, spaceID)
+	if errors.Is(err, store.ErrNotFound) {
+		return ErrNotFound
+	}
+	if err != nil {
 		return err
+	}
+	if !spaces.Role(sp.Role).Allows(need) {
+		return &spaces.ForbiddenError{Need: need}
 	}
 	return nil
 }
 
-// Space returns what names mean in one of owner's spaces.
+// Names returns a space's declared names (any role).
+func (s *Service) Names(ctx context.Context, caller, spaceID string) (NamesView, error) {
+	if err := s.ownSpace(ctx, caller, spaceID, spaces.RoleRead); err != nil {
+		return NamesView{}, err
+	}
+	sn, err := s.d.DB.GetSpaceNames(ctx, spaceID)
+	if err != nil {
+		return NamesView{}, err
+	}
+	bound, err := s.d.DB.BoundNames(ctx, spaceID)
+	if err != nil {
+		return NamesView{}, err
+	}
+	envs := sn.Environments
+	if envs == nil {
+		envs = []string{}
+	}
+	return NamesView{Default: sn.Default, Environments: envs, Names: sn.Names, Bound: bound}, nil
+}
+
+// SetNames replaces a space's declarations (owners). Members' bindings of
+// an environment or name that goes, or of a name whose type changes, go.
+func (s *Service) SetNames(ctx context.Context, caller, spaceID string, in NamesInput) (NamesView, error) {
+	if err := s.ownSpace(ctx, caller, spaceID, spaces.RoleOwner); err != nil {
+		return NamesView{}, err
+	}
+	sn, err := checkNames(in)
+	if err != nil {
+		return NamesView{}, err
+	}
+	if err := s.d.DB.SetSpaceNames(ctx, spaceID, sn); err != nil {
+		return NamesView{}, err
+	}
+	return s.Names(ctx, caller, spaceID)
+}
+
+// checkNames checks declarations and settles the default.
+func checkNames(in NamesInput) (store.SpaceNames, error) {
+	if len(in.Environments) > MaxEnvironments {
+		return store.SpaceNames{}, invalid("at most %d environments", MaxEnvironments)
+	}
+	if len(in.Names) > MaxNames {
+		return store.SpaceNames{}, invalid("at most %d names", MaxNames)
+	}
+	envs := append([]string{}, in.Environments...)
+	sort.Strings(envs)
+	for i, env := range envs {
+		if !identifier.MatchString(env) {
+			return store.SpaceNames{}, invalid("environment names must start with a lowercase letter and have only a-z, 0-9 and _, got %q", env)
+		}
+		if i > 0 && envs[i-1] == env {
+			return store.SpaceNames{}, invalid("environment %q is listed twice", env)
+		}
+	}
+	for name, typ := range in.Names {
+		if !identifier.MatchString(name) {
+			return store.SpaceNames{}, invalid("names must start with a lowercase letter and have only a-z, 0-9 and _ (they are used in SQL, as in crm.orders), got %q", name)
+		}
+		if _, ok := types[typ]; !ok {
+			return store.SpaceNames{}, invalid("%s: type must be one of %s, got %q", name, strings.Join(Types(), ", "), typ)
+		}
+	}
+	sn := store.SpaceNames{Default: in.Default, Environments: envs, Names: in.Names}
+	if sn.Names == nil {
+		sn.Names = map[string]string{}
+	}
+	switch {
+	case len(envs) == 0:
+		if in.Default != "" {
+			return store.SpaceNames{}, invalid("default_environment %q: there are no environments", in.Default)
+		}
+		if len(sn.Names) > 0 {
+			return store.SpaceNames{}, invalid("names need at least one environment")
+		}
+	case in.Default == "" && len(envs) == 1:
+		sn.Default = envs[0]
+	case !slices.Contains(envs, in.Default):
+		return store.SpaceNames{}, invalid("default_environment must be one of the environments (%v), got %q", envs, in.Default)
+	}
+	return sn, nil
+}
+
+// Space returns the space's environments with the caller's bindings, and
+// what each environment still needs from them (any role).
 func (s *Service) Space(ctx context.Context, owner, spaceID string) (SpaceView, error) {
-	if err := s.ownSpace(ctx, owner, spaceID); err != nil {
+	if err := s.ownSpace(ctx, owner, spaceID, spaces.RoleRead); err != nil {
 		return SpaceView{}, err
 	}
-	sc, err := s.d.DB.GetSpaceConnections(ctx, spaceID)
+	sn, err := s.d.DB.GetSpaceNames(ctx, spaceID)
+	if err != nil {
+		return SpaceView{}, err
+	}
+	b, err := s.d.DB.GetBindings(ctx, spaceID, owner)
 	if err != nil {
 		return SpaceView{}, err
 	}
@@ -393,22 +508,63 @@ func (s *Service) Space(ctx context.Context, owner, spaceID string) (SpaceView, 
 	for _, c := range conns {
 		byID[c.ID] = c
 	}
-	out := SpaceView{Default: sc.Default, Environments: map[string]map[string]Bound{}}
-	for env, binds := range sc.Environments {
+	out := SpaceView{Default: sn.Default, Environments: map[string]map[string]Bound{}}
+	for _, env := range sn.Environments {
 		out.Environments[env] = map[string]Bound{}
-		for name, id := range binds {
-			c := byID[id] // the space's owner owns every bound connection
+		for name, id := range b[env] {
+			c := byID[id] // the caller's own
 			out.Environments[env][name] = Bound{ID: id, Name: c.Name, Type: c.Type}
+		}
+		if miss := missing(sn.Names, b[env], nil); len(miss) > 0 {
+			if out.Missing == nil {
+				out.Missing = map[string][]string{}
+			}
+			out.Missing[env] = miss
 		}
 	}
 	return out, nil
 }
 
-// SetSpace replaces what names mean in one of owner's spaces. Every
-// environment must bind the same names; the connections must be owner's.
+// missing are the names of declared (only those in only, if not nil) that
+// bound lacks, sorted.
+func missing(declared map[string]string, bound map[string]string, only []string) []string {
+	var out []string
+	for name := range declared {
+		if only != nil && !slices.Contains(only, name) {
+			continue
+		}
+		if bound[name] == "" {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// SetSpace replaces the caller's bindings in the space (any role): each to
+// one of their own connections, of the declared type, in a declared
+// environment; names may stay unbound (runs then say which to bind). With
+// in.Default set, or while the space declares nothing yet, an owner also
+// declares the space's environments and names from the bindings (every
+// environment must bind the same names), as before shared spaces.
 func (s *Service) SetSpace(ctx context.Context, owner, spaceID string, in SpaceInput) (SpaceView, error) {
-	if err := s.ownSpace(ctx, owner, spaceID); err != nil {
+	if err := s.ownSpace(ctx, owner, spaceID, spaces.RoleRead); err != nil {
 		return SpaceView{}, err
+	}
+	current, err := s.d.DB.GetSpaceNames(ctx, spaceID)
+	if err != nil {
+		return SpaceView{}, err
+	}
+	// Declaring: default_environment given, or nothing declared yet.
+	declaring := in.Default != "" || len(current.Environments) == 0
+	if declaring {
+		if err := s.ownSpace(ctx, owner, spaceID, spaces.RoleOwner); err != nil {
+			var f *spaces.ForbiddenError
+			if errors.As(err, &f) && in.Default == "" {
+				return SpaceView{}, invalid("this space declares no names yet: an owner declares them first")
+			}
+			return SpaceView{}, err
+		}
 	}
 	if len(in.Environments) > MaxEnvironments {
 		return SpaceView{}, invalid("at most %d environments", MaxEnvironments)
@@ -417,17 +573,18 @@ func (s *Service) SetSpace(ctx context.Context, owner, spaceID string, in SpaceI
 	if err != nil {
 		return SpaceView{}, err
 	}
-	byKey := map[string]string{} // a connection's ID or name -> its ID
+	byKey := map[string]store.Connection{} // a connection's ID or name
 	for _, c := range conns {
-		byKey[c.ID], byKey[c.Name] = c.ID, c.ID
+		byKey[c.ID], byKey[c.Name] = c, c
 	}
 	envs := make([]string, 0, len(in.Environments))
 	for env := range in.Environments {
 		envs = append(envs, env)
 	}
 	sort.Strings(envs)
-	sc := store.SpaceConnections{Default: in.Default, Environments: map[string]map[string]string{}}
-	var names []string // the first environment's, which every other must match
+	b := store.Bindings{}
+	typeOf := map[string]string{}
+	var first []string // the first environment's names, which every other must match when declaring
 	for i, env := range envs {
 		if !identifier.MatchString(env) {
 			return SpaceView{}, invalid("environment names must start with a lowercase letter and have only a-z, 0-9 and _, got %q", env)
@@ -437,38 +594,60 @@ func (s *Service) SetSpace(ctx context.Context, owner, spaceID string, in SpaceI
 			return SpaceView{}, invalid("at most %d names per environment", MaxNames)
 		}
 		these := make([]string, 0, len(binds))
-		sc.Environments[env] = map[string]string{}
+		b[env] = map[string]string{}
 		for name, key := range binds {
 			if !identifier.MatchString(name) {
 				return SpaceView{}, invalid("names must start with a lowercase letter and have only a-z, 0-9 and _ (they are used in SQL, as in crm.orders), got %q", name)
 			}
-			id, ok := byKey[key]
+			c, ok := byKey[key]
 			if !ok {
 				return SpaceView{}, invalid("environment %s: %s: you have no connection %q", env, name, key)
 			}
-			sc.Environments[env][name] = id
+			b[env][name] = c.ID
 			these = append(these, name)
+			if t, seen := typeOf[name]; declaring && seen && t != c.Type {
+				return SpaceView{}, invalid("%s is bound to a %s connection in one environment and a %s one in another", name, t, c.Type)
+			}
+			typeOf[name] = c.Type
 		}
 		sort.Strings(these)
+		if !declaring {
+			continue
+		}
 		if i == 0 {
-			names = these
-		} else if fmt.Sprint(these) != fmt.Sprint(names) {
-			return SpaceView{}, invalid("every environment must bind the same names: %s binds %v, %s binds %v", envs[0], names, env, these)
+			first = these
+		} else if fmt.Sprint(these) != fmt.Sprint(first) {
+			return SpaceView{}, invalid("every environment must bind the same names: %s binds %v, %s binds %v", envs[0], first, env, these)
 		}
 	}
-	switch {
-	case len(envs) == 0:
-		if in.Default != "" {
-			return SpaceView{}, invalid("default_environment %q: there are no environments", in.Default)
+	if declaring {
+		sn, err := checkNames(NamesInput{Default: in.Default, Environments: envs, Names: typeOf})
+		if err != nil {
+			return SpaceView{}, err
 		}
-	case in.Default == "" && len(envs) == 1:
-		sc.Default = envs[0]
-	case in.Environments[in.Default] == nil:
-		return SpaceView{}, invalid("default_environment must be one of the environments (%v), got %q", envs, in.Default)
+		if err := s.d.DB.SetSpaceNames(ctx, spaceID, sn); err != nil {
+			return SpaceView{}, err
+		}
+	} else {
+		sn := current
+		for _, env := range envs {
+			if !slices.Contains(sn.Environments, env) {
+				return SpaceView{}, invalid("this space has no environment %q (its environments: %v)", env, sn.Environments)
+			}
+			for name, id := range b[env] {
+				want, ok := sn.Names[name]
+				switch {
+				case !ok:
+					return SpaceView{}, invalid("this space declares no name %q (ask an owner to add it)", name)
+				case byKey[id].Type != want:
+					return SpaceView{}, invalid("%s is a %s name: %q is a %s connection", name, want, byKey[id].Name, byKey[id].Type)
+				}
+			}
+		}
 	}
-	if err := s.d.DB.SetSpaceConnections(ctx, spaceID, sc); err != nil {
+	if err := s.d.DB.SetBindings(ctx, spaceID, owner, b); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			return SpaceView{}, invalid("a connection was deleted meanwhile: try again")
+			return SpaceView{}, invalid("a connection, environment or name was deleted meanwhile: try again")
 		}
 		return SpaceView{}, err
 	}

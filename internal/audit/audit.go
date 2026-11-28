@@ -56,6 +56,7 @@ func New(cfg Config, db Store, log *slog.Logger, failures prometheus.Counter) *R
 var (
 	changes = map[auth.Op]bool{
 		auth.OpCreateSpace: true, auth.OpUpdateSpace: true, auth.OpDeleteSpace: true,
+		auth.OpPutMember: true, auth.OpDeleteMember: true, auth.OpTransferSpace: true,
 		auth.OpUploadFiles: true, auth.OpPutFile: true, auth.OpMoveFile: true, auth.OpDeleteFile: true, auth.OpCreateFolder: true,
 		auth.OpPublishFunction: true, auth.OpDeleteFunction: true, auth.OpInvokeFunction: true, auth.OpInvokeFunctionStream: true,
 		auth.OpCreateRun: true, auth.OpCancelRun: true, auth.OpDeleteRun: true, auth.OpPromoteArtifact: true,
@@ -67,7 +68,7 @@ var (
 		// Connections: who created, changed, deleted or bound them; never
 		// their secrets.
 		auth.OpCreateConnection: true, auth.OpUpdateConnection: true, auth.OpDeleteConnection: true,
-		auth.OpSetSpaceConnections: true,
+		auth.OpSetSpaceConnections: true, auth.OpSetSpaceNames: true,
 	}
 	downloads = map[auth.Op]bool{
 		auth.OpGetFile: true, auth.OpGetRunNotebook: true, auth.OpGetRunHTML: true, auth.OpGetArtifact: true, auth.OpGetRunLog: true,

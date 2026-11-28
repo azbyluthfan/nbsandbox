@@ -174,10 +174,53 @@ func (s *Service) lock(id string) func() {
 type Space struct {
 	ID        string
 	Name      string
-	Owner     string // set only for administrators' views
+	Owner     string // its creator and account: whose quotas its files count toward
+	Role      Role   // the caller's role in it ("" in administrators' views)
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	Usage     Usage
+}
+
+// Role is what a caller may do in a space (docs/plan-shared-spaces.md).
+type Role string
+
+// Roles, lowest first.
+const (
+	RoleRead  Role = store.RoleRead
+	RoleWrite Role = store.RoleWrite
+	RoleOwner Role = store.RoleOwner
+)
+
+func (r Role) rank() int {
+	switch r {
+	case RoleRead:
+		return 1
+	case RoleWrite:
+		return 2
+	case RoleOwner:
+		return 3
+	}
+	return 0
+}
+
+// Allows reports whether r is need or above.
+func (r Role) Allows(need Role) bool { return r.rank() >= need.rank() && need.rank() > 0 }
+
+// ValidRole reports whether r is a role.
+func ValidRole(r Role) bool { return r.rank() > 0 }
+
+// ForbiddenError is a request the caller's role in the space doesn't allow
+// (they can see the space: one they can't see is ErrNotFound).
+type ForbiddenError struct {
+	Need Role
+	Msg  string // instead of the default message
+}
+
+func (e *ForbiddenError) Error() string {
+	if e.Msg != "" {
+		return e.Msg
+	}
+	return fmt.Sprintf("this needs the %s role in the space", e.Need)
 }
 
 // Usage is what a space holds.
@@ -229,9 +272,9 @@ func (s *Service) Create(ctx context.Context, owner, name string) (Space, error)
 	return Space{ID: id, Name: name, CreatedAt: now, UpdatedAt: now, Usage: Usage{QuotaBytes: quota}}, nil
 }
 
-// Get returns owner's space with its usage.
+// Get returns a space caller has any role in, with its usage.
 func (s *Service) Get(ctx context.Context, owner, id string) (Space, error) {
-	sp, err := s.get(ctx, owner, id)
+	sp, err := s.access(ctx, owner, id, RoleRead)
 	if err != nil {
 		return Space{}, err
 	}
@@ -244,24 +287,50 @@ func (s *Service) Get(ctx context.Context, owner, id string) (Space, error) {
 	return out, nil
 }
 
-func (s *Service) get(ctx context.Context, owner, id string) (store.Space, error) {
+// access returns the space if caller's role in it is need or above:
+// ErrNotFound if they have none (as for a missing space), a ForbiddenError
+// if it is lower.
+func (s *Service) access(ctx context.Context, caller, id string, need Role) (store.Space, error) {
 	if !ValidID(id) {
 		return store.Space{}, ErrNotFound // the API rejects malformed IDs with 400 before this
 	}
-	sp, err := s.db.GetSpace(ctx, owner, id)
+	sp, err := s.db.SpaceAccess(ctx, caller, id)
 	if errors.Is(err, store.ErrNotFound) {
 		return store.Space{}, ErrNotFound
 	}
-	return sp, err
+	if err != nil {
+		return store.Space{}, err
+	}
+	if !Role(sp.Role).Allows(need) {
+		return store.Space{}, &ForbiddenError{Need: need}
+	}
+	return sp, nil
+}
+
+// Allowed returns nil if caller's role in the space is need or above;
+// ErrNotFound if they have none, a ForbiddenError if it is lower.
+func (s *Service) Allowed(ctx context.Context, caller, id string, need Role) error {
+	_, err := s.access(ctx, caller, id, need)
+	return err
+}
+
+// RoleIn returns caller's role in the space; ErrNotFound if none.
+func (s *Service) RoleIn(ctx context.Context, caller, id string) (Role, error) {
+	sp, err := s.access(ctx, caller, id, RoleRead)
+	return Role(sp.Role), err
 }
 
 func fromStore(sp store.Space) Space {
-	return Space{ID: sp.ID, Name: sp.Name, CreatedAt: sp.CreatedAt, UpdatedAt: sp.UpdatedAt}
+	return Space{ID: sp.ID, Name: sp.Name, Owner: sp.Owner, Role: Role(sp.Role), CreatedAt: sp.CreatedAt, UpdatedAt: sp.UpdatedAt}
 }
 
-// List returns one page of owner's spaces (without usage).
-func (s *Service) List(ctx context.Context, owner, cursor string, limit int) ([]Space, string, error) {
-	page, err := s.db.ListSpaces(ctx, owner, cursor, limit)
+// List returns one page of the spaces caller has a role in (only role, if
+// not ""), without usage.
+func (s *Service) List(ctx context.Context, owner string, role Role, cursor string, limit int) ([]Space, string, error) {
+	if role != "" && !ValidRole(role) {
+		return nil, "", invalid("role must be read, write or owner")
+	}
+	page, err := s.db.ListSpaces(ctx, owner, string(role), cursor, limit)
 	if errors.Is(err, store.ErrBadCursor) {
 		return nil, "", invalid("invalid cursor")
 	}
@@ -281,10 +350,11 @@ func (s *Service) Rename(ctx context.Context, owner, id, name string) (Space, er
 	if err := validName(name); err != nil {
 		return Space{}, err
 	}
-	if _, err := s.get(ctx, owner, id); err != nil {
+	sp, err := s.access(ctx, owner, id, RoleOwner)
+	if err != nil {
 		return Space{}, err
 	}
-	if err := s.db.RenameSpace(ctx, owner, id, name, s.now()); err != nil {
+	if err := s.db.RenameSpace(ctx, sp.Owner, id, name, s.now()); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return Space{}, ErrNotFound
 		}
@@ -299,12 +369,13 @@ func (s *Service) Rename(ctx context.Context, owner, id, name string) (Space, er
 // and removed. A crash in between leaves only a directory without a row,
 // which the startup consistency check removes.
 func (s *Service) Delete(ctx context.Context, owner, id string) error {
-	if _, err := s.get(ctx, owner, id); err != nil {
+	sp, err := s.access(ctx, owner, id, RoleOwner)
+	if err != nil {
 		return err
 	}
 	unlock := s.lock(id)
 	defer unlock()
-	switch err := s.db.DeleteSpace(ctx, owner, id); {
+	switch err := s.db.DeleteSpace(ctx, sp.Owner, id); {
 	case errors.Is(err, store.ErrNotFound):
 		return ErrNotFound
 	case errors.Is(err, store.ErrActiveRun):

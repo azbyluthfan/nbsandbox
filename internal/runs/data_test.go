@@ -23,7 +23,7 @@ type fakeData struct {
 	got  map[string]string
 }
 
-func (f *fakeData) Resolve(_ context.Context, _, env string) (string, map[string]string, error) {
+func (f *fakeData) Resolve(_ context.Context, _, _, env string, _ []string) (string, map[string]string, error) {
 	switch env {
 	case "", "dev":
 		return "dev", map[string]string{"crm": "conn-dev"}, nil
@@ -31,6 +31,11 @@ func (f *fakeData) Resolve(_ context.Context, _, env string) (string, map[string
 		return "prod", map[string]string{"crm": "conn-prod"}, nil
 	}
 	return "", nil, &spaces.InvalidError{Msg: "no such environment"}
+}
+
+// Declared: the space declares crm, a postgresql name.
+func (f *fakeData) Declared(context.Context, string) (map[string]string, error) {
+	return map[string]string{"crm": "postgresql"}, nil
 }
 
 // Types: conn-prod is a postgresql connection; anything else mysql.

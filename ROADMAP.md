@@ -65,7 +65,8 @@ Data outside nbsandbox, the first phase of [plan-data-access.md](docs/plan-data-
 - **Checked:** upgrades from 0.3.0 with Compose and with Helm, in the weekly run.
 
 ## Next
-- **HTTP APIs in notebooks.** A notebook's code calls the user's APIs (JSON, uploads, streaming SSE) with any HTTP client, through its run's fetcher, which adds the credential (a header token, basic auth, or OAuth 2.0 client credentials): the secret never enters the run ([plan](docs/plan-data-access.md#http-apis-through-the-fetcher)).
+- **Shared spaces.** A space grants roles (read, write, owner) to other callers, users or apps; every member sees the space's runs, and each reads data with their own connections under the space's names, functions included ([sharing.md](docs/sharing.md)). Built, for the next release; OIDC groups as principals come later.
+- **HTTP APIs in notebooks.** A notebook's code calls the user's APIs (JSON, uploads, streaming SSE) with any HTTP client, through its run's fetcher, which adds the credential (a header token, basic auth, or OAuth 2.0 client credentials): the secret never enters the run ([connections.md](docs/connections.md#7-call-an-http-api)). Built, for the next release.
 - **Authentication against Entra ID, end to end.** Keycloak is tested end to end (tokens, scopes, audience, token exchange); Entra ID is unit-tested against a local issuer and documented, and needs the same end-to-end test with a real tenant.
 - **Sandboxes on real clusters.** Run the suite under GKE Sandbox (gVisor) and AKS Pod Sandboxing (Kata), and add a GKE Terraform example beside the AKS one. `nbsandbox-report check` makes each one a deploy, a check and a teardown.
 
@@ -74,7 +75,6 @@ Data outside nbsandbox, the first phase of [plan-data-access.md](docs/plan-data-
 | Item | What it adds | Where it lands |
 |---|---|---|
 | Fast starts (under 1 s) | A small call takes about 2.5 s, which suits batch work and most function calls. What remains is CPU work on the run's one CPU (the Jupyter client libraries and the kernel's imports, about 0.6 s each; [perf.md](docs/perf.md#starting-a-run)): starting the kernel earlier doesn't help on one CPU, so going under 1 s takes **a pool of single-use pre-started containers** per published function version (created and kernel started ahead of time, used once, then removed), and later restoring a booted kernel from a snapshot (gVisor checkpoint/restore, Firecracker snapshots). Waits for a caller that needs it | isolation, runs, runner image |
-| Shared spaces | Grants keyed by caller ID (`space, principal, role`), read or read-write. With data access, each member uses their own connections under the space's names ([plan](docs/plan-data-access.md#functions-and-shared-spaces-the-callers-connections)) | auth, API, web UI |
 | Deeper lint in the editor | ruff (as WebAssembly, in the browser): undefined names, unused imports, common mistakes across all cells | web UI |
 | Bring your own image | A space or function names its own image (any language or package set), pinned by digest from an allowed registry, with the runner contract installed. Only with gVisor or a sandbox RuntimeClass: a foreign image must not get `runc`'s level of trust | runner images, isolation, runs |
 | Custom packages on Kubernetes | Package sets on Kubernetes: build pods with an egress policy of their own, and a per-node cache of sets mounted read-only into run pods (a copy per run would be slow for large sets) | isolation, runs, Helm |

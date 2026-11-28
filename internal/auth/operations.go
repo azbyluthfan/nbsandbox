@@ -16,6 +16,11 @@ const (
 	OpUpdateSpace Op = "UpdateSpace"
 	OpDeleteSpace Op = "DeleteSpace"
 
+	OpListMembers   Op = "ListMembers"
+	OpPutMember     Op = "PutMember"
+	OpDeleteMember  Op = "DeleteMember"
+	OpTransferSpace Op = "TransferSpace"
+
 	OpUploadFiles  Op = "UploadFiles"
 	OpListFiles    Op = "ListFiles"
 	OpGetFile      Op = "GetFile"
@@ -31,6 +36,8 @@ const (
 	OpDeleteConnection    Op = "DeleteConnection"
 	OpGetSpaceConnections Op = "GetSpaceConnections"
 	OpSetSpaceConnections Op = "SetSpaceConnections"
+	OpGetSpaceNames       Op = "GetSpaceNames"
+	OpSetSpaceNames       Op = "SetSpaceNames"
 
 	OpGetSpacePackages   Op = "GetSpacePackages"
 	OpBuildSpacePackages Op = "BuildSpacePackages"
@@ -112,6 +119,11 @@ var opScopes = map[Op]string{
 	OpUpdateSpace: ScopeSpacesWrite,
 	OpDeleteSpace: ScopeSpacesWrite,
 
+	OpListMembers:   ScopeRead,
+	OpPutMember:     ScopeSpacesWrite,
+	OpDeleteMember:  ScopeSpacesWrite,
+	OpTransferSpace: ScopeSpacesWrite,
+
 	OpUploadFiles:  ScopeFilesWrite,
 	OpListFiles:    ScopeRead,
 	OpGetFile:      ScopeRead,
@@ -185,6 +197,8 @@ var opScopes = map[Op]string{
 	OpDeleteConnection:    ScopeConnections,
 	OpGetSpaceConnections: ScopeRead,
 	OpSetSpaceConnections: ScopeConnections,
+	OpGetSpaceNames:       ScopeRead,
+	OpSetSpaceNames:       ScopeConnections,
 
 	OpFollowRunResult:      ScopeRead,
 	OpInvokeFunctionStream: ScopeFunctionsInvoke,

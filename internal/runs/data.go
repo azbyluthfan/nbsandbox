@@ -6,6 +6,7 @@ package runs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -21,7 +22,11 @@ import (
 // submitted, and makes the run's fetcher when it starts
 // (internal/connections).
 type DataAccess interface {
-	Resolve(ctx context.Context, spaceID, environment string) (string, map[string]string, error)
+	// Resolve settles the caller's own bindings (docs/plan-shared-spaces.md):
+	// every declared name, or only those in only, must be bound.
+	Resolve(ctx context.Context, caller, spaceID, environment string, only []string) (string, map[string]string, error)
+	// Declared is the space's declared names and their types.
+	Declared(ctx context.Context, spaceID string) (map[string]string, error)
 	Types(ctx context.Context, owner string, names map[string]string) (map[string]string, error)
 	Fetcher(ctx context.Context, runID, owner string, names map[string]string, expires time.Time) (*isolation.Fetcher, error)
 }
@@ -45,9 +50,25 @@ func (m *Manager) resolveData(ctx context.Context, owner, spaceID string, req Su
 		}
 		return "", nil, nil
 	}
-	env, names, err := m.d.Data.Resolve(ctx, spaceID, req.Environment)
-	if err != nil || sub.function == "" {
-		return env, names, err
+	var only []string // a function's run: only the names its version declared
+	if sub.function != "" {
+		only = make([]string, 0, len(sub.connections))
+		for name := range sub.connections {
+			only = append(only, name)
+		}
+	}
+	env, names, err := m.d.Data.Resolve(ctx, owner, spaceID, req.Environment, only)
+	if err != nil {
+		if sub.function != "" {
+			var ie *spaces.InvalidError
+			if errors.As(err, &ie) {
+				return "", nil, &spaces.InvalidError{Msg: "function " + sub.function + ": " + ie.Msg}
+			}
+		}
+		return "", nil, err
+	}
+	if sub.function == "" {
+		return env, names, nil
 	}
 	types, err := m.d.Data.Types(ctx, owner, names)
 	if err != nil {
@@ -78,18 +99,17 @@ func (m *Manager) resolveData(ctx context.Context, owner, spaceID string, req Su
 }
 
 // declaredConnections is what a version being published reads: the names
-// its space binds (in the default environment) and their types.
-func (m *Manager) declaredConnections(ctx context.Context, owner, spaceID string) (string, error) {
+// its space declares and their types.
+func (m *Manager) declaredConnections(ctx context.Context, _, spaceID string) (string, error) {
 	if m.d.Data == nil {
 		return "{}", nil
 	}
-	_, names, err := m.d.Data.Resolve(ctx, spaceID, "")
+	types, err := m.d.Data.Declared(ctx, spaceID)
 	if err != nil {
 		return "", err
 	}
-	types, err := m.d.Data.Types(ctx, owner, names)
-	if err != nil {
-		return "", err
+	if types == nil {
+		types = map[string]string{}
 	}
 	b, _ := json.Marshal(types)
 	return string(b), nil

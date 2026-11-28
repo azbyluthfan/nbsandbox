@@ -108,10 +108,18 @@ paths:
     get:
       security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
       tags: [spaces]
-      summary: List the caller's spaces, newest first
+      summary: List the caller's spaces and those shared with them, newest first
+      description: |
+        Each space comes with the caller's role in it (read, write or owner)
+        and its creator (`owner`, whose quotas its files count toward).
       parameters:
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Cursor"
+        - name: role
+          in: query
+          required: false
+          description: Only the spaces where the caller has this role.
+          schema: { type: string, enum: [read, write, owner] }
       responses:
         "200": { description: One page, content: { application/json: { schema: { $ref: "#/components/schemas/SpaceList" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -166,6 +174,108 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+
+  /v1/spaces/{id}/members:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [spaces]
+      summary: The space's members and their roles
+      description: |
+        Any role may list them. The creator comes first, an owner with
+        `creator: true` (docs/plan-shared-spaces.md).
+      responses:
+        "200":
+          description: Its members
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Member" } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/spaces/{id}/members/{principal}:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+      - name: principal
+        in: path
+        required: true
+        description: A caller ID (a username, or <prefix>:<claims> for a token), URL-encoded.
+        schema: { type: string, maxLength: 256 }
+    put:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.spaces.write] }]
+      tags: [spaces]
+      summary: Grant a role, or change it (owners)
+      description: |
+        read sees the space and its runs and calls its functions; write also
+        edits files, runs, opens sessions and publishes; owner also manages
+        members and names, renames and deletes. The principal isn't checked
+        against anyone: the grant waits for its caller. The creator's role
+        can't change (hand the space over first).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [role]
+              properties:
+                role: { type: string, enum: [read, write, owner] }
+      responses:
+        "200": { description: The grant, content: { application/json: { schema: { $ref: "#/components/schemas/Member" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.spaces.write] }]
+      tags: [spaces]
+      summary: Revoke a role (owners), or leave (anyone, for themselves)
+      description: The creator can't be removed. Runs already started keep running.
+      responses:
+        "204": { description: Revoked }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/spaces/{id}/transfer:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+    post:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.spaces.write] }]
+      tags: [spaces]
+      summary: Hand the space over to another owner (its creator)
+      description: |
+        `to`, already an owner, becomes the space's creator: its files count
+        toward their quotas. The caller stays an owner.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [to]
+              properties:
+                to: { type: string, maxLength: 256 }
+      responses:
+        "200": { description: The space, content: { application/json: { schema: { $ref: "#/components/schemas/Space" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /v1/admin/spaces:
     get:
@@ -642,7 +752,12 @@ paths:
     get:
       security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
       tags: [connections]
-      summary: What names mean in the space, per environment
+      summary: The caller's own bindings for the space's names, per environment
+      description: |
+        Each member binds their own connections to the names the space's
+        owners declare (docs/plan-shared-spaces.md); `missing` lists, per
+        environment, the declared names the caller hasn't bound (their runs
+        there are refused until they do).
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SpaceConnections" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -653,12 +768,17 @@ paths:
     put:
       security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.connections] }]
       tags: [connections]
-      summary: Replace the space's environments and bindings
+      summary: Replace the caller's bindings (and, for owners, declare the names)
       description: |
-        Each environment binds names (used in SQL: crm.orders) to the caller's
-        connections, by name or ID. Every environment must bind the same
-        names. default_environment is required with several environments.
-        An empty environments object unbinds everything.
+        Each environment binds names (used in SQL: crm.orders) to the
+        caller's own connections, by name or ID, of the type the name is
+        declared with. Any role may bind; names may stay unbound.
+
+        From an owner with default_environment (required with several
+        environments), or while the space declares nothing yet, this also
+        declares the space's environments and names from the bindings, as
+        before shared spaces: every environment must then bind the same
+        names. PUT /v1/spaces/{id}/names declares them without binding.
       requestBody:
         required: true
         content:
@@ -676,6 +796,46 @@ paths:
                     additionalProperties: { type: string }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SpaceConnections" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/spaces/{id}/names:
+    parameters:
+      - $ref: "#/components/parameters/SpaceID"
+    get:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
+      tags: [connections]
+      summary: The space's declared environments and names, and which names each member has bound
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SpaceNames" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.connections] }]
+      tags: [connections]
+      summary: Declare the space's environments and names (owners)
+      description: |
+        Replaces the declarations. Members' bindings of an environment or a
+        name that goes, or of a name whose type changes, go with it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                default_environment: { type: string }
+                environments: { type: array, items: { type: string } }
+                names: { type: object, description: "name -> connection type", additionalProperties: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SpaceNames" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
@@ -1120,10 +1280,12 @@ paths:
       security: [{ basicAuth: [] }, { bearerAuth: [nbsandbox.read] }]
       tags: [runs]
       summary: List runs, newest first
+      description: Every run in the space, whoever started it (any role may list them).
       parameters:
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Cursor"
         - { name: status, in: query, required: false, schema: { $ref: "#/components/schemas/RunStatus" } }
+        - { name: owner, in: query, required: false, description: "Only runs this caller ID started", schema: { type: string } }
         - { name: created_after, in: query, required: false, schema: { type: string, format: date-time } }
         - { name: created_before, in: query, required: false, schema: { type: string, format: date-time } }
       responses:
@@ -1773,6 +1935,23 @@ components:
                 id: { type: string, format: uuid }
                 name: { type: string }
                 type: { type: string }
+        missing:
+          type: object
+          description: environment -> declared names the caller hasn't bound
+          additionalProperties: { type: array, items: { type: string } }
+    SpaceNames:
+      type: object
+      required: [default_environment, environments, names, bound]
+      properties:
+        default_environment: { type: string }
+        environments: { type: array, items: { type: string } }
+        names: { type: object, description: "name -> connection type", additionalProperties: { type: string } }
+        bound:
+          type: object
+          description: "principal -> environment -> the names they have bound (never to which connection)"
+          additionalProperties:
+            type: object
+            additionalProperties: { type: array, items: { type: string } }
     Session:
       type: object
       required: [id, space_id, notebook, mode, status, created_at]
@@ -1885,6 +2064,17 @@ components:
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         usage: { $ref: "#/components/schemas/Usage" }
+        owner: { type: string, description: "Its creator's caller ID: whose quotas its files count toward" }
+        role: { type: string, enum: [read, write, owner], description: "The caller's role in it (not in administrators' lists)" }
+    Member:
+      type: object
+      required: [principal, role]
+      properties:
+        principal: { type: string, description: A caller ID }
+        role: { type: string, enum: [read, write, owner] }
+        creator: { type: boolean, description: "The space's creator: always an owner" }
+        granted_by: { type: string }
+        granted_at: { type: string, format: date-time }
     AdminSpace:
       allOf:
         - $ref: "#/components/schemas/Space"
@@ -2070,6 +2260,7 @@ components:
         id: { type: string, format: uuid }
         space_id: { type: string, format: uuid }
         notebook: { type: string }
+        owner: { type: string, description: "Who started it: a caller ID" }
         notebook_sha256: { type: string, description: Hash of the notebook snapshot the run executes }
         function: { type: string, description: The published function, for an invocation }
         client: { type: string, description: "The application that started the run: the token's client (azp / client_id); absent for basic auth" }

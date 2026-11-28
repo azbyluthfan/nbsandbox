@@ -222,7 +222,15 @@ func (f *fakeSpaces) Get(_ context.Context, owner, id string) (spaces.Space, err
 	if owner != "alice" {
 		return spaces.Space{}, store.ErrNotFound
 	}
-	return spaces.Space{ID: id}, nil
+	return spaces.Space{ID: id, Owner: "alice", Role: spaces.RoleOwner}, nil
+}
+
+// Allowed: alice owns every space; nobody else has a role.
+func (f *fakeSpaces) Allowed(_ context.Context, caller, _ string, _ spaces.Role) error {
+	if caller != "alice" {
+		return store.ErrNotFound
+	}
+	return nil
 }
 
 func (f *fakeSpaces) Stat(_ context.Context, owner, id, p string) (spaces.File, error) {

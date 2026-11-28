@@ -8,7 +8,7 @@
 # (Playwright, in a container on the stack's network). TOUR_ONLY=sessions
 # retakes only the live session's screenshots (13-15); it needs one free
 # session for the user (sessions.per_user). TOUR_ONLY=compute retakes only
-# 16-19 (connections, the compute view). The connections steps need them on:
+# 16-20 (connections, the compute view, members). The connections steps need them on:
 # NBSANDBOX_CONNECTIONS_ENABLED=true NBSANDBOX_CONNECTIONS_ALLOWED=crm.db.internal,api.internal,idp.internal make up
 set -eu
 cd "$(dirname "$0")/../.."
@@ -26,6 +26,8 @@ curl -fsS -u "$AUTH" -F file=@examples/notebooks/sales_report.ipynb -F file=@exa
 curl -fsS -u "$AUTH" -F file=@examples/notebooks/data/sales.csv "$API/v1/spaces/$space/files?folder=data" >/dev/null
 curl -fsS -u "$AUTH" -F file=@examples/notebooks/compute_demo.ipynb "$API/v1/spaces/$space/files" >/dev/null
 echo "space $space"
+# Shared with bob, for the Members screenshot (20).
+curl -fsS -u "$AUTH" -X PUT -H 'Content-Type: application/json' -d '{"role":"write"}' "$API/v1/spaces/$space/members/bob" >/dev/null
 
 # With connections on: a database named crm in two environments, and an
 # HTTP API named events, in a space of its own (a space that binds names

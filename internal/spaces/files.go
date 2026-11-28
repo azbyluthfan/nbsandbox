@@ -141,7 +141,7 @@ func (s *Service) Upload(ctx context.Context, owner, id, dir string, next NextPa
 	if err := ValidateDir(dir); err != nil {
 		return nil, err
 	}
-	if _, err := s.get(ctx, owner, id); err != nil {
+	if _, err := s.access(ctx, owner, id, RoleWrite); err != nil {
 		return nil, err
 	}
 	used, err := s.Usage(ctx, id)
@@ -251,7 +251,7 @@ func ValidateNotebook(r io.Reader) error {
 
 // ListFiles returns the space's files and folders, sorted by path.
 func (s *Service) ListFiles(ctx context.Context, owner, id string) ([]File, error) {
-	if _, err := s.get(ctx, owner, id); err != nil {
+	if _, err := s.access(ctx, owner, id, RoleRead); err != nil {
 		return nil, err
 	}
 	rows, err := s.db.ListFiles(ctx, id)
@@ -273,7 +273,7 @@ func (s *Service) OpenFile(ctx context.Context, owner, id, p string) (*os.File, 
 	if err := ValidatePath(p); err != nil {
 		return nil, File{}, err
 	}
-	if _, err := s.get(ctx, owner, id); err != nil {
+	if _, err := s.access(ctx, owner, id, RoleRead); err != nil {
 		return nil, File{}, err
 	}
 	row, err := s.db.GetFile(ctx, id, p)

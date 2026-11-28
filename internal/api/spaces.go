@@ -31,6 +31,8 @@ const (
 type spaceJSON struct {
 	ID        string     `json:"id"`
 	Name      string     `json:"name"`
+	Owner     string     `json:"owner,omitempty"` // its creator and account
+	Role      string     `json:"role,omitempty"`  // the caller's role in it
 	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at"`
 	Usage     *usageJSON `json:"usage,omitempty"`
@@ -44,7 +46,7 @@ type usageJSON struct {
 }
 
 func toSpaceJSON(sp spaces.Space, withUsage bool) spaceJSON {
-	out := spaceJSON{ID: sp.ID, Name: sp.Name, CreatedAt: sp.CreatedAt.UTC(), UpdatedAt: sp.UpdatedAt.UTC()}
+	out := spaceJSON{ID: sp.ID, Name: sp.Name, Owner: sp.Owner, Role: string(sp.Role), CreatedAt: sp.CreatedAt.UTC(), UpdatedAt: sp.UpdatedAt.UTC()}
 	if withUsage {
 		out.Usage = &usageJSON{BytesUsed: sp.Usage.BytesUsed, QuotaBytes: sp.Usage.QuotaBytes,
 			FileCount: sp.Usage.FileCount, RunCount: sp.Usage.RunCount}
@@ -62,6 +64,7 @@ func user(r *http.Request) string {
 func writeDomainError(w http.ResponseWriter, r *http.Request, err error) {
 	var (
 		pe  *spaces.PathError
+		fe  *spaces.ForbiddenError
 		ie  *spaces.InvalidError
 		le  *spaces.LimitError
 		ve  *spaces.VersionError
@@ -70,6 +73,8 @@ func writeDomainError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, spaces.ErrNotFound):
 		WriteError(w, http.StatusNotFound, CodeNotFound, "not found")
+	case errors.As(err, &fe):
+		WriteError(w, http.StatusForbidden, CodeForbidden, fe.Error())
 	case errors.Is(err, spaces.ErrActiveRun), errors.Is(err, spaces.ErrExists), errors.Is(err, spaces.ErrNotEmpty):
 		WriteError(w, http.StatusConflict, CodeConflict, err.Error())
 	case errors.As(err, &ve):
@@ -155,7 +160,7 @@ func (a *API) listSpaces(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, r, err)
 		return
 	}
-	list, next, err := a.d.Spaces.List(r.Context(), user(r), cursor, limit)
+	list, next, err := a.d.Spaces.List(r.Context(), user(r), spaces.Role(r.URL.Query().Get("role")), cursor, limit)
 	if err != nil {
 		writeDomainError(w, r, err)
 		return

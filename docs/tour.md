@@ -122,6 +122,12 @@ A run's page names the worker it runs on and charts its memory (against its limi
 
 **Compute** lists the workers that run notebooks and sessions: their state, how many runs and sessions each holds of what it can take, the memory and CPU those use against what they reserve, and what they run on ([scaling.md](scaling.md)). Every signed-in user sees the counts; administrators also see whose runs and sessions are on each.
 
+### 20. Sharing a space
+
+![A space's Members section: alice, its creator, and bob with write; a field to grant someone a role](images/tour/20-members.png)
+
+A space's **Members** lists who works in it. Its owners grant others `read`, `write` or `owner`, by caller ID; everyone sees every run in the space, and each member reads data with their own connections under the space's names ([sharing.md](sharing.md)).
+
 ## Part 2: the API
 
 The same things from a service, with `curl`. The API is REST with an [OpenAPI spec](../api/openapi.yaml), and also gRPC ([api.md](api.md)). In development it takes basic auth; in production, bearer tokens from your identity provider ([auth.md](auth.md)).

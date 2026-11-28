@@ -233,7 +233,7 @@ func packagesView(ps store.PackageSet) PackagesView {
 // SpacePackages shows the space's packages: the set its requirements.txt
 // needs now, and how far it is. It never starts a build.
 func (m *Manager) SpacePackages(ctx context.Context, owner, spaceID string) (PackagesView, error) {
-	if err := m.d.Spaces.Owned(ctx, owner, spaceID); err != nil {
+	if err := m.d.Spaces.Allowed(ctx, owner, spaceID, spaces.RoleRead); err != nil {
 		return PackagesView{}, err
 	}
 	if !m.d.Packages.Enabled() {
@@ -266,7 +266,7 @@ func (m *Manager) SpacePackages(ctx context.Context, owner, spaceID string) (Pac
 // BuildSpacePackages asks for the space's set now (runs and publishes then
 // find it built). A set that failed recently is shown failed, not rebuilt.
 func (m *Manager) BuildSpacePackages(ctx context.Context, owner, spaceID string) (PackagesView, error) {
-	if err := m.d.Spaces.Owned(ctx, owner, spaceID); err != nil {
+	if err := m.d.Spaces.Allowed(ctx, owner, spaceID, spaces.RoleWrite); err != nil {
 		return PackagesView{}, err
 	}
 	if !m.d.Packages.Enabled() {

@@ -12,11 +12,10 @@ import (
 	"github.com/azbyluthfan/nbsandbox/internal/store"
 )
 
-// AdminView is a run with its owner, for administrators: metadata only,
-// never results or outputs.
+// AdminView is a run for administrators (its owner is View's): metadata
+// only, never results or outputs.
 type AdminView struct {
 	View
-	Owner string `json:"owner"`
 }
 
 // AdminFilter narrows AdminList; empty fields match everything.
@@ -30,7 +29,7 @@ type AdminFilter struct {
 func (m *Manager) adminView(ctx context.Context, r store.Run) AdminView {
 	v := m.view(ctx, r, false)
 	v.Result = nil
-	return AdminView{View: v, Owner: r.Owner}
+	return AdminView{View: v}
 }
 
 // AdminList returns one page of every owner's runs, newest first.

@@ -79,7 +79,7 @@ func TestListSpacesPaging(t *testing.T) {
 	cursor := ""
 	pages := 0
 	for {
-		page, err := db.ListSpaces(ctx, "alice", cursor, 3)
+		page, err := db.ListSpaces(ctx, "alice", "", cursor, 3)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -97,7 +97,7 @@ func TestListSpacesPaging(t *testing.T) {
 		t.Fatalf("got %v in %d pages, want [%s] in 3", got, pages, want)
 	}
 	for _, bad := range []string{"!!!", "bm9jb2xvbg", "YWJjOg"} {
-		if _, err := db.ListSpaces(ctx, "alice", bad, 3); !errors.Is(err, ErrBadCursor) {
+		if _, err := db.ListSpaces(ctx, "alice", "", bad, 3); !errors.Is(err, ErrBadCursor) {
 			t.Errorf("cursor %q: %v, want ErrBadCursor", bad, err)
 		}
 	}

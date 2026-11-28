@@ -168,15 +168,16 @@ func requireScope(scope string, next http.Handler) http.Handler {
 	})
 }
 
-// requireOwner answers 404 for a space the caller doesn't own before the
-// handler reads anything else (its body, query or headers), so another
-// user's space looks the same whatever the request.
+// requireOwner answers 404 for a space the caller has no role in before
+// the handler reads anything else (its body, query or headers), so another
+// user's space looks the same whatever the request. What each role may do
+// is checked further in.
 func requireOwner(d Deps, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if d.Spaces != nil {
 			// Not tied to the request: a caller hanging up right after
 			// sending a complete submission must not lose it.
-			if err := d.Spaces.Owned(context.WithoutCancel(r.Context()), user(r), r.PathValue("id")); err != nil {
+			if err := d.Spaces.Allowed(context.WithoutCancel(r.Context()), user(r), r.PathValue("id"), spaces.RoleRead); err != nil {
 				writeDomainError(w, r, err)
 				return
 			}

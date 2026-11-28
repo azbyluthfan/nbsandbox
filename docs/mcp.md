@@ -9,7 +9,7 @@ It's a thin layer over the [REST API](api.md): every tool is one or two API call
 | Tool | What it does |
 |---|---|
 | `nbsandbox_runtime` | Python version, installed packages and per-run limits (runs have no network: a package not listed can't be installed in a run; with custom packages on, the space's `requirements.txt` adds packages: [packages.md](packages.md)) |
-| `list_spaces`, `create_space` | the user's spaces |
+| `list_spaces`, `create_space` | the user's spaces, and those shared with them (with their role) |
 | `list_files`, `read_file`, `write_file` | the space's files; `write_file` writes text (a notebook as nbformat 4 JSON, a CSV), creating folders |
 | `run_notebook` | run a notebook with parameters (optionally `read_only`, and in a space `environment` whose connections it reads: [connections.md](connections.md)) and wait for its result, up to `wait_seconds` (default 120, at most 600) |
 | `get_run_result`, `get_run`, `list_runs` | keep waiting for a result; a run's details; the space's runs |

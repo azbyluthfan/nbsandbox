@@ -110,7 +110,7 @@ func (t *tools) register(s *mcp.Server) {
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "list_spaces", Annotations: readOnly("List spaces"),
-		Description: "The caller's spaces: each holds files (notebooks, data) and the runs made from them."},
+		Description: "The caller's spaces and those shared with them, each with the caller's role (read, write or owner) and its creator (owner): each holds files (notebooks, data) and the runs made from them."},
 		func(ctx context.Context, req *mcp.CallToolRequest, _ noInput) (*mcp.CallToolResult, any, error) {
 			v, _, err := t.call(ctx, req, "GET", "/v1/spaces", nil, http.StatusOK)
 			return nil, v, err

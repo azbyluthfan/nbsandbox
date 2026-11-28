@@ -179,8 +179,46 @@ func (a *API) getSpaceConnections(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, v)
 }
 
+// getSpaceNames is GET /v1/spaces/{id}/names: what the space's owners
+// declare, and which names each member has bound.
+func (a *API) getSpaceNames(w http.ResponseWriter, r *http.Request) {
+	if !a.connectionsOn(w) {
+		return
+	}
+	v, err := a.d.Connections.Names(r.Context(), user(r), r.PathValue("id"))
+	if err != nil {
+		writeConnectionError(w, r, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, v)
+}
+
+// setSpaceNames is PUT /v1/spaces/{id}/names (owners).
+func (a *API) setSpaceNames(w http.ResponseWriter, r *http.Request) {
+	if !a.connectionsOn(w) {
+		return
+	}
+	var body struct {
+		Default      string            `json:"default_environment"`
+		Environments []string          `json:"environments"`
+		Names        map[string]string `json:"names"`
+	}
+	if err := decodeJSON(r, &body, false); err != nil {
+		writeConnectionError(w, r, err)
+		return
+	}
+	v, err := a.d.Connections.SetNames(r.Context(), user(r), r.PathValue("id"),
+		connections.NamesInput{Default: body.Default, Environments: body.Environments, Names: body.Names})
+	if err != nil {
+		writeConnectionError(w, r, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, v)
+}
+
 // setSpaceConnections is PUT /v1/spaces/{id}/connections: replaces the
-// space's environments and bindings at once.
+// caller's bindings (and, from an owner with default_environment, the
+// space's declarations).
 func (a *API) setSpaceConnections(w http.ResponseWriter, r *http.Request) {
 	if !a.connectionsOn(w) {
 		return

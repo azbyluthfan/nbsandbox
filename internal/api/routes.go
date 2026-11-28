@@ -47,6 +47,12 @@ func (a *API) routes() []Route {
 		{Method: "PATCH", Pattern: "/v1/spaces/{id}", Handler: a.patchSpace, Auth: true, Op: auth.OpUpdateSpace, SpaceScoped: true},
 		{Method: "DELETE", Pattern: "/v1/spaces/{id}", Handler: a.deleteSpace, Auth: true, Op: auth.OpDeleteSpace, SpaceScoped: true},
 
+		// Members of a shared space.
+		{Method: "GET", Pattern: "/v1/spaces/{id}/members", Handler: a.listMembers, Auth: true, Op: auth.OpListMembers, SpaceScoped: true},
+		{Method: "PUT", Pattern: "/v1/spaces/{id}/members/{principal}", Handler: a.putMember, Auth: true, Op: auth.OpPutMember, SpaceScoped: true},
+		{Method: "DELETE", Pattern: "/v1/spaces/{id}/members/{principal}", Handler: a.deleteMember, Auth: true, Op: auth.OpDeleteMember, SpaceScoped: true},
+		{Method: "POST", Pattern: "/v1/spaces/{id}/transfer", Handler: a.transferSpace, Auth: true, Op: auth.OpTransferSpace, SpaceScoped: true},
+
 		// Files.
 		{Method: "POST", Pattern: "/v1/spaces/{id}/files", Handler: a.uploadFiles, Auth: true, Op: auth.OpUploadFiles, SpaceScoped: true, MaxBody: a.d.MaxUpload},
 		{Method: "GET", Pattern: "/v1/spaces/{id}/files", Handler: a.listFiles, Auth: true, Op: auth.OpListFiles, SpaceScoped: true},
@@ -65,6 +71,8 @@ func (a *API) routes() []Route {
 		{Method: "DELETE", Pattern: "/v1/connections/{connection_id}", Handler: a.deleteConnection, Auth: true, Op: auth.OpDeleteConnection, ConnectionScoped: true},
 		{Method: "GET", Pattern: "/v1/spaces/{id}/connections", Handler: a.getSpaceConnections, Auth: true, Op: auth.OpGetSpaceConnections, SpaceScoped: true},
 		{Method: "PUT", Pattern: "/v1/spaces/{id}/connections", Handler: a.setSpaceConnections, Auth: true, Op: auth.OpSetSpaceConnections, SpaceScoped: true},
+		{Method: "GET", Pattern: "/v1/spaces/{id}/names", Handler: a.getSpaceNames, Auth: true, Op: auth.OpGetSpaceNames, SpaceScoped: true},
+		{Method: "PUT", Pattern: "/v1/spaces/{id}/names", Handler: a.setSpaceNames, Auth: true, Op: auth.OpSetSpaceNames, SpaceScoped: true},
 
 		// The space's own packages (requirements.txt), built into a package set.
 		{Method: "GET", Pattern: "/v1/spaces/{id}/packages", Handler: a.getPackages, Auth: true, Op: auth.OpGetSpacePackages, SpaceScoped: true},
