@@ -8,7 +8,7 @@ Usage: tour.py <web UI base URL> <space id> <output folder>
 
 TOUR_USER picks the user (default alice; the space must be theirs).
 TOUR_ONLY=sessions takes only the interactive session's screenshots (13-15),
-TOUR_ONLY=compute only connections and the compute view's (16-19).
+TOUR_ONLY=compute only connections, the compute view's and the members' (16-20).
 """
 
 import os
@@ -218,6 +218,14 @@ def compute(page):
     expect(page.locator("table.compute")).to_be_visible(timeout=15_000)
     time.sleep(6)  # a refresh with the run's usage
     shot(page, "19-compute")
+
+    # 20. The space's members: shared with bob.
+    page.goto(f"{BASE}/#/{USER}/{SPACE}")
+    members = page.locator(".members")
+    expect(members.get_by_text("bob")).to_be_visible(timeout=15_000)
+    members.scroll_into_view_if_needed()
+    shot(page, "20-members")
+
     page.goto(run_url)
     page.get_by_role("button", name="Cancel").click()
 

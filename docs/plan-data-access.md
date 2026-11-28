@@ -1,6 +1,6 @@
 # Plan: data outside nbsandbox
 
-**Status (2026-11-25):** phase 1 of the [order of work](#order-of-work) is built, in milestones M0 to M5: connections, secret providers (Kubernetes Secrets, Vault/OpenBao, a built-in store for development), names and environments, mediated reads (PostgreSQL, MySQL, SQL Server, S3-compatible storage) for runs, sessions and functions, the egress gateway, on Docker and Kubernetes, the web UI, and the isolation rows. User and operator documentation: [connections.md](connections.md). Phase 2, HTTP APIs through the fetcher, is designed ([below](#http-apis-through-the-fetcher), 2026-11-27). The later phases are on the [ROADMAP](../ROADMAP.md).
+**Status (2026-11-25):** phase 1 of the [order of work](#order-of-work) is built, in milestones M0 to M5: connections, secret providers (Kubernetes Secrets, Vault/OpenBao, a built-in store for development), names and environments, mediated reads (PostgreSQL, MySQL, SQL Server, S3-compatible storage) for runs, sessions and functions, the egress gateway, on Docker and Kubernetes, the web UI, and the isolation rows. User and operator documentation: [connections.md](connections.md). Phase 2, HTTP APIs through the fetcher, is built ([below](#http-apis-through-the-fetcher), H1 to H4, 2026-11-27). The later phases are on the [ROADMAP](../ROADMAP.md).
 
 ## Today
 

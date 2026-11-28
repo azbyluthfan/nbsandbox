@@ -12,6 +12,7 @@ This guide shows how to use the HTTP API, task by task: which endpoints to call,
 - [7. Work interactively: a session](#7-work-interactively-a-session)
 - [8. Connections: your data sources](#8-connections-your-data-sources)
 - [9. Errors and retries](#9-errors-and-retries)
+- [10. Share a space](#10-share-a-space)
 - [Endpoint overview](#endpoint-overview), [viewing the spec](#viewing-the-spec), [compatibility policy](#compatibility-policy)
 
 ## Basics
@@ -298,9 +299,9 @@ Then open the WebSocket `GET …/sessions/{session_id}/channel` and exchange **J
 
 ## 8. Connections: your data sources
 
-Notebooks, sessions and functions read them with `nbsandbox.sql(...)` ([connections.md](connections.md)). Off unless the operator turns them on (`connections.enabled`); while off, these routes answer `404`.
+Notebooks, sessions and functions read them with `nbsandbox.sql(...)`, or call an API through `nbsandbox.http(...)` ([connections.md](connections.md)). Off unless the operator turns them on (`connections.enabled`); while off, these routes answer `404`.
 
-A **connection** is one of your data sources: PostgreSQL, MySQL, SQL Server, object storage (S3-compatible, Azure Blob) or an HTTP API; Azure Blob and HTTP connections can be created and bound, but nothing reads them yet. Its secret goes to the deployment's secret provider and **never comes back** in any response.
+A **connection** is one of your data sources: PostgreSQL, MySQL, SQL Server, object storage (S3-compatible, Azure Blob) or an HTTP API; Azure Blob connections can be created and bound, but nothing reads them yet. Its secret goes to the deployment's secret provider and **never comes back** in any response.
 
 ```bash
 curl -su alice:… -X POST "$URL/v1/connections" -H 'Content-Type: application/json' -d '{
@@ -322,7 +323,7 @@ curl -su alice:… -X PUT "$URL/v1/spaces/$SPACE/connections" -H 'Content-Type: 
   "environments": {"dev": {"crm": "crm-dev"}, "prod": {"crm": "crm-prod"}}}'
 ```
 
-Every environment binds the same names; connections by name or ID; an empty `environments` unbinds everything. Notebooks then read them with `nbsandbox.sql("SELECT … FROM crm.orders")`, in the environment the run names: [connections.md](connections.md).
+With `default_environment`, an owner declares the space's names from these bindings: every environment binds the same names. Without it, you bind your own connections to the names already declared, partly if you like; the answer's `missing` lists, per environment, the names you haven't bound. `GET/PUT …/names` reads and sets the declarations alone (owners set them; [sharing.md](sharing.md)). Notebooks then read them with `nbsandbox.sql("SELECT … FROM crm.orders")`, in the environment the run names: [connections.md](connections.md).
 
 ## 9. Errors and retries
 
@@ -332,8 +333,8 @@ Every environment binds the same names; connections by name or ID; an empty `env
 | `400` | `invalid_parameters` | Parameters aren't a valid object or break the notebook's input contract; `problems` lists JSON pointers. | Fix the parameters. |
 | `400` | `invalid_contract` | The notebook's contract isn't a valid JSON Schema. | Fix the notebook's metadata. |
 | `401` | `unauthorized` | Missing or wrong credentials, or an invalid or expired token. | Check the credentials; get a fresh token. |
-| `403` | `forbidden` | The token lacks the endpoint's scope (named in `WWW-Authenticate`). | Request the scope at the identity provider. |
-| `404` | `not_found` | It doesn't exist, or it belongs to another user. | Check the IDs. |
+| `403` | `forbidden` | The token lacks the endpoint's scope (named in `WWW-Authenticate`), or your role in a shared space is too low (the message names the role needed). | Request the scope at the identity provider, or the role from an owner of the space. |
+| `404` | `not_found` | It doesn't exist, or you have no role in its space. | Check the IDs. |
 | `409` | `conflict` | A writing run or a read-write session is already active in the space; the run is (not) finished yet; the session has ended, or you have too many open; the target path exists; the folder isn't empty. | Wait, cancel, end a session, or pick another path; the message says which. |
 | `412` / `428` | `version_mismatch` / `version_required` | A file save with a stale or missing version. | See [3](#3-edit-a-file-without-overwriting-someone-elses-changes). |
 | `413` | `payload_too_large` | A file, the request, or the space's quota is too large. Nothing was stored. | Make it smaller or free space. |
@@ -346,6 +347,19 @@ Every environment binds the same names; connections by name or ID; an empty `env
 
 **A run that fails is not an HTTP error.** Submitting succeeded (`201`); the run's own outcome is in its `status` and its result's `error`. Retry a run only when `error.retryable` is true (`interrupted`, `platform_error`); any other failure will fail the same way with the same input. Send the same `Idempotency-Key` when retrying a request whose answer you didn't get, so you don't start the run twice.
 
+## 10. Share a space
+
+A space's creator grants other callers (users or apps, by caller ID) a role: `read`, `write` or `owner`. Each member reads data with their own connections under the space's names. The guide is [sharing.md](sharing.md).
+
+```bash
+curl -su alice:… -X PUT "$URL/v1/spaces/$SPACE/members/bob" -H 'Content-Type: application/json' -d '{"role": "write"}'
+curl -su bob:… "$URL/v1/spaces"                       # alice's space too, "role": "write", "owner": "alice"
+curl -su bob:… "$URL/v1/spaces/$SPACE/members"
+```
+
+- Every member sees every run in the space; each run's `owner` is who started it (`?owner=` lists one caller's).
+- `DELETE …/members/{principal}` revokes (owners), or leaves (anyone, for themselves); `POST …/transfer` hands the space over to another owner.
+
 ## Endpoint overview
 
 | Area | Endpoints |
@@ -353,7 +367,8 @@ Every environment binds the same names; connections by name or ID; an empty `env
 | Operations (no auth) | `GET /healthz`, `GET /readyz`, `GET /metrics` (internal; not forwarded by Caddy) |
 | Runtime | `GET /v1/runtime`: runner image, Python, packages, limits |
 | Workers | `GET /v1/workers`: each worker's state, runtime, and runs and sessions held of its capacity (counts only; the run's `worker` names the one that holds it) |
-| Spaces | `POST/GET /v1/spaces`, `GET/PATCH/DELETE /v1/spaces/{id}` |
+| Spaces | `POST/GET /v1/spaces` (`?role=`), `GET/PATCH/DELETE /v1/spaces/{id}` |
+| Members | `GET /v1/spaces/{id}/members`, `PUT/DELETE /v1/spaces/{id}/members/{principal}`, `POST /v1/spaces/{id}/transfer` ([sharing.md](sharing.md)) |
 | Files | `POST/GET /v1/spaces/{id}/files` (upload with `?folder=`, list), `GET/PUT/PATCH/DELETE /v1/spaces/{id}/files/{path}` (download, save with `If-Match`, move, delete), `POST …/folders` |
 | Runs | `POST/GET …/runs`, `GET/DELETE …/runs/{run_id}`, `POST …/cancel`, `GET …/result` (`?wait=`) |
 | Run usage | `GET …/runs/{run_id}/usage`: memory, CPU and disk written over the run's life, sampled by its worker every few seconds |
@@ -361,7 +376,7 @@ Every environment binds the same names; connections by name or ID; an empty `env
 | Status streams (SSE) | `GET …/runs/{run_id}/events`, `GET /v1/spaces/{id}/events` |
 | Functions | `GET …/functions`, `GET/DELETE …/functions/{name}`, `POST …/functions/{name}/versions` (publish), `GET …/versions/{version}`, `GET …/contract`, `POST …/invoke`, `POST …/versions/{version}/invoke` |
 | Packages | `GET/POST /v1/spaces/{id}/packages`: the space's package set, and building it now ([packages.md](packages.md)) |
-| Connections | `POST/GET /v1/connections`, `GET/PATCH/DELETE /v1/connections/{connection_id}`, `GET/PUT /v1/spaces/{id}/connections` |
+| Connections | `POST/GET /v1/connections`, `GET/PATCH/DELETE /v1/connections/{connection_id}`, `GET/PUT /v1/spaces/{id}/connections` (your bindings), `GET/PUT /v1/spaces/{id}/names` (the declarations) |
 | Sessions | `POST/GET …/sessions`, `GET/DELETE …/sessions/{session_id}`, `POST …/interrupt`, `…/restart`, `…/sync`, `GET …/channel` (WebSocket) ([sessions.md](sessions.md)) |
 | Administration (`nbsandbox.admin`) | `GET /v1/admin/spaces`, `PATCH/DELETE /v1/admin/spaces/{id}`, `GET /v1/admin/runs` (`?worker=` among others), `POST /v1/admin/runs/{run_id}/cancel`, `GET/PUT /v1/admin/drain`, `GET /v1/admin/audit`, `GET /v1/admin/sessions` (`?worker=`), `POST /v1/admin/sessions/{session_id}/end` ([auth.md](auth.md#administration)) |
 

@@ -19,6 +19,8 @@ scripts/nbsandbox.sh spaces list
 
 A space can hold up to 500 MB by default (`uploads.max_space`), **including run outputs**. Deleting a space deletes everything in it.
 
+A space can be **shared**: its creator grants others `read`, `write` or `owner`, and each reads data with their own connections ([sharing.md](sharing.md)).
+
 ## Files
 
 ```bash

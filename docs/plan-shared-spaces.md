@@ -1,6 +1,6 @@
 # Plan: shared spaces
 
-**Status (2026-11-28):** designed; not built.
+**Status (2026-11-28):** built as below, in S1 to S4 (user documentation: [sharing.md](sharing.md)).
 
 ## Today
 
@@ -97,3 +97,6 @@ space "forecast"   declared (owners)           alice's bindings          bob's b
 - Owners declare names and types per environment; each member binds their own connections; a run, session or function call resolves with its caller's bindings.
 - The creator is the space's account for storage quotas and can hand it over; runs and sessions count toward whoever starts them.
 - No access is `404`; too low a role is `403`.
+- One open session per notebook per caller (two members each get their own); still one read-write session per space.
+- An owner's `PUT /v1/spaces/{id}/connections` declares the names (as in 0.4) when it sends `default_environment` or nothing is declared yet; otherwise it sets the caller's bindings only, partly if they like.
+- Revoking a member, or their leaving, drops their bindings in the space.

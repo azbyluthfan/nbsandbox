@@ -65,8 +65,8 @@ Data outside nbsandbox, the first phase of [plan-data-access.md](docs/plan-data-
 - **Checked:** upgrades from 0.3.0 with Compose and with Helm, in the weekly run.
 
 ## Next
-- **Shared spaces.** A space grants roles (read, write, owner) to other callers, users or apps; every member sees the space's runs, and each reads data with their own connections under the space's names, functions included ([plan](docs/plan-shared-spaces.md)).
-- **HTTP APIs in notebooks.** A notebook's code calls the user's APIs (JSON, uploads, streaming SSE) with any HTTP client, through its run's fetcher, which adds the credential (a header token, basic auth, or OAuth 2.0 client credentials): the secret never enters the run ([plan](docs/plan-data-access.md#http-apis-through-the-fetcher)).
+- **Shared spaces.** A space grants roles (read, write, owner) to other callers, users or apps; every member sees the space's runs, and each reads data with their own connections under the space's names, functions included ([sharing.md](docs/sharing.md)). Built, for the next release; OIDC groups as principals come later.
+- **HTTP APIs in notebooks.** A notebook's code calls the user's APIs (JSON, uploads, streaming SSE) with any HTTP client, through its run's fetcher, which adds the credential (a header token, basic auth, or OAuth 2.0 client credentials): the secret never enters the run ([connections.md](docs/connections.md#7-call-an-http-api)). Built, for the next release.
 - **Authentication against Entra ID, end to end.** Keycloak is tested end to end (tokens, scopes, audience, token exchange); Entra ID is unit-tested against a local issuer and documented, and needs the same end-to-end test with a real tenant.
 - **Sandboxes on real clusters.** Run the suite under GKE Sandbox (gVisor) and AKS Pod Sandboxing (Kata), and add a GKE Terraform example beside the AKS one. `nbsandbox-report check` makes each one a deploy, a check and a teardown.
 
