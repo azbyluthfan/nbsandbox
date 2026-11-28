@@ -350,7 +350,7 @@ k8s-down: ## Delete the local Kubernetes cluster (K8S_CNI picks which)
 # point to: theirs, and a second name for the TLS ones that their
 # certificates don't carry (deploy/kubernetes/kind/values.yaml lists them too).
 TEST_SOURCES := nbsandbox-src-pg nbsandbox-src-s3 nbsandbox-src-mysql nbsandbox-src-mssql \
-	nbsandbox-src-tls-pg nbsandbox-src-tls-mysql nbsandbox-src-tls-s3
+	nbsandbox-src-tls-pg nbsandbox-src-tls-mysql nbsandbox-src-tls-s3 nbsandbox-src-api nbsandbox-src-keycloak
 comma := ,
 TEST_SOURCES_ALLOWED := $(subst $(eval) ,$(comma),$(strip $(TEST_SOURCES) nbsandbox-src-tls-pg-alias nbsandbox-src-tls-mysql-alias))
 

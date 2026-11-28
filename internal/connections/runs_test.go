@@ -94,24 +94,42 @@ func TestResolveAndFetcher(t *testing.T) {
 		got = append(got, src.Name)
 		secretsOf[src.Name] = src.Secret
 	}
-	if !reflect.DeepEqual(got, []string{"crm", "lake", "logs"}) { // sorted; http isn't the fetcher's
+	if !reflect.DeepEqual(got, []string{"api", "crm", "lake", "logs"}) { // sorted
 		t.Fatalf("sources: %v", got)
 	}
-	if secretsOf["crm"] != "pa55" || secretsOf["lake"] != "s3-SECRET" || secretsOf["logs"] != "" || cfg.Token != f.Token {
+	if secretsOf["api"] != "tok" || secretsOf["crm"] != "pa55" || secretsOf["lake"] != "s3-SECRET" || secretsOf["logs"] != "" || cfg.Token != f.Token {
 		t.Fatalf("secrets: %v", secretsOf)
 	}
 	c, err := gateway.Verify(gwKey, cfg.Gateway.Token, now)
 	if err != nil || c.Run != "run1" || c.Exp != exp.Unix() || cfg.Gateway.Address != "nbsandbox-gateway:3128" {
 		t.Fatalf("gateway token: %+v %v", c, err)
 	}
-	want := []string{"pg.internal:5432", "minio.internal:9000", "logs.s3.eu-west-1.amazonaws.internal:443"}
+	want := []string{"api.example.com:443", "pg.internal:5432", "minio.internal:9000", "logs.s3.eu-west-1.amazonaws.internal:443"}
 	if !reflect.DeepEqual(c.Allow, want) {
 		t.Fatalf("allowed endpoints: %v, want %v", c.Allow, want)
 	}
 
-	// Nothing the fetcher reads: no fetcher.
-	if f, err := s.Fetcher(ctx, "run2", "alice", map[string]string{"api": api.ID}, exp); err != nil || f != nil {
+	// An API alone gets a fetcher too; with OAuth 2.0, its token URL is an
+	// endpoint as well.
+	oauth, err := s.Create(ctx, "alice", Input{Name: "oauth", Type: TypeHTTP, Settings: map[string]any{
+		"url": "https://api.example.com/v2/", "auth": "oauth2", "client_id": "cid", "token_url": "http://idp.internal:8080/token"},
+		Secret: SecretInput{Value: ptr("cs")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err = s.Fetcher(ctx, "run2", "alice", map[string]string{"api": oauth.ID}, exp)
+	if err != nil || f == nil {
 		t.Fatalf("http only: %+v %v", f, err)
+	}
+	cfg = fetcherConfig{}
+	_ = json.Unmarshal(f.Config, &cfg)
+	if c, _ := gateway.Verify(gwKey, cfg.Gateway.Token, now); !reflect.DeepEqual(c.Allow, []string{"api.example.com:443", "idp.internal:8080"}) ||
+		cfg.Sources[0].Secret != "cs" || cfg.Sources[0].Settings["client_id"] != "cid" {
+		t.Fatalf("oauth2: %+v %v", c.Allow, cfg.Sources)
+	}
+	// Nothing at all: no fetcher.
+	if f, err := s.Fetcher(ctx, "run2", "alice", map[string]string{}, exp); err != nil || f != nil {
+		t.Fatalf("no names: %+v %v", f, err)
 	}
 	// Someone else's run, a connection gone, an endpoint no longer allowed.
 	if _, err := s.Fetcher(ctx, "run3", "bob", names, exp); !errors.Is(err, ErrUnavailable) {

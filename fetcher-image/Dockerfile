@@ -25,7 +25,7 @@ RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/
  && groupadd --gid 1000 nbsandbox \
  && useradd --uid 1000 --gid 1000 --no-create-home --home-dir /tmp --shell /usr/sbin/nologin nbsandbox
 
-COPY fetcher.py /opt/nbsandbox-fetcher/
+COPY fetcher.py httpapi.py /opt/nbsandbox-fetcher/
 
 # The root filesystem is read-only at run time; /tmp is a tmpfs.
 ENV HOME=/tmp \
@@ -33,5 +33,5 @@ ENV HOME=/tmp \
     NBSANDBOX_FETCHER_CONFIG=/etc/nbsandbox-fetcher/config.json
 USER 1000:1000
 WORKDIR /tmp
-EXPOSE 8815
+EXPOSE 8815 8816
 ENTRYPOINT ["python", "/opt/nbsandbox-fetcher/fetcher.py"]

@@ -24,6 +24,14 @@ const (
 	TypeHTTP       = "http"
 )
 
+// An HTTP connection's auth: how the fetcher authenticates its requests.
+const (
+	HTTPAuthHeader = "header" // the secret in a header (auth_header, auth_prefix)
+	HTTPAuthBasic  = "basic"  // user and the secret as the password
+	HTTPAuthOAuth2 = "oauth2" // OAuth 2.0 client credentials; the secret is the client secret
+	HTTPAuthNone   = "none"   // no credential
+)
+
 // A database connection's tls: how the fetcher talks to it.
 const (
 	TLSOff     = "off"     // never encrypt
@@ -66,10 +74,17 @@ var types = map[string]typeSpec{
 		"endpoint":  {kind: "string"},                           // default: <account>.blob.core.windows.net
 		"auth":      {kind: "string", def: "connection_string"}, // what the secret is: connection_string, account_key or sas
 	}, secretIs: "the connection string, account key or SAS token"},
-	TypeHTTP: {fields: map[string]field{ //nolint:gosec // a header's name and a prefix, not credentials
+	TypeHTTP: {fields: map[string]field{ //nolint:gosec // names, prefixes and URLs, not credentials
 		"url":         {kind: "string", required: true},
+		"auth":        {kind: "string", def: HTTPAuthHeader},
 		"auth_header": {kind: "string", def: "Authorization"},
 		"auth_prefix": {kind: "string", def: "Bearer "},
+		"user":        {kind: "string"}, // basic
+		"token_url":   {kind: "string"}, // oauth2
+		"client_id":   {kind: "string"},
+		"scope":       {kind: "string"},
+		"audience":    {kind: "string"},
+		"ca":          {kind: "pem"}, // a private CA to trust as well as the system's
 	}, secretIs: "the token or API key"},
 }
 
@@ -222,8 +237,14 @@ func endpoint(typ string, s map[string]any) (host string, err error) {
 		return hostOnly(str(s, "account") + ".blob.core.windows.net")
 	case TypeHTTP:
 		u, err := url.Parse(str(s, "url"))
-		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Hostname() == "" || u.User != nil {
-			return "", invalid("url must be an http(s) URL without credentials in it, got %q", s["url"])
+		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Hostname() == "" || u.User != nil || u.Fragment != "" {
+			return "", invalid("url must be an http(s) URL without credentials or a fragment in it, got %q", s["url"])
+		}
+		if str(s, "ca") != "" && u.Scheme != "https" {
+			return "", invalid("ca is the authority for https: the url must be https")
+		}
+		if err := checkHTTPAuth(s); err != nil {
+			return "", err
 		}
 		return hostOnly(u.Hostname())
 	}
@@ -293,4 +314,74 @@ func hostOnly(h string) (string, error) {
 		return "", invalid("%q is not a host name or address", h)
 	}
 	return h, nil
+}
+
+// checkHTTPAuth checks an HTTP connection's auth and the settings it needs.
+func checkHTTPAuth(s map[string]any) error {
+	only := func(auth string, keys ...string) error {
+		for _, k := range keys {
+			if str(s, k) != "" {
+				return invalid("%s is for auth %s, not %s", k, map[string]string{"user": HTTPAuthBasic}[k]+oauthOr(k), auth)
+			}
+		}
+		return nil
+	}
+	switch a := str(s, "auth"); a {
+	case HTTPAuthHeader, HTTPAuthNone:
+		return only(a, "user", "token_url", "client_id", "scope", "audience")
+	case HTTPAuthBasic:
+		if str(s, "user") == "" {
+			return invalid("auth basic needs user")
+		}
+		return only(a, "token_url", "client_id", "scope", "audience")
+	case HTTPAuthOAuth2:
+		if str(s, "client_id") == "" {
+			return invalid("auth oauth2 needs client_id")
+		}
+		u, err := url.Parse(str(s, "token_url"))
+		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Hostname() == "" || u.User != nil {
+			return invalid("auth oauth2 needs token_url, an http(s) URL without credentials in it")
+		}
+		return only(a, "user")
+	default:
+		return invalid("auth must be header, basic, oauth2 or none, got %q", a)
+	}
+}
+
+func oauthOr(k string) string {
+	if k == "user" {
+		return ""
+	}
+	return HTTPAuthOAuth2
+}
+
+// tokenHost is an oauth2 HTTP connection's token URL host ("" otherwise):
+// the fetcher reaches it too, so the operator must allow it as well.
+func tokenHost(typ string, s map[string]any) string {
+	if typ != TypeHTTP || str(s, "auth") != HTTPAuthOAuth2 {
+		return ""
+	}
+	u, err := url.Parse(str(s, "token_url"))
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(u.Hostname())
+}
+
+// secretRule says whether a connection with these settings needs a secret
+// (and what it is), or takes none.
+func secretRule(typ string, s map[string]any) (needed, forbidden bool, is string) {
+	spec := types[typ]
+	if typ != TypeHTTP {
+		return spec.secretNeeded, false, spec.secretIs
+	}
+	switch str(s, "auth") {
+	case HTTPAuthNone:
+		return false, true, ""
+	case HTTPAuthBasic:
+		return true, false, "the password"
+	case HTTPAuthOAuth2:
+		return true, false, "the client secret"
+	}
+	return false, false, spec.secretIs // header: optional, as before auth existed (no secret, no header)
 }

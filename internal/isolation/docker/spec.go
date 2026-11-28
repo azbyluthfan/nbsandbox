@@ -97,6 +97,7 @@ func buildContainerConfig(spec isolation.RunSpec) (*container.Config, *container
 		host.NetworkMode = container.NetworkMode(NetworkName(spec.RunID))
 		cfg.Env = append(cfg.Env,
 			isolation.FetcherEnv+"=grpc://"+FetcherName(spec.RunID)+":"+strconv.Itoa(isolation.FetcherPort),
+			isolation.FetcherHTTPEnv+"=http://"+FetcherName(spec.RunID)+":"+strconv.Itoa(isolation.FetcherHTTPPort)+"/",
 			isolation.FetcherTokenEnv+"="+spec.Fetcher.Token)
 	}
 	return cfg, host

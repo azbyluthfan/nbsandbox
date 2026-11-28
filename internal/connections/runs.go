@@ -144,9 +144,9 @@ type fetcherConfig struct {
 	Vault   *fetcherVault   `json:"vault,omitempty"`
 }
 
-// served are the types a fetcher reads; the others (http) reach notebooks
-// another way.
-var served = map[string]bool{TypePostgreSQL: true, TypeMySQL: true, TypeSQLServer: true, TypeS3: true}
+// served are the types a fetcher serves: in SQL, or HTTP APIs through it.
+// Azure Blob is not read yet.
+var served = map[string]bool{TypePostgreSQL: true, TypeMySQL: true, TypeSQLServer: true, TypeS3: true, TypeHTTP: true}
 
 // Fetcher makes a run's fetcher: its configuration with the credentials of
 // each name the run resolved, and a gateway token for exactly their
@@ -178,8 +178,10 @@ func (s *Service) Fetcher(ctx context.Context, runID, owner string, names map[st
 		if err != nil {
 			return nil, err
 		}
-		if !s.d.Allowed.Permits(host) {
-			return nil, fmt.Errorf("%w: %q's connection points to %s, which the operator no longer allows", ErrUnavailable, name, host)
+		for _, h := range []string{host, tokenHost(c.Type, settings)} {
+			if h != "" && !s.d.Allowed.Permits(h) {
+				return nil, fmt.Errorf("%w: %q's connection points to %s, which the operator no longer allows", ErrUnavailable, name, h)
+			}
 		}
 		src := fetcherSource{Name: name, Type: c.Type, Settings: settings}
 		if c.SecretMode != store.SecretNone {
@@ -260,6 +262,12 @@ func targets(typ string, s map[string]any) []string {
 			host = str(s, "bucket") + "." + host
 		}
 		return []string{net.JoinHostPort(host, p)}
+	case TypeHTTP:
+		out := []string{hostPort(str(s, "url"))}
+		if tokenHost(typ, s) != "" {
+			out = append(out, hostPort(str(s, "token_url")))
+		}
+		return out
 	}
 	return nil
 }

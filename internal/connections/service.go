@@ -155,14 +155,20 @@ func (s *Service) check(name, typ string, settings map[string]any) (map[string]a
 	if err != nil {
 		return nil, err
 	}
-	if !s.d.Allowed.Permits(host) {
-		return nil, invalid("connections may not point to %s: the operator allows only the hosts in connections.allowed (never loopback or link-local addresses)", host)
+	for _, h := range []string{host, tokenHost(typ, norm)} {
+		if h != "" && !s.d.Allowed.Permits(h) {
+			return nil, invalid("connections may not point to %s: the operator allows only the hosts in connections.allowed (never loopback or link-local addresses)", h)
+		}
 	}
 	return norm, nil
 }
 
 // putSecret stores or checks a credential for connection id.
-func (s *Service) putSecret(ctx context.Context, id, typ string, in SecretInput) (mode, provider, ref string, err error) {
+func (s *Service) putSecret(ctx context.Context, id, typ string, settings map[string]any, in SecretInput) (mode, provider, ref string, err error) {
+	needed, forbidden, is := secretRule(typ, settings)
+	if forbidden && (in.Value != nil || in.Ref != nil) {
+		return "", "", "", invalid("%s connections with auth %s take no secret", typ, str(settings, "auth"))
+	}
 	switch {
 	case in.Value != nil && in.Ref != nil, in.None && (in.Value != nil || in.Ref != nil):
 		return "", "", "", invalid("give the secret's value or a reference to it, not both")
@@ -190,8 +196,8 @@ func (s *Service) putSecret(ctx context.Context, id, typ string, in SecretInput)
 		}
 		return store.SecretReferenced, s.d.Secrets.Name(), *in.Ref, nil
 	default:
-		if types[typ].secretNeeded {
-			return "", "", "", invalid("%s connections need a secret: %s", typ, types[typ].secretIs)
+		if needed {
+			return "", "", "", invalid("%s connections need a secret: %s", typ, is)
 		}
 		return store.SecretNone, "", "", nil
 	}
@@ -215,7 +221,7 @@ func (s *Service) Create(ctx context.Context, owner string, in Input) (View, err
 		return View{}, err
 	}
 	id := spaces.NewID()
-	mode, provider, ref, err := s.putSecret(ctx, id, in.Type, in.Secret)
+	mode, provider, ref, err := s.putSecret(ctx, id, in.Type, norm, in.Secret)
 	if err != nil {
 		return View{}, err
 	}
@@ -293,11 +299,18 @@ func (s *Service) Update(ctx context.Context, owner, id string, p Patch) (View, 
 	if p.Secret != nil {
 		// A new managed value overwrites the same place (the reference is the
 		// connection's), so the old one is removed only when the mode changes.
-		mode, provider, ref, err := s.putSecret(ctx, id, c.Type, *p.Secret)
+		mode, provider, ref, err := s.putSecret(ctx, id, c.Type, norm, *p.Secret)
 		if err != nil {
 			return View{}, err
 		}
 		c.SecretMode, c.SecretProvider, c.SecretRef = mode, provider, ref
+	}
+	// Settings changed without a new secret (an HTTP connection's auth).
+	switch needed, forbidden, is := secretRule(c.Type, norm); {
+	case needed && c.SecretMode == store.SecretNone:
+		return View{}, invalid("%s connections with these settings need a secret: %s", c.Type, is)
+	case forbidden && c.SecretMode != store.SecretNone:
+		return View{}, invalid("%s connections with auth %s take no secret: send \"secret\": {\"none\": true} to remove it", c.Type, str(norm, "auth"))
 	}
 	if err := s.d.DB.UpdateConnection(ctx, c); err != nil {
 		if p.Secret != nil && c.SecretMode == store.SecretManaged && old.SecretMode != store.SecretManaged {

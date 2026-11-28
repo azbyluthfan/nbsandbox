@@ -18,7 +18,8 @@ import (
 
 // The soak's reading workload (make soak-connections): with connections on,
 // a space that reads runs beside the others, in turn:
-//   - a run reading a database and object storage, and streaming;
+//   - a run reading a database and object storage, and streaming, and
+//     calling an HTTP API through its fetcher (JSON and server-sent events);
 //   - a run whose environment has a wrong password (refused at start);
 //   - a call of a published function that reads;
 //   - a session that reads, then ends.
@@ -31,12 +32,17 @@ const soakReadNotebook = `import nbsandbox
 by_region = nbsandbox.sql("SELECT region, count(*) AS n FROM crm.orders GROUP BY 1 ORDER BY 1")
 lake = nbsandbox.sql("SELECT sum(amount)::BIGINT AS total FROM lake.csv('sales/2026.csv')")
 rows = sum(b.num_rows for b in nbsandbox.stream("SELECT * FROM crm.orders"))
-nbsandbox.output({"n": int(by_region.n.sum()), "lake": int(lake.total.iloc[0]), "rows": rows})`
+api = nbsandbox.http("events")
+orders = len(api.get("orders").json()["orders"])
+events = sum(1 for l in api.get("events", stream=True).iter_lines() if l.startswith(b"data:"))
+nbsandbox.output({"n": int(by_region.n.sum()), "lake": int(lake.total.iloc[0]), "rows": rows, "api": orders, "events": events})`
 
 // soakReadSpace makes the reading space and publishes its function.
 func soakReadSpace(t *testing.T) string {
 	t.Helper()
-	sp := readerSpace(t, codeNotebook(soakReadNotebook))
+	apiSource(t)
+	events := connection(t, "events", "http", map[string]any{"url": apiURL("token-api/")}, apiToken)
+	sp := readerSpaceWith(t, codeNotebook(soakReadNotebook), map[string]string{"events": events})
 	if r := jsonCall(t, "POST", "/v1/spaces/"+sp+"/functions/totals/versions", "alice", map[string]any{"notebook": "read.ipynb"}, nil); r.Code != http.StatusCreated {
 		t.Fatalf("publish: %d %s", r.Code, r.Body)
 	}
@@ -46,7 +52,7 @@ func soakReadSpace(t *testing.T) string {
 // soakRead is one reading cycle, chosen by n.
 func soakRead(t *testing.T, sp string, n int) {
 	t.Helper()
-	const want = `{"n":1000,"lake":22,"rows":1000}`
+	const want = `{"n":1000,"lake":22,"rows":1000,"api":10,"events":5}`
 	compact := func(b []byte) string {
 		var v any
 		if json.Unmarshal(b, &v) != nil {

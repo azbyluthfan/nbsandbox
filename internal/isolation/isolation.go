@@ -112,6 +112,11 @@ const (
 	FetcherPort     = 8815
 	FetcherEnv      = "NBSANDBOX_FETCHER"
 	FetcherTokenEnv = "NBSANDBOX_FETCHER_TOKEN" //nolint:gosec // a variable's name, not a credential
+	// FetcherHTTPPort is where a fetcher serves the run's HTTP APIs, and
+	// FetcherHTTPEnv the run's variable with its base address
+	// (http://host:port/; a connection's base URL adds its name and "/").
+	FetcherHTTPPort = 8816
+	FetcherHTTPEnv  = "NBSANDBOX_FETCHER_HTTP"
 )
 
 // PackagesPath is where a run sees its space's package set.
