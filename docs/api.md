@@ -44,7 +44,7 @@ A **space** holds a notebook and the files it reads. Runs see the space's files 
 nb -H 'Content-Type: application/json' -d '{"name": "forecast"}' "$NBSANDBOX_URL/v1/spaces"
 ```
 ```json
-{"id": "6f1c…", "name": "forecast", "created_at": "2026-11-07T08:00:00Z", "updated_at": "2026-11-07T08:00:00Z"}
+{"id": "6f1c…", "name": "forecast", "owner": "alice", "role": "owner", "created_at": "2026-11-07T08:00:00Z", "updated_at": "2026-11-07T08:00:00Z"}
 ```
 
 Keep the `id`: every other call uses it (`SPACE=6f1c…` below).
@@ -86,7 +86,7 @@ nb -H 'Content-Type: application/json' \
    "$NBSANDBOX_URL/v1/spaces/$SPACE/runs"
 ```
 ```json
-{"id": "a93e…", "space_id": "6f1c…", "notebook": "forecast.ipynb", "notebook_sha256": "…",
+{"id": "a93e…", "space_id": "6f1c…", "notebook": "forecast.ipynb", "notebook_sha256": "…", "owner": "alice",
  "parameters": {"cfg": {"months": 4}, "region": "bandung"}, "status": "queued", "queue_position": 1,
  "created_at": "…"}
 ```

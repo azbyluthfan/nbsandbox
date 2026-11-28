@@ -176,7 +176,7 @@ curl -s -u $A -H 'Content-Type: application/json' -H 'Idempotency-Key: tour-1' \
 ```
 
 ```json
-{"id":"e768c889-c007-4fb9-9fcc-fe97f08ade16","space_id":"f87d8e2a-6c51-48be-bcf8-1abd7a157da6","notebook":"sales_report.ipynb","notebook_sha256":"7f4525dd0ddc1bb22b766ab97aa48c8db0d0c371a654fc3de10338570c8b3f83","read_only_space":false,"parameters":{"months":3,"region":"jakarta"},"status":"queued","retryable":false,"queue_position":1,"created_at":"2026-11-08T05:46:46.494Z"}
+{"id":"e768c889-c007-4fb9-9fcc-fe97f08ade16","space_id":"f87d8e2a-6c51-48be-bcf8-1abd7a157da6","notebook":"sales_report.ipynb","notebook_sha256":"7f4525dd0ddc1bb22b766ab97aa48c8db0d0c371a654fc3de10338570c8b3f83","read_only_space":false,"owner":"alice","parameters":{"months":3,"region":"jakarta"},"status":"queued","retryable":false,"queue_position":1,"created_at":"2026-11-08T05:46:46.494Z"}
 ```
 
 The `Idempotency-Key` makes a retry safe: the same key returns the same run instead of starting a second one.
